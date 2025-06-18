@@ -837,7 +837,7 @@ export class UIManager {
             <div class="card-info">
                 <div class="card-name">${card.name || 'Unknown Card'}</div>
                 <div class="card-details">
-                    <span class="card-rarity">${card.displayRarity || card.rarity || 'Unknown'}</span>
+                    <span class="card-rarity">${card.displayRarity || card.rarity}</span>
                     ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
                     ${card.price ? `<span class="card-price">$${card.price.toFixed(2)}</span>` : ''}
                 </div>

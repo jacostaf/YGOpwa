@@ -849,7 +849,7 @@ class YGORipperApp {
                                     <div class="card-info">
                                         <div class="card-name">${card.name}</div>
                                         <div class="card-details">
-                                            <span class="card-rarity">${card.displayRarity || card.rarity || 'Unknown'}</span>
+                                            <span class="card-rarity">${card.displayRarity || card.rarity}</span>
                                             <span class="card-confidence">${confidencePercent}% confidence</span>
                                             ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
                                         </div>
