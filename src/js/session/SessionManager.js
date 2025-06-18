@@ -1103,29 +1103,11 @@ export class SessionManager {
                     this.logger.debug(`[VARIANT] First card_set example:`, JSON.stringify(cardSets[0], null, 2));
                     this.logger.debug(`[VARIANT] All card_sets:`, cardSets.map(cs => `${cs.set_rarity} [${cs.set_code}]`).join(', '));
                 } else {
-                    this.logger.debug(`[VARIANT] Card has no card_sets array. Full card structure:`, JSON.stringify(card, null, 2));
+                    this.logger.debug(`[VARIANT] Card has no card_sets array. Skipping as per oldIteration.py logic.`);
                 }
                 
-                if (cardSets.length === 0) {
-                    // Fallback: create single variant with unknown rarity
-                    const variantKey = `${card.name}_Unknown_N/A`;
-                    
-                    if (!allVariants.some(v => v.variantKey === variantKey)) {
-                        this.logger.debug(`[VARIANT] Created fallback variant: ${card.name} - Unknown (no card_sets data)`);
-                        allVariants.push({
-                            ...card,
-                            confidence: match.confidence,
-                            method: match.method,
-                            transcript: match.transcript,
-                            variantKey: variantKey,
-                            displayRarity: 'Unknown',
-                            setInfo: {
-                                setCode: 'N/A',
-                                setName: this.currentSet.name
-                            }
-                        });
-                    }
-                } else {
+                // Only create variants from cards that have actual card_sets data (matching oldIteration.py logic)
+                if (cardSets.length > 0) {
                     // Create a variant for each card_set entry (different rarities)
                     for (const cardSet of cardSets) {
                         const rarity = cardSet.set_rarity || 'Unknown';
