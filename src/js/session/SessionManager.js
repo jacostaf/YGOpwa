@@ -63,8 +63,7 @@ export class SessionManager {
         // Auto-save timer
         this.autoSaveTimer = null;
         
-        // Card recognition patterns (Yu-Gi-Oh specific)
-        this.cardPatterns = new Map();
+        // Common card names cache for optimization
         this.commonCardNames = new Map();
         
         this.logger.info('SessionManager initialized');
@@ -104,9 +103,6 @@ export class SessionManager {
         try {
             // Load card sets
             await this.loadCardSets();
-            
-            // Load card recognition patterns
-            await this.loadCardPatterns();
             
             // Load last session if available
             await this.loadLastSession();
@@ -503,59 +499,7 @@ export class SessionManager {
         }
     }
 
-    /**
-     * Load card recognition patterns
-     */
-    async loadCardPatterns() {
-        try {
-            // Load common card name patterns for better voice recognition
-            const patterns = await this.storage?.get('cardPatterns') || this.getDefaultCardPatterns();
-            
-            this.cardPatterns = new Map(patterns);
-            this.logger.debug(`Loaded ${this.cardPatterns.size} card patterns`);
-            
-        } catch (error) {
-            this.logger.warn('Failed to load card patterns:', error);
-            this.cardPatterns = new Map(this.getDefaultCardPatterns());
-        }
-    }
 
-    /**
-     * Get default card patterns
-     */
-    getDefaultCardPatterns() {
-        return [
-            // Common card name variations
-            ['blue eyes white dragon', 'Blue-Eyes White Dragon'],
-            ['dark magician', 'Dark Magician'],
-            ['red eyes black dragon', 'Red-Eyes Black Dragon'],
-            ['time wizard', 'Time Wizard'],
-            ['mirror force', 'Mirror Force'],
-            ['pot of greed', 'Pot of Greed'],
-            ['mystical space typhoon', 'Mystical Space Typhoon'],
-            ['man eater bug', 'Man-Eater Bug'],
-            ['elemental hero', 'Elemental HERO'],
-            ['cyber dragon', 'Cyber Dragon'],
-            
-            // Evil HERO specific patterns
-            ['evil hero neos lord', 'Evil HERO Neos Lord'],
-            ['evil hero NEOS lord', 'Evil HERO Neos Lord'],
-            ['evil hero neos lord', 'Evil Hero Neos Lord'],
-            ['evil HERO neos lord', 'Evil HERO Neos Lord'],
-            
-            // Common phonetic variations
-            ['dragun', 'Dragon'],
-            ['majician', 'Magician'],
-            ['elemental hero', 'Elemental HERO'],
-            ['cyber dragun', 'Cyber Dragon'],
-            ['blue i white dragun', 'Blue-Eyes White Dragon'],
-            ['red i black dragun', 'Red-Eyes Black Dragon'],
-            ['dark majician', 'Dark Magician'],
-            ['time wiserd', 'Time Wizard'],
-            ['mirror four', 'Mirror Force'],
-            ['pot of greed', 'Pot of Greed']
-        ];
-    }
 
     /**
      * Start a new session
@@ -882,18 +826,14 @@ export class SessionManager {
         const recognizedCards = [];
         
         try {
-            // Method 1: Exact pattern matching
-            const patternMatches = await this.findCardsByPattern(cleanTranscript);
-            recognizedCards.push(...patternMatches);
-            
-            // Method 2: Fuzzy matching (if enabled and no exact matches)
-            if (recognizedCards.length === 0 && this.config.enableFuzzyMatching) {
+            // Method 1: Fuzzy matching (if enabled)
+            if (this.config.enableFuzzyMatching) {
                 const fuzzyMatches = await this.findCardsByFuzzyMatch(cleanTranscript);
                 recognizedCards.push(...fuzzyMatches);
             }
             
-            // Method 3: Set-specific card matching
-            if (recognizedCards.length === 0 && this.currentSet) {
+            // Method 2: Set-specific card matching (primary matching method)
+            if (this.currentSet) {
                 const setMatches = await this.findCardsInCurrentSet(cleanTranscript);
                 recognizedCards.push(...setMatches);
             }
@@ -907,89 +847,7 @@ export class SessionManager {
         }
     }
 
-    /**
-     * Find cards by pattern matching and create proper variants
-     */
-    async findCardsByPattern(transcript) {
-        const matches = [];
-        
-        for (const [pattern, cardName] of this.cardPatterns) {
-            if (transcript.includes(pattern.toLowerCase())) {
-                // Create a basic match object
-                const basicMatch = {
-                    name: cardName,
-                    confidence: 90,
-                    method: 'pattern',
-                    transcript: transcript
-                };
-                
-                this.logger.debug(`[PATTERN] Pattern match found: "${pattern}" -> "${cardName}"`);
-                
-                // Find the actual card in the current set to create proper variants
-                if (this.currentSet) {
-                    const setCards = this.setCards.get(this.currentSet.id) || [];
-                    const matchingCards = setCards.filter(card => card.name === cardName);
-                    
-                    if (matchingCards.length > 0) {
-                        this.logger.debug(`[PATTERN] Found ${matchingCards.length} cards in set matching pattern: "${cardName}"`);
-                        
-                        // Create variants for each matching card (same logic as findCardsInCurrentSet)
-                        for (const card of matchingCards) {
-                            const cardSets = card.card_sets || [];
-                            
-                            if (cardSets.length === 0) {
-                                // Fallback: create single variant with unknown rarity
-                                matches.push({
-                                    ...card,
-                                    confidence: basicMatch.confidence,
-                                    method: basicMatch.method,
-                                    transcript: basicMatch.transcript,
-                                    displayRarity: 'Unknown',
-                                    setInfo: {
-                                        setCode: 'N/A',
-                                        setName: this.currentSet.name
-                                    }
-                                });
-                            } else {
-                                // Create a variant for each card_set entry (different rarities)
-                                for (const cardSet of cardSets) {
-                                    const rarity = cardSet.set_rarity || 'Unknown';
-                                    const setCode = cardSet.set_code || 'N/A';
-                                    
-                                    matches.push({
-                                        ...card,
-                                        confidence: basicMatch.confidence,
-                                        method: basicMatch.method,
-                                        transcript: basicMatch.transcript,
-                                        displayRarity: rarity,
-                                        setInfo: {
-                                            setCode: setCode,
-                                            setName: cardSet.set_name || this.currentSet.name
-                                        }
-                                    });
-                                }
-                            }
-                        }
-                    } else {
-                        // Card not found in current set, add basic match without rarity info
-                        this.logger.debug(`[PATTERN] Card "${cardName}" not found in current set, using basic match`);
-                        matches.push(basicMatch);
-                    }
-                } else {
-                    // No current set, add basic match
-                    this.logger.debug(`[PATTERN] No current set loaded, using basic match for "${cardName}"`);
-                    matches.push(basicMatch);
-                }
-            }
-        }
-        
-        // Ensure unique confidence scores if we have multiple variants
-        if (matches.length > 1) {
-            this.ensureUniqueConfidenceScores(matches);
-        }
-        
-        return matches;
-    }
+
 
     /**
      * Find cards by fuzzy matching using advanced variant generation
