@@ -1,0 +1,47 @@
+{
+  "name": "ygoui-v2",
+  "version": "2.1.0",
+  "description": "Yu-Gi-Oh Card Price Checker & Pack Ripper - Cross-Platform PWA Edition",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8080 --directory .",
+    "dev": "python3 -m http.server 8080 --directory . --bind 127.0.0.1",
+    "test": "node src/tests/runner.js",
+    "test-voice": "node src/tests/voice.test.js",
+    "build": "node scripts/build.js",
+    "install-electron": "npm install electron@32.3.3 --save-dev",
+    "start-electron": "electron main.js",
+    "package-electron": "electron-builder"
+  },
+  "keywords": [
+    "yugioh",
+    "cards",
+    "price",
+    "checker",
+    "pack",
+    "ripper",
+    "voice",
+    "recognition",
+    "pwa"
+  ],
+  "author": "YGORipperUI Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.3.3",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "pwa": {
+    "short_name": "YGO Ripper",
+    "name": "YGO Ripper UI v2",
+    "description": "Cross-platform Yu-Gi-Oh card price checker and pack ripper with voice recognition",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "theme_color": "#ffd700",
+    "background_color": "#1a1a2e"
+  }
+}

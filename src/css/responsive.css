@@ -1,0 +1,768 @@
+/**
+ * Responsive CSS - Mobile and Cross-Platform Optimizations
+ * 
+ * Comprehensive responsive design for:
+ * - Mobile devices (iOS, Android)
+ * - Tablets (iPad, Android tablets)
+ * - Desktop (Windows, macOS, Linux)
+ * - Touch-first interfaces
+ * - Accessibility enhancements
+ * - Platform-specific optimizations
+ */
+
+/* Mobile First Responsive Breakpoints */
+:root {
+  --breakpoint-xs: 320px;   /* Small phones */
+  --breakpoint-sm: 480px;   /* Large phones */
+  --breakpoint-md: 768px;   /* Tablets */
+  --breakpoint-lg: 1024px;  /* Small laptops */
+  --breakpoint-xl: 1440px;  /* Large screens */
+  --breakpoint-xxl: 1920px; /* Ultra-wide */
+}
+
+/* Base Mobile Styles (320px+) */
+@media (min-width: 320px) {
+  .mobile\:block {
+    display: block !important;
+  }
+  
+  .mobile\:hidden {
+    display: none !important;
+  }
+  
+  .mobile\:flex {
+    display: flex !important;
+  }
+  
+  .mobile\:grid {
+    display: grid !important;
+  }
+}
+
+/* Large Mobile (480px+) */
+@media (min-width: 480px) {
+  .app-title {
+    font-size: var(--font-size-2xl);
+  }
+  
+  .tab-btn {
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+  
+  .form-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+  
+  .btn {
+    width: auto;
+  }
+  
+  .session-card {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+  }
+  
+  .card-price {
+    text-align: right;
+  }
+}
+
+/* Tablet Portrait (768px+) */
+@media (min-width: 768px) {
+  /* Layout Improvements */
+  .main-content {
+    padding: var(--spacing-xl) var(--spacing-lg);
+  }
+  
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .voice-actions {
+    flex-direction: row;
+  }
+  
+  .session-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  /* Enhanced Touch Targets */
+  .btn {
+    min-height: 48px;
+    padding: var(--spacing-md) var(--spacing-xl);
+  }
+  
+  .tab-btn {
+    min-height: 48px;
+  }
+  
+  .icon-btn {
+    width: 48px;
+    height: 48px;
+  }
+  
+  /* Modal Improvements */
+  .modal {
+    max-width: 700px;
+  }
+  
+  .toast {
+    min-width: 350px;
+  }
+  
+  /* Card Layout */
+  .session-card {
+    padding: var(--spacing-xl);
+  }
+  
+  .card-image {
+    width: 80px;
+    height: 80px;
+    font-size: var(--font-size-3xl);
+  }
+  
+  /* Price Display */
+  .price-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .source-prices {
+    flex-direction: row;
+  }
+}
+
+/* Tablet Landscape / Small Desktop (1024px+) */
+@media (min-width: 1024px) {
+  /* Full Desktop Layout */
+  .main-content {
+    padding: var(--spacing-2xl) var(--spacing-xl);
+  }
+  
+  .form-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .session-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  /* Enhanced Typography */
+  .app-title {
+    font-size: var(--font-size-3xl);
+  }
+  
+  .title-icon {
+    font-size: var(--font-size-4xl);
+  }
+  
+  /* Sidebar Potential */
+  .app {
+    /* Could implement sidebar layout here */
+  }
+  
+  /* Multi-column Content */
+  .panel-content {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-2xl);
+  }
+  
+  .two-column .panel-content {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  /* Enhanced Modals */
+  .modal {
+    max-width: 800px;
+  }
+  
+  /* Hover Effects (Desktop Only) */
+  .card:hover,
+  .session-card:hover {
+    transform: translateY(-4px);
+  }
+  
+  .btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+  }
+}
+
+/* Large Desktop (1440px+) */
+@media (min-width: 1440px) {
+  .main-content {
+    padding: var(--spacing-3xl) var(--spacing-2xl);
+  }
+  
+  .container-large {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  
+  .form-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  /* Enhanced spacing for large screens */
+  .panel-content {
+    gap: var(--spacing-3xl);
+  }
+  
+  .card,
+  .section-card {
+    padding: var(--spacing-2xl);
+  }
+}
+
+/* Ultra-wide (1920px+) */
+@media (min-width: 1920px) {
+  .container-xl {
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+  
+  /* Three-column layout for very wide screens */
+  .three-column .panel-content {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (pointer: coarse) {
+  /* Larger touch targets */
+  .btn {
+    min-height: 48px;
+    padding: var(--spacing-md) var(--spacing-xl);
+  }
+  
+  .tab-btn {
+    min-height: 48px;
+    padding: var(--spacing-md) var(--spacing-xl);
+  }
+  
+  .icon-btn {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .card-action-btn {
+    width: 40px;
+    height: 40px;
+  }
+  
+  /* Enhanced spacing for touch */
+  .form-actions {
+    gap: var(--spacing-lg);
+  }
+  
+  .voice-actions {
+    gap: var(--spacing-lg);
+  }
+  
+  /* Remove hover effects on touch devices */
+  .card:hover,
+  .session-card:hover,
+  .btn:hover {
+    transform: none;
+  }
+  
+  /* Focus states for touch */
+  .btn:active {
+    transform: scale(0.98);
+  }
+  
+  .tab-btn:active {
+    background-color: var(--color-surface-lighter);
+  }
+}
+
+/* Fine Pointer (Mouse) Optimizations */
+@media (pointer: fine) {
+  /* Smaller, precise targets acceptable */
+  .card-action-btn {
+    width: 32px;
+    height: 32px;
+  }
+  
+  /* Enhanced hover effects */
+  .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+  
+  /* Cursor styles */
+  .btn {
+    cursor: pointer;
+  }
+  
+  .tab-btn {
+    cursor: pointer;
+  }
+  
+  .card-action-btn {
+    cursor: pointer;
+  }
+}
+
+/* iOS Specific Optimizations */
+@supports (-webkit-touch-callout: none) {
+  /* iOS Safari specific styles */
+  .app {
+    /* Address iOS viewport height issues */
+    min-height: -webkit-fill-available;
+  }
+  
+  /* iOS safe area support */
+  .app-header {
+    padding-top: max(var(--spacing-md), env(safe-area-inset-top));
+  }
+  
+  .status-bar {
+    padding-bottom: max(var(--spacing-sm), env(safe-area-inset-bottom));
+  }
+  
+  /* iOS form styling */
+  input,
+  select,
+  textarea {
+    -webkit-appearance: none;
+    border-radius: var(--border-radius);
+  }
+  
+  /* iOS button styling */
+  .btn {
+    -webkit-appearance: none;
+    border-radius: var(--border-radius);
+  }
+  
+  /* Prevent zoom on input focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  
+  /* iOS scrolling improvements */
+  .modal-content,
+  .virtual-scroll-container {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* macOS Specific Optimizations */
+@media (prefers-color-scheme: dark) {
+  /* Ensure good contrast on macOS dark mode */
+  :root {
+    --color-text: #ffffff;
+    --color-background: #000000;
+  }
+}
+
+/* Windows High Contrast Mode */
+@media (prefers-contrast: high) {
+  .btn {
+    border: 2px solid ButtonText;
+  }
+  
+  .card,
+  .section-card {
+    border: 2px solid WindowText;
+  }
+  
+  .tab-btn.active {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* Reduced Motion Preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .loading-spinner {
+    animation: none;
+    border-top-color: var(--color-primary);
+  }
+  
+  .progress-bar.animated {
+    animation: none;
+  }
+}
+
+/* Landscape Orientation */
+@media (orientation: landscape) and (max-width: 1024px) {
+  /* Optimize for landscape tablets and phones */
+  .app-header {
+    padding: var(--spacing-sm) 0;
+  }
+  
+  .main-content {
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+  
+  .tab-navigation {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+  
+  .tab-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+  }
+  
+  /* Compact session cards for landscape */
+  .session-card {
+    padding: var(--spacing-md);
+  }
+  
+  .card-image {
+    width: 48px;
+    height: 48px;
+  }
+  
+  /* Two-column layout for landscape tablets */
+  .session-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Portrait Orientation */
+@media (orientation: portrait) and (max-width: 768px) {
+  /* Optimize for portrait phones */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .session-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .voice-actions {
+    flex-direction: column;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .btn {
+    width: 100%;
+  }
+}
+
+/* Container Queries (Future-proofing) */
+@container (min-width: 600px) {
+  .price-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@container (min-width: 900px) {
+  .form-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Print Optimizations */
+@media print {
+  /* Hide interactive elements */
+  .tab-navigation,
+  .btn,
+  .voice-controls,
+  .status-bar,
+  .loading-screen,
+  .modal-overlay,
+  .toast-container,
+  .fab {
+    display: none !important;
+  }
+  
+  /* Optimize for print */
+  .app {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .card,
+  .section-card {
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    background: white !important;
+    break-inside: avoid;
+  }
+  
+  .main-content {
+    padding: 0 !important;
+  }
+  
+  .price-summary {
+    background: #f5f5f5 !important;
+    border: 2px solid #333 !important;
+  }
+  
+  .session-card {
+    background: white !important;
+    border: 1px solid #ccc !important;
+  }
+  
+  /* Typography for print */
+  body {
+    font-size: 12pt !important;
+    line-height: 1.4 !important;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    color: black !important;
+    break-after: avoid;
+  }
+  
+  /* Page breaks */
+  .section-card {
+    page-break-inside: avoid;
+  }
+  
+  .price-summary {
+    page-break-inside: avoid;
+  }
+}
+
+/* Utility Classes for Responsive Design */
+.container {
+  width: 100%;
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  padding: 0 var(--spacing-md);
+}
+
+.container-fluid {
+  width: 100%;
+  padding: 0 var(--spacing-md);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 calc(-1 * var(--spacing-sm));
+}
+
+.col {
+  flex: 1;
+  padding: 0 var(--spacing-sm);
+}
+
+.col-auto {
+  flex: 0 0 auto;
+  padding: 0 var(--spacing-sm);
+}
+
+/* Responsive visibility utilities */
+.visible-mobile {
+  display: none;
+}
+
+.visible-tablet {
+  display: none;
+}
+
+.visible-desktop {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .visible-mobile {
+    display: block;
+  }
+  
+  .hidden-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .visible-tablet {
+    display: block;
+  }
+  
+  .hidden-tablet {
+    display: none !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .visible-desktop {
+    display: block;
+  }
+  
+  .hidden-desktop {
+    display: none !important;
+  }
+}
+
+/* Flex utilities */
+.flex {
+  display: flex;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.flex-nowrap {
+  flex-wrap: nowrap;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.flex-row {
+  flex-direction: row;
+}
+
+.justify-start {
+  justify-content: flex-start;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-end {
+  justify-content: flex-end;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.align-start {
+  align-items: flex-start;
+}
+
+.align-center {
+  align-items: center;
+}
+
+.align-end {
+  align-items: flex-end;
+}
+
+.align-stretch {
+  align-items: stretch;
+}
+
+/* Grid utilities */
+.grid {
+  display: grid;
+}
+
+.grid-cols-1 {
+  grid-template-columns: repeat(1, 1fr);
+}
+
+.grid-cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.gap-sm {
+  gap: var(--spacing-sm);
+}
+
+.gap-md {
+  gap: var(--spacing-md);
+}
+
+.gap-lg {
+  gap: var(--spacing-lg);
+}
+
+.gap-xl {
+  gap: var(--spacing-xl);
+}
+
+/* Spacing utilities */
+.m-0 { margin: 0; }
+.m-sm { margin: var(--spacing-sm); }
+.m-md { margin: var(--spacing-md); }
+.m-lg { margin: var(--spacing-lg); }
+.m-xl { margin: var(--spacing-xl); }
+
+.p-0 { padding: 0; }
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+.p-xl { padding: var(--spacing-xl); }
+
+.mt-0 { margin-top: 0; }
+.mt-sm { margin-top: var(--spacing-sm); }
+.mt-md { margin-top: var(--spacing-md); }
+.mt-lg { margin-top: var(--spacing-lg); }
+.mt-xl { margin-top: var(--spacing-xl); }
+
+.mb-0 { margin-bottom: 0; }
+.mb-sm { margin-bottom: var(--spacing-sm); }
+.mb-md { margin-bottom: var(--spacing-md); }
+.mb-lg { margin-bottom: var(--spacing-lg); }
+.mb-xl { margin-bottom: var(--spacing-xl); }
+
+.pt-0 { padding-top: 0; }
+.pt-sm { padding-top: var(--spacing-sm); }
+.pt-md { padding-top: var(--spacing-md); }
+.pt-lg { padding-top: var(--spacing-lg); }
+.pt-xl { padding-top: var(--spacing-xl); }
+
+.pb-0 { padding-bottom: 0; }
+.pb-sm { padding-bottom: var(--spacing-sm); }
+.pb-md { padding-bottom: var(--spacing-md); }
+.pb-lg { padding-bottom: var(--spacing-lg); }
+.pb-xl { padding-bottom: var(--spacing-xl); }
+
+/* Text utilities */
+.text-xs { font-size: var(--font-size-xs); }
+.text-sm { font-size: var(--font-size-sm); }
+.text-base { font-size: var(--font-size-base); }
+.text-lg { font-size: var(--font-size-lg); }
+.text-xl { font-size: var(--font-size-xl); }
+.text-2xl { font-size: var(--font-size-2xl); }
+.text-3xl { font-size: var(--font-size-3xl); }
+
+.font-normal { font-weight: var(--font-weight-normal); }
+.font-medium { font-weight: var(--font-weight-medium); }
+.font-semibold { font-weight: var(--font-weight-semibold); }
+.font-bold { font-weight: var(--font-weight-bold); }
+
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+.text-primary { color: var(--color-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-muted { color: var(--color-text-muted); }
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-error { color: var(--color-error); }
+.text-info { color: var(--color-info); }
