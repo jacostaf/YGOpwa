@@ -1137,27 +1137,41 @@ export class SessionManager {
                             set_code: cardSet.set_code,
                             set_name: cardSet.set_name,
                             type_of_rarity: typeof cardSet.set_rarity,
+                            type_of_setcode: typeof cardSet.set_code,
                             rarity_is_undefined: cardSet.set_rarity === undefined,
-                            rarity_is_null: cardSet.set_rarity === null
+                            rarity_is_null: cardSet.set_rarity === null,
+                            setcode_is_undefined: cardSet.set_code === undefined,
+                            setcode_is_null: cardSet.set_code === null
                         });
                         
-                        // Use proper default handling like oldIteration.py
-                        const rarity = cardSet.set_rarity || null;
-                        
-                        // Skip card_sets entries without valid rarity (comprehensive filtering)
-                        if (rarity === null || 
-                            rarity === undefined || 
-                            typeof rarity !== 'string' ||
-                            rarity.trim() === '' || 
-                            rarity.toLowerCase().trim() === 'unknown' ||
-                            rarity.toLowerCase().trim() === 'n/a' ||
-                            rarity.toLowerCase().trim() === 'undefined' ||
-                            rarity.toLowerCase().trim() === 'null') {
-                            this.logger.debug(`[VARIANT] Skipping card_set with invalid rarity: "${rarity}" (type: ${typeof rarity}) for card: ${card.name}`);
+                        // Filter out card_sets entries with missing or invalid rarity
+                        if (cardSet.set_rarity === null || 
+                            cardSet.set_rarity === undefined || 
+                            typeof cardSet.set_rarity !== 'string' ||
+                            cardSet.set_rarity.trim() === '' || 
+                            cardSet.set_rarity.toLowerCase().trim() === 'unknown' ||
+                            cardSet.set_rarity.toLowerCase().trim() === 'n/a' ||
+                            cardSet.set_rarity.toLowerCase().trim() === 'undefined' ||
+                            cardSet.set_rarity.toLowerCase().trim() === 'null') {
+                            this.logger.debug(`[VARIANT] Skipping card_set with invalid rarity: "${cardSet.set_rarity}" (type: ${typeof cardSet.set_rarity}) for card: ${card.name}`);
                             continue;
                         }
                         
-                        const setCode = cardSet.set_code || 'N/A';
+                        // Filter out card_sets entries with missing or invalid set code
+                        if (cardSet.set_code === null || 
+                            cardSet.set_code === undefined || 
+                            typeof cardSet.set_code !== 'string' ||
+                            cardSet.set_code.trim() === '' || 
+                            cardSet.set_code.toLowerCase().trim() === 'n/a' ||
+                            cardSet.set_code.toLowerCase().trim() === 'undefined' ||
+                            cardSet.set_code.toLowerCase().trim() === 'null') {
+                            this.logger.debug(`[VARIANT] Skipping card_set with invalid set_code: "${cardSet.set_code}" (type: ${typeof cardSet.set_code}) for card: ${card.name}`);
+                            continue;
+                        }
+                        
+                        // Only use verified valid values (no fallbacks)
+                        const rarity = cardSet.set_rarity;
+                        const setCode = cardSet.set_code;
                         
                         this.logger.debug(`[VARIANT] Processing valid card_set: rarity="${rarity}", setCode="${setCode}" for card: ${card.name}`);
                         
