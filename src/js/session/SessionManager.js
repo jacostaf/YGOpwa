@@ -1044,6 +1044,7 @@ export class SessionManager {
         }
         
         // Second pass: Create variants for each matching card name with different rarities
+        // Following the logic from oldIteration.py for proper rarity variant handling
         const allVariants = [];
         const processedCardNames = new Set();
         
@@ -1056,30 +1057,57 @@ export class SessionManager {
             }
             processedCardNames.add(cardName);
             
-            // Find all variants of this card in the set (different rarities, art variants, etc.)
-            const cardVariants = setCards.filter(card => card.name === cardName);
+            // Find all cards with the same name (exact match)
+            const matchingCards = setCards.filter(card => card.name === cardName);
             
-            this.logger.debug(`Found ${cardVariants.length} variants for card: ${cardName}`);
+            this.logger.debug(`Found ${matchingCards.length} cards with name: ${cardName}`);
             
-            for (const variant of cardVariants) {
-                // Create a unique variant key
-                const variantKey = `${variant.name}_${variant.rarity || 'Unknown'}_${variant.set_code || 'N/A'}`;
+            // For each matching card, create variants based on card_sets array (like oldIteration.py)
+            for (const card of matchingCards) {
+                const cardSets = card.card_sets || [];
                 
-                // Check if we already added this exact variant
-                if (!allVariants.some(v => v.variantKey === variantKey)) {
-                    allVariants.push({
-                        ...variant,
-                        confidence: match.confidence,
-                        method: match.method,
-                        transcript: match.transcript,
-                        variantKey: variantKey,
-                        // Enhanced rarity info
-                        displayRarity: variant.rarity || variant.set_rarity || 'Unknown',
-                        setInfo: {
-                            setCode: variant.set_code || this.currentSet.code,
-                            setName: variant.set_name || this.currentSet.name
+                if (cardSets.length === 0) {
+                    // Fallback: create single variant with unknown rarity
+                    const variantKey = `${card.name}_Unknown_N/A`;
+                    
+                    if (!allVariants.some(v => v.variantKey === variantKey)) {
+                        allVariants.push({
+                            ...card,
+                            confidence: match.confidence,
+                            method: match.method,
+                            transcript: match.transcript,
+                            variantKey: variantKey,
+                            displayRarity: 'Unknown',
+                            setInfo: {
+                                setCode: 'N/A',
+                                setName: this.currentSet.name
+                            }
+                        });
+                    }
+                } else {
+                    // Create a variant for each card_set entry (different rarities)
+                    for (const cardSet of cardSets) {
+                        const rarity = cardSet.set_rarity || 'Unknown';
+                        const setCode = cardSet.set_code || 'N/A';
+                        const variantKey = `${card.name}_${rarity}_${setCode}`;
+                        
+                        // Check if we already added this exact variant
+                        if (!allVariants.some(v => v.variantKey === variantKey)) {
+                            allVariants.push({
+                                ...card,
+                                confidence: match.confidence,
+                                method: match.method,
+                                transcript: match.transcript,
+                                variantKey: variantKey,
+                                // Use the specific rarity and set info from this card_set
+                                displayRarity: rarity,
+                                setInfo: {
+                                    setCode: setCode,
+                                    setName: cardSet.set_name || this.currentSet.name
+                                }
+                            });
                         }
-                    });
+                    }
                 }
             }
         }
@@ -1097,12 +1125,39 @@ export class SessionManager {
 
     /**
      * Ensure unique confidence scores to avoid ties in selection
+     * Based on the logic from oldIteration.py
      */
     ensureUniqueConfidenceScores(variants) {
-        for (let i = 1; i < variants.length; i++) {
-            if (variants[i].confidence >= variants[i - 1].confidence) {
-                // Slightly reduce confidence to maintain order
-                variants[i].confidence = variants[i - 1].confidence - 0.001;
+        const usedScores = new Set();
+        
+        for (const variant of variants) {
+            const originalConfidence = variant.confidence;
+            let confidence = originalConfidence;
+            
+            // Adjust confidence if it's already used (like oldIteration.py)
+            while (usedScores.has(Math.round(confidence * 10) / 10)) { // Round to 1 decimal for comparison
+                confidence -= 0.1;
+                
+                // Ensure we don't go below reasonable bounds
+                if (confidence < 10) {
+                    confidence = originalConfidence + 0.1;
+                    while (usedScores.has(Math.round(confidence * 10) / 10)) {
+                        confidence += 0.1;
+                        if (confidence > 99) {
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            
+            // Round to one decimal place and update
+            confidence = Math.round(confidence * 10) / 10;
+            variant.confidence = confidence;
+            usedScores.add(confidence);
+            
+            if (Math.abs(confidence - originalConfidence) > 0.05) { // Only log significant changes
+                this.logger.debug(`Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
             }
         }
     }
