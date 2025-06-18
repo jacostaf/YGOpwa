@@ -1108,9 +1108,9 @@ export class UIManager {
         // Ctrl/Cmd + number keys for tab switching
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
             const keyNum = parseInt(e.key);
-            if (keyNum >= 1 && keyNum <= 3) {
+            if (keyNum >= 1 && keyNum <= 2) {
                 e.preventDefault();
-                const tabs = ['price-checker', 'pack-ripper', 'session-tracker'];
+                const tabs = ['price-checker', 'pack-ripper'];
                 this.switchTab(tabs[keyNum - 1]);
             }
         }

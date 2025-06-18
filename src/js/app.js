@@ -386,23 +386,131 @@ class YGORipperApp {
      */
     async handleSessionExport() {
         try {
-            const sessionData = this.sessionManager.exportSession();
+            // Show export format dialog
+            this.showExportFormatDialog();
+            
+        } catch (error) {
+            this.logger.error('Failed to export session:', error);
+            this.uiManager.showToast('Error exporting session: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Show export format dialog
+     */
+    showExportFormatDialog() {
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-dialog';
+        dialog.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Export Session</h3>
+                    <button class="modal-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>Choose export format:</p>
+                    <div class="format-options">
+                        <label class="radio-option">
+                            <input type="radio" name="format" value="csv" checked>
+                            <span>CSV (Excel compatible)</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="format" value="json">
+                            <span>JSON (Full data)</span>
+                        </label>
+                    </div>
+                    <div class="field-selection" id="csv-fields" style="margin-top: 20px;">
+                        <p>Select fields to export:</p>
+                        <div class="checkbox-grid">
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="cardName" checked>
+                                <span>Card Name</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="rarity" checked>
+                                <span>Rarity</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="setCode" checked>
+                                <span>Set Code</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="timestamp" checked>
+                                <span>Added Time</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="price">
+                                <span>Estimated Price</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="condition">
+                                <span>Condition</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancel-export">Cancel</button>
+                    <button class="btn btn-primary" id="confirm-export">Export</button>
+                </div>
+            </div>
+        `;
+
+        // Add dialog to modal overlay
+        this.uiManager.elements.modalOverlay.innerHTML = '';
+        this.uiManager.elements.modalOverlay.appendChild(dialog);
+        this.uiManager.elements.modalOverlay.classList.remove('hidden');
+
+        // Handle format change
+        const formatRadios = dialog.querySelectorAll('input[name="format"]');
+        const csvFields = dialog.querySelector('#csv-fields');
+        
+        formatRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                csvFields.style.display = radio.value === 'csv' ? 'block' : 'none';
+            });
+        });
+
+        // Handle close
+        const closeBtn = dialog.querySelector('.modal-close');
+        const cancelBtn = dialog.querySelector('#cancel-export');
+        
+        [closeBtn, cancelBtn].forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.uiManager.closeModal();
+            });
+        });
+
+        // Handle export
+        const exportBtn = dialog.querySelector('#confirm-export');
+        exportBtn.addEventListener('click', () => {
+            const selectedFormat = dialog.querySelector('input[name="format"]:checked').value;
+            const selectedFields = selectedFormat === 'csv' ? 
+                Array.from(dialog.querySelectorAll('input[name="field"]:checked')).map(cb => cb.value) :
+                null;
+
+            this.performSessionExport(selectedFormat, selectedFields);
+            this.uiManager.closeModal();
+        });
+    }
+
+    /**
+     * Perform the actual session export
+     */
+    performSessionExport(format, selectedFields) {
+        try {
+            const exportFile = this.sessionManager.generateExportFile(format, selectedFields);
             
             // Create download link
-            const blob = new Blob([JSON.stringify(sessionData, null, 2)], { 
-                type: 'application/json' 
-            });
-            const url = URL.createObjectURL(blob);
-            
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `ygo-session-${new Date().toISOString().split('T')[0]}.json`;
+            a.href = exportFile.url;
+            a.download = exportFile.filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            exportFile.cleanup();
             
-            this.uiManager.showToast('Session exported successfully', 'success');
+            this.uiManager.showToast(`Session exported as ${format.toUpperCase()}`, 'success');
             
         } catch (error) {
             this.logger.error('Failed to export session:', error);
