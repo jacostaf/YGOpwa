@@ -65,13 +65,13 @@ export class SessionManager {
     }
 
     /**
-     * Get API URL (matching tcg_ygoripper backend)
-     * Backend runs on Flask default port 5000
+     * Get API URL (matching realBackendAPI.py backend)
+     * Backend runs on port 8081 as configured in realBackendAPI.py
      */
     getApiUrl() {
-        // Flask backend runs on default port 5000
-        // Based on the tcg_ygoripper/main.py backend API
-        return 'http://127.0.0.1:5000';
+        // realBackendAPI.py backend runs on port 8081
+        // Based on the realBackendAPI.py backend API
+        return 'http://127.0.0.1:8081';
     }
 
     /**
@@ -191,7 +191,7 @@ export class SessionManager {
             let errorMessage = 'Failed to load card sets';
             
             if (error.message.includes('backend') || error.message.includes('connect')) {
-                errorMessage = 'Cannot connect to backend API. Please ensure tcg_ygoripper backend is running on port 5000.';
+                errorMessage = 'Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on port 8081.';
             } else if (error.message.includes('timeout')) {
                 errorMessage = 'Request timed out. Please check your backend connection.';
             } else {
@@ -318,7 +318,7 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('API request timed out after', this.config.apiTimeout, 'ms');
-                throw new Error('Request timed out. Please check if the backend is running on http://127.0.0.1:5000');
+                throw new Error('Request timed out. Please check if the backend is running on http://127.0.0.1:8081');
             }
             
             this.logger.error('Failed to fetch card sets from API:', error);
@@ -338,7 +338,7 @@ export class SessionManager {
             
             // Provide more specific error messages
             if (error.message.includes('fetch')) {
-                throw new Error('Cannot connect to backend API. Please ensure tcg_ygoripper backend is running on http://127.0.0.1:5000');
+                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
             }
             
             throw error;
@@ -491,7 +491,7 @@ export class SessionManager {
             
             // Provide more specific error messages
             if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-                throw new Error('Cannot connect to backend API. Please ensure tcg_ygoripper backend is running on http://127.0.0.1:5000');
+                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
             }
             
             throw error;
@@ -499,31 +499,18 @@ export class SessionManager {
     }
 
     /**
-     * Get default card sets as fallback when API is unavailable
-     * These are common sets that should always be available
+     * Get minimal emergency fallback card sets when API is completely unavailable
+     * This should only be used as a last resort - the backend API should provide 990+ sets
      */
     getDefaultCardSets() {
         return [
-            // Classic sets
+            // Minimal emergency fallback - only essential sets
             { id: 'LOB', name: 'Legend of Blue Eyes White Dragon', code: 'LOB', set_name: 'Legend of Blue Eyes White Dragon', set_code: 'LOB' },
             { id: 'MRD', name: 'Metal Raiders', code: 'MRD', set_name: 'Metal Raiders', set_code: 'MRD' },
-            { id: 'SRL', name: 'Spell Ruler', code: 'SRL', set_name: 'Spell Ruler', set_code: 'SRL' },
-            { id: 'PSV', name: 'Pharaoh\'s Servant', code: 'PSV', set_name: 'Pharaoh\'s Servant', set_code: 'PSV' },
-            { id: 'LON', name: 'Labyrinth of Nightmare', code: 'LON', set_name: 'Labyrinth of Nightmare', set_code: 'LON' },
-            
-            // Modern popular sets
             { id: 'DUEL', name: 'Duel Devastator', code: 'DUEL', set_name: 'Duel Devastator', set_code: 'DUEL' },
-            { id: 'MAGO', name: 'Maximum Gold', code: 'MAGO', set_name: 'Maximum Gold', set_code: 'MAGO' },
-            { id: 'GFTP', name: 'Ghosts From the Past', code: 'GFTP', set_name: 'Ghosts From the Past', set_code: 'GFTP' },
-            { id: 'MGED', name: 'Maximum Gold: El Dorado', code: 'MGED', set_name: 'Maximum Gold: El Dorado', set_code: 'MGED' },
-            { id: 'BACH', name: 'Battle of Chaos', code: 'BACH', set_name: 'Battle of Chaos', set_code: 'BACH' },
             
-            // Structure decks
-            { id: 'SDBE', name: 'Structure Deck: Blue-Eyes White Dragon', code: 'SDBE', set_name: 'Structure Deck: Blue-Eyes White Dragon', set_code: 'SDBE' },
-            { id: 'SDSE', name: 'Structure Deck: Synchron Extreme', code: 'SDSE', set_name: 'Structure Deck: Synchron Extreme', set_code: 'SDSE' },
-            
-            // Note: This is a fallback list. The backend should provide 990+ sets.
-            // If you're seeing this, it means the backend API is not accessible.
+            // WARNING: This is an emergency fallback with only 3 sets instead of 990+.
+            // If you're seeing this, check that realBackendAPI.py is running on port 8081.
         ];
     }
 
