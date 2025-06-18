@@ -1,6 +1,7 @@
 {
   "name": "ygoui-v2",
   "version": "2.1.0",
+  "type": "module",
   "description": "Yu-Gi-Oh Card Price Checker & Pack Ripper - Cross-Platform PWA Edition",
   "main": "index.html",
   "scripts": {
