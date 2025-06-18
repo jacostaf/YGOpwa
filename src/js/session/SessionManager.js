@@ -1131,15 +1131,29 @@ export class SessionManager {
                 if (cardSets.length > 0) {
                     // Create a variant for each card_set entry (different rarities)
                     for (const cardSet of cardSets) {
-                        // Skip card_sets entries without valid rarity (stricter filtering to eliminate Unknown variants)
-                        const rarity = cardSet.set_rarity;
-                        if (!rarity || 
+                        // Add comprehensive debugging for this card_set entry
+                        this.logger.debug(`[VARIANT] Processing card_set entry for card: ${card.name}`, {
+                            set_rarity: cardSet.set_rarity,
+                            set_code: cardSet.set_code,
+                            set_name: cardSet.set_name,
+                            type_of_rarity: typeof cardSet.set_rarity,
+                            rarity_is_undefined: cardSet.set_rarity === undefined,
+                            rarity_is_null: cardSet.set_rarity === null
+                        });
+                        
+                        // Use proper default handling like oldIteration.py
+                        const rarity = cardSet.set_rarity || null;
+                        
+                        // Skip card_sets entries without valid rarity (comprehensive filtering)
+                        if (rarity === null || 
+                            rarity === undefined || 
+                            typeof rarity !== 'string' ||
                             rarity.trim() === '' || 
                             rarity.toLowerCase().trim() === 'unknown' ||
                             rarity.toLowerCase().trim() === 'n/a' ||
                             rarity.toLowerCase().trim() === 'undefined' ||
                             rarity.toLowerCase().trim() === 'null') {
-                            this.logger.debug(`[VARIANT] Skipping card_set with invalid rarity: "${rarity}" for card: ${card.name}`);
+                            this.logger.debug(`[VARIANT] Skipping card_set with invalid rarity: "${rarity}" (type: ${typeof rarity}) for card: ${card.name}`);
                             continue;
                         }
                         
