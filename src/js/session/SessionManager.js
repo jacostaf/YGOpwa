@@ -22,7 +22,7 @@ export class SessionManager {
         
         // Session state
         this.currentSession = null;
-        this.isSessionActive = false;
+        this.sessionActive = false;
         this.sessionHistory = [];
         
         // Card sets data
@@ -582,7 +582,7 @@ export class SessionManager {
             };
             
             this.currentSet = set;
-            this.isSessionActive = true;
+            this.sessionActive = true;
             
             // Load set-specific card data
             await this.loadSetCards(set.id);
@@ -603,7 +603,7 @@ export class SessionManager {
      * Stop the current session
      */
     async stopSession() {
-        if (!this.isSessionActive || !this.currentSession) {
+        if (!this.sessionActive || !this.currentSession) {
             this.logger.warn('No active session to stop');
             return;
         }
@@ -633,7 +633,7 @@ export class SessionManager {
             this.emitSessionStop(this.currentSession);
             
             // Reset state
-            this.isSessionActive = false;
+            this.sessionActive = false;
             const stoppedSession = this.currentSession;
             this.currentSession = null;
             this.currentSet = null;
@@ -669,7 +669,7 @@ export class SessionManager {
      * Add a card to the current session
      */
     async addCard(cardData) {
-        if (!this.isSessionActive || !this.currentSession) {
+        if (!this.sessionActive || !this.currentSession) {
             throw new Error('No active session');
         }
         
@@ -705,7 +705,7 @@ export class SessionManager {
      * Remove a card from the current session
      */
     removeCard(cardId) {
-        if (!this.isSessionActive || !this.currentSession) {
+        if (!this.sessionActive || !this.currentSession) {
             throw new Error('No active session');
         }
         
@@ -992,7 +992,7 @@ export class SessionManager {
             if (session && !session.endTime) {
                 // Resume incomplete session
                 this.currentSession = session;
-                this.isSessionActive = true;
+                this.sessionActive = true;
                 
                 // Find the set
                 this.currentSet = this.cardSets.find(s => s.id === session.setId);
@@ -1034,7 +1034,7 @@ export class SessionManager {
             }
             
             // Stop current session if active
-            if (this.isSessionActive) {
+            if (this.sessionActive) {
                 await this.stopSession();
             }
             
@@ -1047,7 +1047,7 @@ export class SessionManager {
             
             // Find the set
             this.currentSet = this.cardSets.find(s => s.id === sessionData.setId);
-            this.isSessionActive = true;
+            this.sessionActive = true;
             
             // Load set cards
             if (this.currentSet) {
@@ -1074,7 +1074,7 @@ export class SessionManager {
         }
         
         this.autoSaveTimer = setInterval(async () => {
-            if (this.isSessionActive) {
+            if (this.sessionActive) {
                 await this.saveSession();
             }
         }, this.config.autoSaveInterval);
@@ -1124,18 +1124,18 @@ export class SessionManager {
         }
         
         return {
-            isActive: this.isSessionActive,
+            isActive: this.sessionActive,
             setName: this.currentSession.setName,
             cardCount: this.currentSession.cards.length,
             totalValue: this.currentSession.statistics.totalValue,
-            status: this.isSessionActive ? 'Active' : 'Stopped',
+            status: this.sessionActive ? 'Active' : 'Stopped',
             sessionId: this.currentSession.id,
             startTime: this.currentSession.startTime
         };
     }
 
     isSessionActive() {
-        return this.isSessionActive;
+        return this.sessionActive;
     }
 
     // Event handling
