@@ -155,33 +155,80 @@ export class ImageManager {
             
             img.onerror = (error) => {
                 this.logger.error(`Failed to download image: ${imageUrl}`, error);
-                reject(new Error(`Failed to download image: ${imageUrl}`));
+                
+                // If it's a YGOPRODeck image that failed, try to create a placeholder
+                if (imageUrl.startsWith('https://images.ygoprodeck.com/') || 
+                    imageUrl.startsWith('http://127.0.0.1:8081/cards/image')) {
+                    this.logger.debug(`Creating data URL placeholder for failed YGOPRODeck image: ${imageUrl}`);
+                    
+                    // Create a placeholder data URL image
+                    const placeholderImg = this.createPlaceholderImage(size);
+                    resolve(placeholderImg);
+                } else {
+                    reject(new Error(`Failed to download image: ${imageUrl}`));
+                }
             };
             
-            // Try backend proxy first for YGOPRODeck images to avoid CORS issues
-            let proxiedUrl = imageUrl;
+            // For YGOPRODeck images, always use backend proxy to avoid CORS issues
+            let finalUrl = imageUrl;
             if (imageUrl.startsWith('https://images.ygoprodeck.com/')) {
-                try {
-                    // Test if backend is available by trying the proxy
-                    proxiedUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
-                    this.logger.debug(`Attempting backend proxy for image: ${imageUrl}`);
-                } catch (proxyError) {
-                    this.logger.debug(`Backend proxy not available, will handle CORS gracefully: ${proxyError.message}`);
-                    // Fall through to direct URL (will handle CORS error gracefully)
-                    proxiedUrl = imageUrl;
-                }
+                finalUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
+                this.logger.debug(`Using backend proxy for image: ${imageUrl} -> ${finalUrl}`);
             }
             
             // Start the download
-            img.src = proxiedUrl;
+            img.src = finalUrl;
             
             // Set timeout for the request
             setTimeout(() => {
                 if (!img.complete) {
-                    reject(new Error(`Image download timeout: ${imageUrl}`));
+                    // If it's a YGOPRODeck image that timed out, create a placeholder
+                    if (imageUrl.startsWith('https://images.ygoprodeck.com/')) {
+                        this.logger.debug(`Creating placeholder for timed out image: ${imageUrl}`);
+                        const placeholderImg = this.createPlaceholderImage(size);
+                        resolve(placeholderImg);
+                    } else {
+                        reject(new Error(`Image download timeout: ${imageUrl}`));
+                    }
                 }
             }, 15000); // 15 second timeout
         });
+    }
+
+    /**
+     * Create a placeholder image when real image fails to load
+     * @private
+     */
+    createPlaceholderImage(size) {
+        const canvas = document.createElement('canvas');
+        canvas.width = size.width;
+        canvas.height = size.height;
+        const ctx = canvas.getContext('2d');
+        
+        // Fill background with a card-like color
+        ctx.fillStyle = '#4A90E2';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Add border
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+        
+        // Add card icon
+        ctx.fillStyle = 'white';
+        ctx.font = `${Math.floor(size.height * 0.3)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🃏', canvas.width / 2, canvas.height / 2);
+        
+        // Create image element from canvas
+        const img = new Image();
+        img.src = canvas.toDataURL('image/png');
+        img.style.width = `${size.width}px`;
+        img.style.height = `${size.height}px`;
+        img.style.objectFit = 'contain';
+        
+        return img;
     }
 
     /**
