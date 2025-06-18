@@ -429,7 +429,7 @@ export class UIManager {
     }
 
     /**
-     * Display price results
+     * Display price results with image loading
      */
     displayPriceResults(results) {
         if (!results || !this.elements.priceContent) {
@@ -444,6 +444,11 @@ export class UIManager {
             this.elements.priceResults.classList.remove('hidden');
         }
         
+        // Load card image if available
+        if (results.success && results.data && results.data.image_url) {
+            this.loadCardImage(results.data);
+        }
+        
         // Scroll to results
         this.elements.priceResults?.scrollIntoView({ 
             behavior: 'smooth', 
@@ -452,7 +457,42 @@ export class UIManager {
     }
 
     /**
-     * Generate HTML for price results
+     * Load and display card image
+     */
+    async loadCardImage(cardData) {
+        const imageContainer = document.getElementById('card-image-container');
+        if (!imageContainer || !cardData.image_url) return;
+        
+        try {
+            // Import ImageManager dynamically to avoid circular dependencies
+            const { ImageManager } = await import('../utils/ImageManager.js');
+            const imageManager = new ImageManager();
+            
+            // Load the image with proper error handling
+            await imageManager.loadImageForDisplay(
+                cardData.card_number,
+                cardData.image_url,
+                imageManager.detailModeSize, // Use detail mode size for price results
+                imageContainer
+            );
+            
+        } catch (error) {
+            console.warn('Failed to load card image:', error);
+            
+            // Display placeholder on error
+            imageContainer.innerHTML = `
+                <div class="card-image-placeholder">
+                    <div class="placeholder-content">
+                        <div class="placeholder-icon">🃏</div>
+                        <div class="placeholder-text">Image unavailable</div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Generate HTML for price results (matching oldIteration.py format)
      */
     generatePriceResultsHTML(results) {
         if (!results.success) {
@@ -464,70 +504,143 @@ export class UIManager {
             `;
         }
         
-        const { cardInfo, aggregated, sources, metadata } = results;
+        const { data: cardData, aggregated, sources, metadata } = results;
+        
+        // Generate card image section
+        const imageSection = cardData.image_url ? `
+            <div class="card-image-section">
+                <div class="card-image-container" id="card-image-container">
+                    <div class="card-image-loading">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">Loading image...</div>
+                    </div>
+                </div>
+            </div>
+        ` : '';
+        
+        // Generate pricing information section
+        const pricingSection = this.generatePricingSection(cardData, aggregated);
         
         return `
-            <div class="price-summary">
-                <div class="card-info">
-                    <h4>${cardInfo.name || cardInfo.number}</h4>
-                    <div class="card-details">
-                        <span class="detail">Number: ${cardInfo.number}</span>
-                        <span class="detail">Rarity: ${cardInfo.rarity}</span>
-                        <span class="detail">Condition: ${cardInfo.condition}</span>
-                        ${cardInfo.artVariant ? `<span class="detail">Variant: ${cardInfo.artVariant}</span>` : ''}
-                    </div>
+            <div class="price-results-enhanced">
+                <div class="results-header">
+                    <div class="header-icon">🃏</div>
+                    <h3>YGORIPPERUI - CARD PRICE INFORMATION</h3>
+                    <div class="header-line"></div>
                 </div>
                 
-                <div class="price-aggregate">
-                    <div class="main-price">
-                        <span class="price-label">Average Price</span>
-                        <span class="price-value">$${aggregated.averagePrice.toFixed(2)}</span>
+                <div class="results-content">
+                    ${imageSection}
+                    
+                    <div class="card-details-section">
+                        <h4>📋 CARD DETAILS:</h4>
+                        <div class="details-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Name:</span>
+                                <span class="detail-value">${cardData.card_name}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Number:</span>
+                                <span class="detail-value">${cardData.card_number}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Rarity:</span>
+                                <span class="detail-value">${cardData.card_rarity}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Set:</span>
+                                <span class="detail-value">${cardData.booster_set_name}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Art Variant:</span>
+                                <span class="detail-value">${cardData.card_art_variant}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Set Code:</span>
+                                <span class="detail-value">${cardData.set_code}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Last Updated:</span>
+                                <span class="detail-value">${cardData.last_price_updt}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="price-stats">
-                        <div class="stat">
-                            <span class="stat-label">Range</span>
-                            <span class="stat-value">$${aggregated.lowestPrice.toFixed(2)} - $${aggregated.highestPrice.toFixed(2)}</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Median</span>
-                            <span class="stat-value">$${aggregated.medianPrice.toFixed(2)}</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Confidence</span>
-                            <span class="stat-value">${(aggregated.confidence * 100).toFixed(0)}%</span>
+                    
+                    ${pricingSection}
+                    
+                    <div class="additional-info-section">
+                        <h4>ℹ️ ADDITIONAL INFORMATION:</h4>
+                        <div class="additional-grid">
+                            <div class="info-item">
+                                <span class="info-label">Scrape Success:</span>
+                                <span class="info-value">${cardData.scrape_success ? '✅ Yes' : '❌ No'}</span>
+                            </div>
+                            ${cardData.source_url ? `
+                                <div class="info-item">
+                                    <span class="info-label">Source URL:</span>
+                                    <span class="info-value">
+                                        <a href="${cardData.source_url}" target="_blank" rel="noopener">View Source</a>
+                                    </span>
+                                </div>
+                            ` : ''}
+                            ${metadata.hasEnhancedInfo ? `
+                                <div class="info-item">
+                                    <span class="info-label">Data Source:</span>
+                                    <span class="info-value">Backend API</span>
+                                </div>
+                            ` : `
+                                <div class="info-item">
+                                    <span class="info-label">Data Source:</span>
+                                    <span class="info-value">Mock Data</span>
+                                </div>
+                            `}
+                            <div class="info-item">
+                                <span class="info-label">Query Time:</span>
+                                <span class="info-value">${metadata.queryTime}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <div class="price-sources">
-                <h5>Price Sources</h5>
-                ${Object.entries(sources).map(([sourceId, source]) => `
-                    <div class="source-result">
-                        <div class="source-header">
-                            <span class="source-name">${source.source}</span>
-                            <span class="response-time">${source.responseTime}ms</span>
-                        </div>
-                        <div class="source-data">
-                            ${this.generateSourceDataHTML(sourceId, source.data)}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-            
-            <div class="price-metadata">
-                <div class="meta-item">
-                    <span class="meta-label">Updated:</span>
-                    <span class="meta-value">${new Date(metadata.timestamp).toLocaleString()}</span>
+        `;
+    }
+
+    /**
+     * Generate pricing information section
+     */
+    generatePricingSection(cardData, aggregated) {
+        const prices = [];
+        
+        // TCGPlayer prices (matching oldIteration.py format)
+        if (cardData.tcg_price) {
+            prices.push(`🎯 TCGPlayer Low: $${cardData.tcg_price}`);
+        }
+        if (cardData.tcg_market_price) {
+            prices.push(`📈 TCGPlayer Market: $${cardData.tcg_market_price}`);
+        }
+        
+        // Add aggregated prices if available
+        if (aggregated && aggregated.averagePrice) {
+            prices.push(`📊 Average Price: $${aggregated.averagePrice.toFixed(2)}`);
+            prices.push(`📉 Lowest Price: $${aggregated.lowestPrice.toFixed(2)}`);
+            prices.push(`📈 Highest Price: $${aggregated.highestPrice.toFixed(2)}`);
+            prices.push(`📍 Median Price: $${aggregated.medianPrice.toFixed(2)}`);
+        }
+        
+        const pricesHTML = prices.length > 0 ? 
+            prices.map(price => `<div class="price-item">${price}</div>`).join('') :
+            '<div class="price-item">❌ No pricing data available</div>';
+        
+        return `
+            <div class="pricing-section">
+                <h4>💰 PRICING INFORMATION:</h4>
+                <div class="pricing-grid">
+                    ${pricesHTML}
                 </div>
-                <div class="meta-item">
-                    <span class="meta-label">Sources:</span>
-                    <span class="meta-value">${metadata.sourcesUsed}/${metadata.totalSources}</span>
-                </div>
-                ${metadata.fromCache ? `
-                    <div class="meta-item">
-                        <span class="meta-label">From Cache:</span>
-                        <span class="meta-value">Yes (${Math.round(metadata.cacheAge / 1000)}s ago)</span>
+                ${aggregated ? `
+                    <div class="price-confidence">
+                        <span class="confidence-label">Confidence Level:</span>
+                        <span class="confidence-value">${(aggregated.confidence * 100).toFixed(0)}%</span>
                     </div>
                 ` : ''}
             </div>
