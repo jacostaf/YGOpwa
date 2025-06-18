@@ -30,7 +30,9 @@ export class UIManager {
             sessionImport: [],
             voiceStart: [],
             voiceStop: [],
-            voiceTest: []
+            voiceTest: [],
+            quantityAdjust: [],
+            cardRemove: []
         };
         
         // UI state
@@ -786,6 +788,89 @@ export class UIManager {
         const hasSession = sessionInfo.cardCount > 0;
         this.elements.exportSessionBtn?.toggleAttribute('disabled', !hasSession);
         this.elements.clearSessionBtn?.toggleAttribute('disabled', !hasSession);
+        
+        // Update session cards display
+        this.displaySessionCards(sessionInfo.cards || []);
+    }
+
+    /**
+     * Display session cards with quantity adjustment buttons
+     */
+    displaySessionCards(cards) {
+        if (!this.elements.sessionCards) return;
+        
+        // Remove existing cards
+        const existingCards = this.elements.sessionCards.querySelectorAll('.session-card');
+        existingCards.forEach(card => card.remove());
+        
+        if (cards.length === 0) {
+            // Show empty state
+            if (this.elements.emptySession) {
+                this.elements.emptySession.classList.remove('hidden');
+            }
+            return;
+        }
+        
+        // Hide empty state
+        if (this.elements.emptySession) {
+            this.elements.emptySession.classList.add('hidden');
+        }
+        
+        // Display cards
+        cards.forEach(card => {
+            const cardElement = this.createSessionCardElement(card);
+            this.elements.sessionCards.appendChild(cardElement);
+        });
+    }
+
+    /**
+     * Create a session card element with quantity adjustment
+     */
+    createSessionCardElement(card) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'session-card';
+        cardDiv.dataset.cardId = card.id;
+        
+        cardDiv.innerHTML = `
+            <div class="card-info">
+                <div class="card-name">${card.name || 'Unknown Card'}</div>
+                <div class="card-details">
+                    <span class="card-rarity">${card.displayRarity || card.rarity || 'Unknown'}</span>
+                    ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
+                    ${card.price ? `<span class="card-price">$${card.price.toFixed(2)}</span>` : ''}
+                </div>
+            </div>
+            <div class="card-controls">
+                <div class="quantity-controls">
+                    <button class="btn btn-sm quantity-btn decrease-qty" data-card-id="${card.id}" title="Decrease Quantity">-</button>
+                    <span class="quantity-display">${card.quantity || 1}</span>
+                    <button class="btn btn-sm quantity-btn increase-qty" data-card-id="${card.id}" title="Increase Quantity">+</button>
+                </div>
+                <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+            </div>
+        `;
+        
+        // Add event listeners for quantity adjustment
+        const decreaseBtn = cardDiv.querySelector('.decrease-qty');
+        const increaseBtn = cardDiv.querySelector('.increase-qty');
+        const removeBtn = cardDiv.querySelector('.remove-card');
+        
+        decreaseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.emitQuantityAdjust(card.id, -1);
+        });
+        
+        increaseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.emitQuantityAdjust(card.id, 1);
+        });
+        
+        removeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.emitCardRemove(card.id);
+        });
+        
+        return cardDiv;
     }
 
     /**
@@ -1277,6 +1362,14 @@ export class UIManager {
         this.eventListeners.voiceTest.push(callback);
     }
 
+    onQuantityAdjust(callback) {
+        this.eventListeners.quantityAdjust.push(callback);
+    }
+
+    onCardRemove(callback) {
+        this.eventListeners.cardRemove.push(callback);
+    }
+
     // Event emission methods
     emitTabChange(tabId) {
         this.eventListeners.tabChange.forEach(callback => {
@@ -1374,6 +1467,26 @@ export class UIManager {
                 callback();
             } catch (error) {
                 this.logger.error('Error in voice test callback:', error);
+            }
+        });
+    }
+
+    emitQuantityAdjust(cardId, adjustment) {
+        this.eventListeners.quantityAdjust.forEach(callback => {
+            try {
+                callback(cardId, adjustment);
+            } catch (error) {
+                this.logger.error('Error in quantity adjust callback:', error);
+            }
+        });
+    }
+
+    emitCardRemove(cardId) {
+        this.eventListeners.cardRemove.forEach(callback => {
+            try {
+                callback(cardId);
+            } catch (error) {
+                this.logger.error('Error in card remove callback:', error);
             }
         });
     }

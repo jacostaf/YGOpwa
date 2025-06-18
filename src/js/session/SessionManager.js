@@ -478,37 +478,13 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('Set cards request timed out after', this.config.apiTimeout, 'ms');
+                throw new Error(`Request timed out loading cards for set ${setIdentifier}. Please check if the backend is running on http://127.0.0.1:8081`);
             } else {
                 this.logger.error(`Failed to load cards for set ${setIdentifier}:`, error);
+                throw error;
             }
-            
-            // Fallback: provide sample cards for testing voice recognition
-            this.logger.warn('API failed, using sample cards for testing');
-            const sampleCards = this.getSampleCards(setIdentifier);
-            this.setCards.set(setIdentifier, sampleCards);
-            return sampleCards;
         }
     }
-
-    /**
-     * Get sample cards for testing voice recognition
-     */
-    getSampleCards(setId) {
-        return [
-            { id: `${setId}-001`, name: 'Blue-Eyes White Dragon', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-002`, name: 'Dark Magician', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-003`, name: 'Evil HERO Neos Lord', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-004`, name: 'Evil Hero Neos Lord', rarity: 'Secret Rare', setCode: setId },
-            { id: `${setId}-005`, name: 'Elemental HERO Neos', rarity: 'Super Rare', setCode: setId },
-            { id: `${setId}-006`, name: 'Red-Eyes Black Dragon', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-007`, name: 'Time Wizard', rarity: 'Common', setCode: setId },
-            { id: `${setId}-008`, name: 'Mirror Force', rarity: 'Super Rare', setCode: setId },
-            { id: `${setId}-009`, name: 'Pot of Greed', rarity: 'Common', setCode: setId },
-            { id: `${setId}-010`, name: 'Mystical Space Typhoon', rarity: 'Common', setCode: setId }
-        ];
-    }
-
-
 
     /**
      * Load card recognition patterns
@@ -753,6 +729,39 @@ export class SessionManager {
     }
 
     /**
+     * Adjust card quantity in the current session
+     */
+    adjustCardQuantity(cardId, adjustment) {
+        if (!this.sessionActive || !this.currentSession) {
+            throw new Error('No active session');
+        }
+        
+        const card = this.currentSession.cards.find(card => card.id === cardId);
+        if (!card) {
+            throw new Error('Card not found in session');
+        }
+        
+        // Calculate new quantity
+        const currentQuantity = card.quantity || 1;
+        const newQuantity = Math.max(1, currentQuantity + adjustment); // Minimum quantity is 1
+        
+        if (newQuantity === currentQuantity) {
+            return card; // No change needed
+        }
+        
+        card.quantity = newQuantity;
+        
+        // Update statistics
+        this.updateSessionStatistics();
+        
+        // Emit events
+        this.emitSessionUpdate(this.currentSession);
+        
+        this.logger.info(`Card quantity adjusted: ${card.name || card.id} (${currentQuantity} -> ${newQuantity})`);
+        return card;
+    }
+
+    /**
      * Process voice input to identify cards
      */
     async processVoiceInput(transcript) {
@@ -987,7 +996,7 @@ export class SessionManager {
     }
 
     /**
-     * Find cards in current set
+     * Find cards in current set with enhanced rarity variant handling
      */
     async findCardsInCurrentSet(transcript) {
         if (!this.currentSet) {
@@ -995,11 +1004,12 @@ export class SessionManager {
         }
         
         const setCards = this.setCards.get(this.currentSet.id) || [];
-        const matches = [];
+        const initialMatches = [];
         
         // Normalize the transcript for better matching
         const normalizedTranscript = this.normalizeCardName(transcript);
         
+        // First pass: Find matching card names
         for (const card of setCards) {
             const normalizedCardName = this.normalizeCardName(card.name);
             
@@ -1022,7 +1032,7 @@ export class SessionManager {
             }
             
             if (confidence > 0) {
-                matches.push({
+                initialMatches.push({
                     ...card,
                     confidence: confidence,
                     method: `set-search-${matchType}`,
@@ -1033,7 +1043,68 @@ export class SessionManager {
             }
         }
         
-        return matches.sort((a, b) => b.confidence - a.confidence);
+        // Second pass: Create variants for each matching card name with different rarities
+        const allVariants = [];
+        const processedCardNames = new Set();
+        
+        for (const match of initialMatches) {
+            const cardName = match.name;
+            
+            // Skip if we already processed this card name
+            if (processedCardNames.has(cardName)) {
+                continue;
+            }
+            processedCardNames.add(cardName);
+            
+            // Find all variants of this card in the set (different rarities, art variants, etc.)
+            const cardVariants = setCards.filter(card => card.name === cardName);
+            
+            this.logger.debug(`Found ${cardVariants.length} variants for card: ${cardName}`);
+            
+            for (const variant of cardVariants) {
+                // Create a unique variant key
+                const variantKey = `${variant.name}_${variant.rarity || 'Unknown'}_${variant.set_code || 'N/A'}`;
+                
+                // Check if we already added this exact variant
+                if (!allVariants.some(v => v.variantKey === variantKey)) {
+                    allVariants.push({
+                        ...variant,
+                        confidence: match.confidence,
+                        method: match.method,
+                        transcript: match.transcript,
+                        variantKey: variantKey,
+                        // Enhanced rarity info
+                        displayRarity: variant.rarity || variant.set_rarity || 'Unknown',
+                        setInfo: {
+                            setCode: variant.set_code || this.currentSet.code,
+                            setName: variant.set_name || this.currentSet.name
+                        }
+                    });
+                }
+            }
+        }
+        
+        // Sort by confidence (highest first) and ensure unique confidence scores
+        const sortedVariants = allVariants.sort((a, b) => b.confidence - a.confidence);
+        
+        // Ensure unique confidence scores to avoid ties (similar to oldIteration.py)
+        this.ensureUniqueConfidenceScores(sortedVariants);
+        
+        this.logger.info(`Generated ${sortedVariants.length} card variants for transcript: "${transcript}"`);
+        
+        return sortedVariants;
+    }
+
+    /**
+     * Ensure unique confidence scores to avoid ties in selection
+     */
+    ensureUniqueConfidenceScores(variants) {
+        for (let i = 1; i < variants.length; i++) {
+            if (variants[i].confidence >= variants[i - 1].confidence) {
+                // Slightly reduce confidence to maintain order
+                variants[i].confidence = variants[i - 1].confidence - 0.001;
+            }
+        }
     }
 
     /**
@@ -1436,7 +1507,8 @@ export class SessionManager {
             totalValue: this.currentSession.statistics.totalValue,
             status: this.sessionActive ? 'Active' : 'Stopped',
             sessionId: this.currentSession.id,
-            startTime: this.currentSession.startTime
+            startTime: this.currentSession.startTime,
+            cards: this.currentSession.cards
         };
     }
 
