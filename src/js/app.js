@@ -586,7 +586,7 @@ class YGORipperApp {
      */
     handlePackRipperTabActivated() {
         // Ensure voice engine is ready when pack ripper tab is active
-        if (this.voiceEngine && !this.voiceEngine.isInitialized()) {
+        if (this.voiceEngine && !this.voiceEngine.isInitialized) {
             this.voiceEngine.initialize().catch((error) => {
                 this.logger.warn('Failed to initialize voice engine on tab activation:', error);
             });

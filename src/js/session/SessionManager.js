@@ -198,25 +198,20 @@ export class SessionManager {
                 errorMessage = `Failed to load card sets: ${error.message}`;
             }
             
-            // Try to use fallback sets only for full loads
-            let fallbackSets = [];
-            if (!this.searchTerm) {
-                fallbackSets = this.getDefaultCardSets();
-                this.logger.info(`Using ${fallbackSets.length} fallback card sets`);
-            }
+            // No fallback - API must be working for the app to function
+            this.cardSets = [];
+            this.filteredCardSets = [];
             
-            this.cardSets = this.searchTerm ? this.cardSets : fallbackSets;
-            this.filteredCardSets = fallbackSets;
-            
-            // Still notify listeners even on error
+            // Notify listeners of the error
             this.emit('setsLoaded', { 
-                sets: fallbackSets, 
+                sets: [], 
                 searchTerm: this.searchTerm,
                 error: errorMessage,
-                totalSets: this.cardSets.length
+                totalSets: 0
             });
             
-            return fallbackSets;
+            // Rethrow the error with enhanced message
+            throw new Error(errorMessage);
         }
     }
 
@@ -237,11 +232,15 @@ export class SessionManager {
                 url = `${this.apiUrl}/card-sets/from-cache`;
             }
             
-            this.logger.info(`Fetching card sets from: ${url}`);
+            this.logger.info(`[API DEBUG] Attempting to fetch card sets from: ${url}`);
+            this.logger.info(`[API DEBUG] API URL configured as: ${this.apiUrl}`);
+            this.logger.info(`[API DEBUG] Search term: ${searchTerm || 'none (fetching all sets)'}`);
             
             // Create AbortController for timeout handling
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.config.apiTimeout);
+            
+            this.logger.info(`[API DEBUG] Making fetch request with timeout: ${this.config.apiTimeout}ms`);
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -253,6 +252,8 @@ export class SessionManager {
             });
             
             clearTimeout(timeoutId);
+            
+            this.logger.info(`[API DEBUG] Received response with status: ${response.status} (${response.statusText})`);
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -317,28 +318,26 @@ export class SessionManager {
             
         } catch (error) {
             if (error.name === 'AbortError') {
-                this.logger.error('API request timed out after', this.config.apiTimeout, 'ms');
+                this.logger.error('[API DEBUG] Request timed out after', this.config.apiTimeout, 'ms');
                 throw new Error('Request timed out. Please check if the backend is running on http://127.0.0.1:8081');
             }
             
-            this.logger.error('Failed to fetch card sets from API:', error);
+            this.logger.error('[API DEBUG] Failed to fetch card sets from API:', error);
+            this.logger.error('[API DEBUG] Error details:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
             
-            // If API fails, try to load from storage as fallback (only for full set list)
-            if (!searchTerm) {
-                try {
-                    const cachedSets = await this.storage?.get('cardSets');
-                    if (cachedSets && Array.isArray(cachedSets) && cachedSets.length > 0) {
-                        this.logger.info(`Using cached card sets as fallback (${cachedSets.length} sets)`);
-                        return cachedSets;
-                    }
-                } catch (cacheError) {
-                    this.logger.warn('Failed to load cached sets:', cacheError);
-                }
+            // Provide more specific error messages for debugging
+            if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+                this.logger.error('[API DEBUG] Network error detected - backend may not be running or accessible');
+                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
             }
             
-            // Provide more specific error messages
-            if (error.message.includes('fetch')) {
-                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
+            if (error.message.includes('ECONNREFUSED')) {
+                this.logger.error('[API DEBUG] Connection refused - backend server is not listening on port 8081');
+                throw new Error('Connection refused: Backend server is not running on port 8081. Please start realBackendAPI.py');
             }
             
             throw error;
@@ -498,21 +497,7 @@ export class SessionManager {
         }
     }
 
-    /**
-     * Get minimal emergency fallback card sets when API is completely unavailable
-     * This should only be used as a last resort - the backend API should provide 990+ sets
-     */
-    getDefaultCardSets() {
-        return [
-            // Minimal emergency fallback - only essential sets
-            { id: 'LOB', name: 'Legend of Blue Eyes White Dragon', code: 'LOB', set_name: 'Legend of Blue Eyes White Dragon', set_code: 'LOB' },
-            { id: 'MRD', name: 'Metal Raiders', code: 'MRD', set_name: 'Metal Raiders', set_code: 'MRD' },
-            { id: 'DUEL', name: 'Duel Devastator', code: 'DUEL', set_name: 'Duel Devastator', set_code: 'DUEL' },
-            
-            // WARNING: This is an emergency fallback with only 3 sets instead of 990+.
-            // If you're seeing this, check that realBackendAPI.py is running on port 8081.
-        ];
-    }
+
 
     /**
      * Load card recognition patterns
