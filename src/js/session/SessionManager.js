@@ -1068,6 +1068,13 @@ export class SessionManager {
                 
                 this.logger.debug(`Processing card "${card.name}" with ${cardSets.length} card_sets entries`);
                 
+                // Log the actual card structure for debugging
+                if (cardSets.length > 0) {
+                    this.logger.debug(`First card_set example:`, JSON.stringify(cardSets[0], null, 2));
+                } else {
+                    this.logger.debug(`Card has no card_sets array. Full card structure:`, JSON.stringify(card, null, 2));
+                }
+                
                 if (cardSets.length === 0) {
                     // Fallback: create single variant with unknown rarity
                     const variantKey = `${card.name}_Unknown_N/A`;
@@ -1094,6 +1101,8 @@ export class SessionManager {
                         const setCode = cardSet.set_code || 'N/A';
                         const variantKey = `${card.name}_${rarity}_${setCode}`;
                         
+                        this.logger.debug(`Creating variant with rarity: "${rarity}", setCode: "${setCode}"`);
+                        
                         // Check if we already added this exact variant
                         if (!allVariants.some(v => v.variantKey === variantKey)) {
                             this.logger.debug(`Created variant: ${card.name} - ${rarity} [${setCode}]`);
@@ -1110,6 +1119,8 @@ export class SessionManager {
                                     setName: cardSet.set_name || this.currentSet.name
                                 }
                             });
+                        } else {
+                            this.logger.debug(`Skipped duplicate variant: ${variantKey}`);
                         }
                     }
                 }
