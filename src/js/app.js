@@ -271,6 +271,14 @@ class YGORipperApp {
             this.handleCardRemove(cardId);
         });
 
+        this.uiManager.onSettingsSave((settings) => {
+            this.handleSettingsSave(settings);
+        });
+
+        this.uiManager.onSettingsShow(() => {
+            this.handleSettingsShow();
+        });
+
         // SessionManager events
         this.sessionManager.addEventListener('setsLoaded', (data) => {
             this.handleSetsLoaded(data);
@@ -671,6 +679,35 @@ class YGORipperApp {
             this.logger.error('Failed to remove card:', error);
             this.uiManager.showToast('Error removing card: ' + error.message, 'error');
         }
+    }
+
+    /**
+     * Handle settings save
+     */
+    async handleSettingsSave(newSettings) {
+        try {
+            this.logger.info('Saving settings:', newSettings);
+            
+            // Update application settings
+            this.settings = { ...this.settings, ...newSettings };
+            
+            // Save to storage
+            await this.saveSettings();
+            
+            this.logger.info('Settings saved successfully');
+            
+        } catch (error) {
+            this.logger.error('Failed to save settings:', error);
+            this.uiManager.showToast('Error saving settings: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle settings show
+     */
+    handleSettingsShow() {
+        // Show settings modal with current settings
+        this.uiManager.showSettings(this.settings);
     }
 
     /**
