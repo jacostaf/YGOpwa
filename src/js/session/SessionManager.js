@@ -1047,7 +1047,7 @@ export class SessionManager {
             .replace(/\s+/g, ' ')     // Normalize multiple spaces
             .trim();
     }
-    }
+    
 
     /**
      * Calculate similarity between two strings
