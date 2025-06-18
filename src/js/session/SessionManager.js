@@ -94,11 +94,6 @@ export class SessionManager {
             // Load last session if available
             await this.loadLastSession();
             
-            // Start auto-save if enabled
-            if (this.config.autoSave) {
-                this.startAutoSave();
-            }
-            
             this.logger.info('Session manager initialized successfully');
             return true;
             
@@ -609,6 +604,11 @@ export class SessionManager {
             // Load set-specific card data
             await this.loadSetCards(set.id);
             
+            // Start auto-save if enabled
+            if (this.config.autoSave) {
+                this.startAutoSave();
+            }
+            
             // Emit event
             this.emitSessionStart(this.currentSession);
             
@@ -650,6 +650,9 @@ export class SessionManager {
                 await this.storage.set('sessionHistory', this.sessionHistory);
                 await this.storage.set('lastSession', this.currentSession);
             }
+            
+            // Stop auto-save
+            this.stopAutoSave();
             
             // Emit event
             this.emitSessionStop(this.currentSession);
@@ -809,26 +812,178 @@ export class SessionManager {
     }
 
     /**
-     * Find cards by fuzzy matching
+     * Find cards by fuzzy matching using advanced variant generation
      */
-    async findCardsByFuzzyMatch(transcript) {
-        // For now, implement a simple fuzzy matching
-        // In a real implementation, you might use a library like fuse.js
+     async findCardsByFuzzyMatch(transcript) {
+        if (!this.currentSet) {
+            return [];
+        }
+        
+        const setCards = this.setCards.get(this.currentSet.id) || [];
         const matches = [];
         
-        for (const [pattern, cardName] of this.cardPatterns) {
-            const similarity = this.calculateSimilarity(transcript, pattern);
-            if (similarity >= this.config.cardMatchThreshold) {
+        // Generate search variants for the transcript
+        const searchVariants = this.generateCardNameVariants(transcript);
+        
+        for (const card of setCards) {
+            const cardNameVariants = this.generateCardNameVariants(card.name);
+            
+            let bestScore = 0;
+            let bestMethod = '';
+            
+            // Test all combinations of search variants vs card variants
+            for (const searchVariant of searchVariants) {
+                for (const cardVariant of cardNameVariants) {
+                    // Method 1: Fuzzy ratio
+                    const fuzzyScore = this.calculateSimilarity(searchVariant, cardVariant);
+                    
+                    // Method 2: Word-by-word matching
+                    const wordScore = this.calculateWordByWordScore(searchVariant, cardVariant);
+                    
+                    // Method 3: Compound word detection
+                    const compoundScore = this.calculateCompoundWordScore(searchVariant, cardVariant);
+                    
+                    // Take the best score from all methods
+                    const scores = [fuzzyScore, wordScore, compoundScore];
+                    const maxScore = Math.max(...scores);
+                    
+                    if (maxScore > bestScore) {
+                        bestScore = maxScore;
+                        const methodIndex = scores.indexOf(maxScore);
+                        bestMethod = ['fuzzy', 'word', 'compound'][methodIndex];
+                    }
+                }
+            }
+            
+            // Apply length penalty (similar to oldIteration.py)
+            const lengthDifference = Math.abs(transcript.length - card.name.length);
+            const maxLength = Math.max(transcript.length, card.name.length);
+            const lengthPenalty = maxLength > 0 ? Math.max(0, 1 - (lengthDifference / maxLength)) : 1;
+            
+            const finalScore = bestScore * lengthPenalty;
+            
+            if (finalScore >= this.config.cardMatchThreshold) {
                 matches.push({
-                    name: cardName,
-                    confidence: similarity,
-                    method: 'fuzzy',
-                    transcript: transcript
+                    ...card,
+                    confidence: finalScore,
+                    method: `fuzzy-${bestMethod}`,
+                    transcript: transcript,
+                    rawScore: bestScore,
+                    lengthPenalty: lengthPenalty
                 });
             }
         }
         
         return matches.sort((a, b) => b.confidence - a.confidence);
+    }
+
+    /**
+     * Generate card name variants for better matching (based on oldIteration.py)
+     */
+    generateCardNameVariants(name) {
+        const variants = [name.toLowerCase()];
+        
+        // Yu-Gi-Oh specific substitutions from oldIteration.py
+        const substitutions = {
+            'yu': ['you', 'u'],
+            'gi': ['gee', 'ji'],
+            'oh': ['o'],
+            'elemental': ['elemental', 'element'],
+            'hero': ['hiro', 'heero', 'hero'],
+            'evil': ['evil', 'evel'],
+            'dark': ['dark', 'drak'],
+            'gaia': ['gaia', 'gaya', 'guy', 'gya'],
+            'cyber': ['siber', 'cyber'],
+            'dragon': ['drago', 'drag', 'dragun'],
+            'magician': ['magic', 'mage', 'majician'],
+            'warrior': ['war', 'warrior'],
+            'machine': ['mach', 'machin'],
+            'beast': ['best', 'beast'],
+            'fiend': ['fend', 'fiend'],
+            'spellcaster': ['spell', 'caster'],
+            'aqua': ['agua', 'aqua'],
+            'winged': ['wing', 'winged'],
+            'thunder': ['under', 'thunder'],
+            'zombie': ['zomb', 'zombie'],
+            'plant': ['plan', 'plant'],
+            'insect': ['insec', 'insect'],
+            'rock': ['rok', 'rock'],
+            'pyro': ['fire', 'pyro'],
+            'sea': ['see', 'sea'],
+            'divine': ['divin', 'divine'],
+            'metal': ['metal', 'mettle'],
+            'flame': ['flame', 'flam'],
+            'neos': ['neos', 'neeos', 'neus']
+        };
+        
+        // Create phonetic alternatives
+        const lowerName = name.toLowerCase();
+        for (const [original, alternatives] of Object.entries(substitutions)) {
+            if (lowerName.includes(original)) {
+                for (const alt of alternatives) {
+                    variants.push(lowerName.replace(original, alt));
+                }
+            }
+        }
+        
+        // Add compound word variants
+        const words = lowerName.split(/[\s-]+/);
+        if (words.length >= 2) {
+            // Add version with spaces removed
+            variants.push(words.join(''));
+            // Add version with different spacing
+            for (let i = 1; i < words.length; i++) {
+                const compound = words.slice(0, i).join('') + ' ' + words.slice(i).join(' ');
+                variants.push(compound);
+            }
+        }
+        
+        // Remove duplicates while preserving order
+        const seen = new Set();
+        return variants.filter(variant => {
+            const normalized = variant.toLowerCase();
+            if (seen.has(normalized)) {
+                return false;
+            }
+            seen.add(normalized);
+            return true;
+        });
+    }
+
+    /**
+     * Calculate word-by-word matching score
+     */
+    calculateWordByWordScore(str1, str2) {
+        const words1 = str1.toLowerCase().split(/[\s-]+/);
+        const words2 = str2.toLowerCase().split(/[\s-]+/);
+        
+        let matchCount = 0;
+        const totalWords = Math.max(words1.length, words2.length);
+        
+        for (const word1 of words1) {
+            for (const word2 of words2) {
+                if (word1 === word2 || this.calculateSimilarity(word1, word2) >= 0.8) {
+                    matchCount++;
+                    break;
+                }
+            }
+        }
+        
+        return totalWords > 0 ? (matchCount / totalWords) : 0;
+    }
+
+    /**
+     * Calculate compound word detection score
+     */
+    calculateCompoundWordScore(str1, str2) {
+        const clean1 = str1.replace(/[\s-]/g, '').toLowerCase();
+        const clean2 = str2.replace(/[\s-]/g, '').toLowerCase();
+        
+        if (clean1.includes(clean2) || clean2.includes(clean1)) {
+            return 0.9;
+        }
+        
+        return this.calculateSimilarity(clean1, clean2);
     }
 
     /**
@@ -1009,6 +1164,11 @@ export class SessionManager {
                 
                 // Find the set
                 this.currentSet = this.cardSets.find(s => s.id === session.setId);
+                
+                // Start auto-save for resumed session
+                if (this.config.autoSave) {
+                    this.startAutoSave();
+                }
                 
                 this.logger.info('Resumed previous session:', session.id);
                 return session;
