@@ -849,11 +849,15 @@ class YGORipperApp {
             </div>
         `;
         
+        // Create modal element
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = dialogHTML;
+        
         // Show the modal
-        this.uiManager.showModal(dialogHTML);
+        this.uiManager.showModal(modal);
         
         // Add event listeners
-        const modal = document.querySelector('.modal');
         if (modal) {
             // Handle card selection
             modal.querySelectorAll('.select-card-btn').forEach(btn => {
