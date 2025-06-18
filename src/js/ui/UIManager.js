@@ -965,29 +965,101 @@ export class UIManager {
     }
 
     /**
-     * Create a session card element with quantity adjustment
+     * Create a session card element with enhanced display including images and detailed pricing
      */
     createSessionCardElement(card) {
         const cardDiv = document.createElement('div');
-        cardDiv.className = 'session-card';
+        cardDiv.className = 'session-card enhanced';
         cardDiv.dataset.cardId = card.id;
         
+        // Determine display values with enhanced info priority
+        const cardName = card.card_name || card.name || 'Unknown Card';
+        const rarity = card.card_rarity || card.displayRarity || card.rarity || 'Unknown';
+        const setCode = card.set_code || card.setInfo?.setCode || '';
+        const setName = card.booster_set_name || card.setInfo?.setName || '';
+        const price = card.price || parseFloat(card.tcg_market_price || card.tcg_price || '0');
+        const hasEnhancedInfo = card.hasEnhancedInfo || false;
+        
+        // Create the enhanced card HTML
         cardDiv.innerHTML = `
-            <div class="card-info">
-                <div class="card-name">${card.name || 'Unknown Card'}</div>
-                <div class="card-details">
-                    <span class="card-rarity">${card.displayRarity || card.rarity}</span>
-                    ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
-                    ${card.price ? `<span class="card-price">$${card.price.toFixed(2)}</span>` : ''}
+            <div class="session-card-content">
+                <div class="card-image-section">
+                    <div class="card-image-container" data-card-id="${card.id}">
+                        ${card.image_url ? `
+                            <div class="card-image-loading">
+                                <div class="loading-spinner-small"></div>
+                                <div class="loading-text-small">Loading...</div>
+                            </div>
+                        ` : `
+                            <div class="card-image-placeholder">
+                                <div class="placeholder-icon">🃏</div>
+                            </div>
+                        `}
+                    </div>
                 </div>
-            </div>
-            <div class="card-controls">
-                <div class="quantity-controls">
-                    <button class="btn btn-sm quantity-btn decrease-qty" data-card-id="${card.id}" title="Decrease Quantity">-</button>
-                    <span class="quantity-display">${card.quantity || 1}</span>
-                    <button class="btn btn-sm quantity-btn increase-qty" data-card-id="${card.id}" title="Increase Quantity">+</button>
+                
+                <div class="card-details-section">
+                    <div class="card-header">
+                        <div class="card-name">${cardName}</div>
+                        <div class="card-enhancement-indicator">
+                            ${hasEnhancedInfo ? '✨' : '📦'}
+                        </div>
+                    </div>
+                    
+                    <div class="card-info-grid">
+                        <div class="info-row">
+                            <span class="info-label">Rarity:</span>
+                            <span class="info-value rarity-${rarity.toLowerCase().replace(/\s+/g, '-')}">${rarity}</span>
+                        </div>
+                        ${setCode ? `
+                            <div class="info-row">
+                                <span class="info-label">Set:</span>
+                                <span class="info-value">${setCode}</span>
+                            </div>
+                        ` : ''}
+                        ${setName ? `
+                            <div class="info-row">
+                                <span class="info-label">Set Name:</span>
+                                <span class="info-value set-name">${setName}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="card-pricing">
+                        ${price > 0 ? `
+                            <div class="pricing-info">
+                                ${card.tcg_price ? `
+                                    <div class="price-item">
+                                        <span class="price-label">TCG Low:</span>
+                                        <span class="price-value">$${card.tcg_price}</span>
+                                    </div>
+                                ` : ''}
+                                ${card.tcg_market_price ? `
+                                    <div class="price-item primary">
+                                        <span class="price-label">TCG Market:</span>
+                                        <span class="price-value">$${card.tcg_market_price}</span>
+                                    </div>
+                                ` : `
+                                    <div class="price-item primary">
+                                        <span class="price-label">Est. Value:</span>
+                                        <span class="price-value">$${price.toFixed(2)}</span>
+                                    </div>
+                                `}
+                            </div>
+                        ` : `
+                            <div class="price-unavailable">Price data unavailable</div>
+                        `}
+                    </div>
                 </div>
-                <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+                
+                <div class="card-controls">
+                    <div class="quantity-controls">
+                        <button class="btn btn-sm quantity-btn decrease-qty" data-card-id="${card.id}" title="Decrease Quantity">-</button>
+                        <span class="quantity-display">${card.quantity || 1}</span>
+                        <button class="btn btn-sm quantity-btn increase-qty" data-card-id="${card.id}" title="Increase Quantity">+</button>
+                    </div>
+                    <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+                </div>
             </div>
         `;
         
@@ -1011,7 +1083,56 @@ export class UIManager {
             this.emitCardRemove(card.id);
         });
         
+        // Load card image if available
+        if (card.image_url) {
+            this.loadSessionCardImage(card, cardDiv);
+        }
+        
         return cardDiv;
+    }
+
+    /**
+     * Load and display image for session card
+     */
+    async loadSessionCardImage(card, cardElement) {
+        const imageContainer = cardElement.querySelector('.card-image-container');
+        if (!imageContainer) return;
+        
+        try {
+            // Import ImageManager dynamically to avoid circular dependencies
+            const { ImageManager } = await import('../utils/ImageManager.js');
+            const imageManager = new ImageManager();
+            
+            // Use normal mode size for session cards (not as large as detail mode)
+            const cardImagePromise = imageManager.loadImageForDisplay(
+                card.card_number || card.id,
+                card.image_url,
+                imageManager.normalModeSize,
+                imageContainer
+            );
+            
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Session card image loading timeout')), 10000); // 10 second timeout
+            });
+            
+            await Promise.race([cardImagePromise, timeoutPromise]);
+            
+            console.log(`✅ Successfully loaded session card image for ${card.card_name || card.name}`);
+            
+        } catch (error) {
+            console.warn('Failed to load session card image:', error.message);
+            
+            // Display placeholder on error
+            if (imageContainer) {
+                imageContainer.innerHTML = `
+                    <div class="card-image-placeholder error">
+                        <div class="placeholder-icon">🃏</div>
+                        <div class="placeholder-text">Image unavailable</div>
+                    </div>
+                `;
+            }
+        }
     }
 
     /**

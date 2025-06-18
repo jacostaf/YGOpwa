@@ -612,6 +612,232 @@
   transform: scale(1.05);
 }
 
+/* Enhanced Session Cards */
+.session-card.enhanced {
+  display: block;
+  padding: var(--spacing-lg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  margin-bottom: var(--spacing-md);
+  background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-light) 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all var(--transition-normal);
+}
+
+.session-card.enhanced:hover {
+  border-color: var(--color-accent);
+  box-shadow: 0 4px 16px rgba(255, 215, 0, 0.2);
+  transform: translateY(-2px);
+}
+
+.session-card-content {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+}
+
+/* Enhanced Card Image Section */
+.session-card .card-image-section {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.session-card .card-image-container {
+  width: 80px;
+  height: 116px;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-card .card-image-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+}
+
+.session-card .loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top: 2px solid var(--color-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.session-card .loading-text-small {
+  font-size: 0.7em;
+  text-align: center;
+}
+
+.session-card .card-image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+}
+
+.session-card .card-image-placeholder .placeholder-icon {
+  font-size: 2em;
+  margin-bottom: var(--spacing-xs);
+}
+
+.session-card .card-image-placeholder .placeholder-text {
+  font-size: 0.7em;
+  text-align: center;
+}
+
+.session-card .card-image-placeholder.error {
+  color: var(--color-danger);
+}
+
+/* Enhanced Card Details Section */
+.session-card .card-details-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-card .card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.session-card .card-name {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+  margin: 0;
+}
+
+.session-card .card-enhancement-indicator {
+  font-size: 1.2em;
+  margin-left: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+.session-card .card-info-grid {
+  display: grid;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.session-card .info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9em;
+}
+
+.session-card .info-label {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  min-width: 60px;
+}
+
+.session-card .info-value {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  text-align: right;
+  flex: 1;
+}
+
+.session-card .info-value.set-name {
+  font-size: 0.85em;
+  opacity: 0.9;
+}
+
+/* Rarity-specific colors */
+.session-card .info-value.rarity-common { color: var(--color-text-primary); }
+.session-card .info-value.rarity-rare { color: #4A90E2; }
+.session-card .info-value.rarity-super,
+.session-card .info-value.rarity-super-rare { color: #50C878; }
+.session-card .info-value.rarity-ultra,
+.session-card .info-value.rarity-ultra-rare { color: #FFD700; }
+.session-card .info-value.rarity-secret,
+.session-card .info-value.rarity-secret-rare { color: #FF6B6B; }
+.session-card .info-value.rarity-ghost,
+.session-card .info-value.rarity-ghost-rare { color: #9B59B6; }
+.session-card .info-value.rarity-starlight,
+.session-card .info-value.rarity-starlight-rare { color: #E74C3C; }
+
+/* Enhanced Card Pricing */
+.session-card .card-pricing {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.session-card .pricing-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.session-card .price-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85em;
+  padding: var(--spacing-xs);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface-dark);
+}
+
+.session-card .price-item.primary {
+  background: linear-gradient(135deg, var(--color-success) 0%, var(--color-success-dark) 100%);
+  color: var(--color-success-text);
+  font-weight: 600;
+}
+
+.session-card .price-label {
+  font-weight: 500;
+}
+
+.session-card .price-value {
+  font-weight: 700;
+}
+
+.session-card .price-unavailable {
+  font-size: 0.8em;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  text-align: center;
+  padding: var(--spacing-xs);
+}
+
+/* Enhanced Card Controls */
+.session-card.enhanced .card-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 100px;
+}
+
+.session-card.enhanced .quantity-controls {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-xs);
+}
+
+.session-card.enhanced .remove-card {
+  width: 100%;
+  font-size: 0.9em;
+}
+
 /* Settings Modal */
 .settings-content {
   padding: var(--spacing-lg);
