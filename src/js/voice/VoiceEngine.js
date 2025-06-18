@@ -28,6 +28,7 @@ export class VoiceEngine {
         this.isInitialized = false;
         this.isListening = false;
         this.isPaused = false;
+        this.shouldKeepListening = false; // Track if user wants continuous listening
         
         // Configuration
         this.config = {
@@ -232,10 +233,10 @@ export class VoiceEngine {
                 this.logger.debug('Web Speech recognition ended');
                 this.isListening = false;
                 
-                // Auto-restart if in continuous mode and not manually stopped
-                if (this.config.continuous && !this.isPaused && this.isInitialized) {
+                // Auto-restart if user wants continuous listening and not manually stopped
+                if (this.shouldKeepListening && !this.isPaused && this.isInitialized) {
                     setTimeout(() => {
-                        if (!this.isPaused) {
+                        if (this.shouldKeepListening && !this.isPaused) {
                             this.startListening().catch((error) => {
                                 this.logger.warn('Failed to restart recognition:', error);
                             });
@@ -310,6 +311,7 @@ export class VoiceEngine {
         try {
             this.logger.info('Starting voice recognition...');
             this.isPaused = false;
+            this.shouldKeepListening = true; // Enable continuous listening
             this.recognitionAttempts = 0;
             
             const engine = this.engines.get(this.currentEngine);
@@ -370,6 +372,7 @@ export class VoiceEngine {
         try {
             this.logger.info('Stopping voice recognition...');
             this.isPaused = true;
+            this.shouldKeepListening = false; // Disable continuous listening
             
             const engine = this.engines.get(this.currentEngine);
             if (engine && engine.instance) {

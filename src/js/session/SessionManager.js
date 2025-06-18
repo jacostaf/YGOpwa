@@ -22,7 +22,7 @@ export class SessionManager {
         
         // Session state
         this.currentSession = null;
-        this.isSessionActive = false;
+        this.sessionActive = false;
         this.sessionHistory = [];
         
         // Card sets data
@@ -65,13 +65,13 @@ export class SessionManager {
     }
 
     /**
-     * Get API URL (matching tcg_ygoripper backend)
-     * Backend runs on Flask default port 5000
+     * Get API URL (matching realBackendAPI.py backend)
+     * Backend runs on port 8081 as configured in realBackendAPI.py
      */
     getApiUrl() {
-        // Flask backend runs on default port 5000
-        // Based on the tcg_ygoripper/main.py backend API
-        return 'http://127.0.0.1:5000';
+        // realBackendAPI.py backend runs on port 8081
+        // Based on the realBackendAPI.py backend API
+        return 'http://127.0.0.1:8081';
     }
 
     /**
@@ -191,32 +191,27 @@ export class SessionManager {
             let errorMessage = 'Failed to load card sets';
             
             if (error.message.includes('backend') || error.message.includes('connect')) {
-                errorMessage = 'Cannot connect to backend API. Please ensure tcg_ygoripper backend is running on port 5000.';
+                errorMessage = 'Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on port 8081.';
             } else if (error.message.includes('timeout')) {
                 errorMessage = 'Request timed out. Please check your backend connection.';
             } else {
                 errorMessage = `Failed to load card sets: ${error.message}`;
             }
             
-            // Try to use fallback sets only for full loads
-            let fallbackSets = [];
-            if (!this.searchTerm) {
-                fallbackSets = this.getDefaultCardSets();
-                this.logger.info(`Using ${fallbackSets.length} fallback card sets`);
-            }
+            // No fallback - API must be working for the app to function
+            this.cardSets = [];
+            this.filteredCardSets = [];
             
-            this.cardSets = this.searchTerm ? this.cardSets : fallbackSets;
-            this.filteredCardSets = fallbackSets;
-            
-            // Still notify listeners even on error
+            // Notify listeners of the error
             this.emit('setsLoaded', { 
-                sets: fallbackSets, 
+                sets: [], 
                 searchTerm: this.searchTerm,
                 error: errorMessage,
-                totalSets: this.cardSets.length
+                totalSets: 0
             });
             
-            return fallbackSets;
+            // Rethrow the error with enhanced message
+            throw new Error(errorMessage);
         }
     }
 
@@ -237,11 +232,15 @@ export class SessionManager {
                 url = `${this.apiUrl}/card-sets/from-cache`;
             }
             
-            this.logger.info(`Fetching card sets from: ${url}`);
+            this.logger.info(`[API DEBUG] Attempting to fetch card sets from: ${url}`);
+            this.logger.info(`[API DEBUG] API URL configured as: ${this.apiUrl}`);
+            this.logger.info(`[API DEBUG] Search term: ${searchTerm || 'none (fetching all sets)'}`);
             
             // Create AbortController for timeout handling
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), this.config.apiTimeout);
+            
+            this.logger.info(`[API DEBUG] Making fetch request with timeout: ${this.config.apiTimeout}ms`);
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -253,6 +252,8 @@ export class SessionManager {
             });
             
             clearTimeout(timeoutId);
+            
+            this.logger.info(`[API DEBUG] Received response with status: ${response.status} (${response.statusText})`);
             
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -317,28 +318,26 @@ export class SessionManager {
             
         } catch (error) {
             if (error.name === 'AbortError') {
-                this.logger.error('API request timed out after', this.config.apiTimeout, 'ms');
-                throw new Error('Request timed out. Please check if the backend is running on http://127.0.0.1:5000');
+                this.logger.error('[API DEBUG] Request timed out after', this.config.apiTimeout, 'ms');
+                throw new Error('Request timed out. Please check if the backend is running on http://127.0.0.1:8081');
             }
             
-            this.logger.error('Failed to fetch card sets from API:', error);
+            this.logger.error('[API DEBUG] Failed to fetch card sets from API:', error);
+            this.logger.error('[API DEBUG] Error details:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
             
-            // If API fails, try to load from storage as fallback (only for full set list)
-            if (!searchTerm) {
-                try {
-                    const cachedSets = await this.storage?.get('cardSets');
-                    if (cachedSets && Array.isArray(cachedSets) && cachedSets.length > 0) {
-                        this.logger.info(`Using cached card sets as fallback (${cachedSets.length} sets)`);
-                        return cachedSets;
-                    }
-                } catch (cacheError) {
-                    this.logger.warn('Failed to load cached sets:', cacheError);
-                }
+            // Provide more specific error messages for debugging
+            if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+                this.logger.error('[API DEBUG] Network error detected - backend may not be running or accessible');
+                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
             }
             
-            // Provide more specific error messages
-            if (error.message.includes('fetch')) {
-                throw new Error('Cannot connect to backend API. Please ensure tcg_ygoripper backend is running on http://127.0.0.1:5000');
+            if (error.message.includes('ECONNREFUSED')) {
+                this.logger.error('[API DEBUG] Connection refused - backend server is not listening on port 8081');
+                throw new Error('Connection refused: Backend server is not running on port 8081. Please start realBackendAPI.py');
             }
             
             throw error;
@@ -491,41 +490,14 @@ export class SessionManager {
             
             // Provide more specific error messages
             if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-                throw new Error('Cannot connect to backend API. Please ensure tcg_ygoripper backend is running on http://127.0.0.1:5000');
+                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
             }
             
             throw error;
         }
     }
 
-    /**
-     * Get default card sets as fallback when API is unavailable
-     * These are common sets that should always be available
-     */
-    getDefaultCardSets() {
-        return [
-            // Classic sets
-            { id: 'LOB', name: 'Legend of Blue Eyes White Dragon', code: 'LOB', set_name: 'Legend of Blue Eyes White Dragon', set_code: 'LOB' },
-            { id: 'MRD', name: 'Metal Raiders', code: 'MRD', set_name: 'Metal Raiders', set_code: 'MRD' },
-            { id: 'SRL', name: 'Spell Ruler', code: 'SRL', set_name: 'Spell Ruler', set_code: 'SRL' },
-            { id: 'PSV', name: 'Pharaoh\'s Servant', code: 'PSV', set_name: 'Pharaoh\'s Servant', set_code: 'PSV' },
-            { id: 'LON', name: 'Labyrinth of Nightmare', code: 'LON', set_name: 'Labyrinth of Nightmare', set_code: 'LON' },
-            
-            // Modern popular sets
-            { id: 'DUEL', name: 'Duel Devastator', code: 'DUEL', set_name: 'Duel Devastator', set_code: 'DUEL' },
-            { id: 'MAGO', name: 'Maximum Gold', code: 'MAGO', set_name: 'Maximum Gold', set_code: 'MAGO' },
-            { id: 'GFTP', name: 'Ghosts From the Past', code: 'GFTP', set_name: 'Ghosts From the Past', set_code: 'GFTP' },
-            { id: 'MGED', name: 'Maximum Gold: El Dorado', code: 'MGED', set_name: 'Maximum Gold: El Dorado', set_code: 'MGED' },
-            { id: 'BACH', name: 'Battle of Chaos', code: 'BACH', set_name: 'Battle of Chaos', set_code: 'BACH' },
-            
-            // Structure decks
-            { id: 'SDBE', name: 'Structure Deck: Blue-Eyes White Dragon', code: 'SDBE', set_name: 'Structure Deck: Blue-Eyes White Dragon', set_code: 'SDBE' },
-            { id: 'SDSE', name: 'Structure Deck: Synchron Extreme', code: 'SDSE', set_name: 'Structure Deck: Synchron Extreme', set_code: 'SDSE' },
-            
-            // Note: This is a fallback list. The backend should provide 990+ sets.
-            // If you're seeing this, it means the backend API is not accessible.
-        ];
-    }
+
 
     /**
      * Load card recognition patterns
@@ -610,7 +582,7 @@ export class SessionManager {
             };
             
             this.currentSet = set;
-            this.isSessionActive = true;
+            this.sessionActive = true;
             
             // Load set-specific card data
             await this.loadSetCards(set.id);
@@ -631,7 +603,7 @@ export class SessionManager {
      * Stop the current session
      */
     async stopSession() {
-        if (!this.isSessionActive || !this.currentSession) {
+        if (!this.sessionActive || !this.currentSession) {
             this.logger.warn('No active session to stop');
             return;
         }
@@ -661,7 +633,7 @@ export class SessionManager {
             this.emitSessionStop(this.currentSession);
             
             // Reset state
-            this.isSessionActive = false;
+            this.sessionActive = false;
             const stoppedSession = this.currentSession;
             this.currentSession = null;
             this.currentSet = null;
@@ -697,7 +669,7 @@ export class SessionManager {
      * Add a card to the current session
      */
     async addCard(cardData) {
-        if (!this.isSessionActive || !this.currentSession) {
+        if (!this.sessionActive || !this.currentSession) {
             throw new Error('No active session');
         }
         
@@ -733,7 +705,7 @@ export class SessionManager {
      * Remove a card from the current session
      */
     removeCard(cardId) {
-        if (!this.isSessionActive || !this.currentSession) {
+        if (!this.sessionActive || !this.currentSession) {
             throw new Error('No active session');
         }
         
@@ -1020,7 +992,7 @@ export class SessionManager {
             if (session && !session.endTime) {
                 // Resume incomplete session
                 this.currentSession = session;
-                this.isSessionActive = true;
+                this.sessionActive = true;
                 
                 // Find the set
                 this.currentSet = this.cardSets.find(s => s.id === session.setId);
@@ -1062,7 +1034,7 @@ export class SessionManager {
             }
             
             // Stop current session if active
-            if (this.isSessionActive) {
+            if (this.sessionActive) {
                 await this.stopSession();
             }
             
@@ -1075,7 +1047,7 @@ export class SessionManager {
             
             // Find the set
             this.currentSet = this.cardSets.find(s => s.id === sessionData.setId);
-            this.isSessionActive = true;
+            this.sessionActive = true;
             
             // Load set cards
             if (this.currentSet) {
@@ -1102,7 +1074,7 @@ export class SessionManager {
         }
         
         this.autoSaveTimer = setInterval(async () => {
-            if (this.isSessionActive) {
+            if (this.sessionActive) {
                 await this.saveSession();
             }
         }, this.config.autoSaveInterval);
@@ -1152,18 +1124,18 @@ export class SessionManager {
         }
         
         return {
-            isActive: this.isSessionActive,
+            isActive: this.sessionActive,
             setName: this.currentSession.setName,
             cardCount: this.currentSession.cards.length,
             totalValue: this.currentSession.statistics.totalValue,
-            status: this.isSessionActive ? 'Active' : 'Stopped',
+            status: this.sessionActive ? 'Active' : 'Stopped',
             sessionId: this.currentSession.id,
             startTime: this.currentSession.startTime
         };
     }
 
     isSessionActive() {
-        return this.isSessionActive;
+        return this.sessionActive;
     }
 
     // Event handling
