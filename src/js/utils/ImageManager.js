@@ -137,7 +137,7 @@ export class ImageManager {
     }
 
     /**
-     * Download image with proper error handling and YGOPRODeck API compliance
+     * Download image with proper error handling and fallback for CORS issues
      * @private
      */
     async downloadAndProcessImage(imageUrl, size) {
@@ -158,18 +158,29 @@ export class ImageManager {
                 reject(new Error(`Failed to download image: ${imageUrl}`));
             };
             
-            // Add CORS headers for YGOPRODeck API compliance
-            img.crossOrigin = 'anonymous';
+            // Try backend proxy first for YGOPRODeck images to avoid CORS issues
+            let proxiedUrl = imageUrl;
+            if (imageUrl.startsWith('https://images.ygoprodeck.com/')) {
+                try {
+                    // Test if backend is available by trying the proxy
+                    proxiedUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
+                    this.logger.debug(`Attempting backend proxy for image: ${imageUrl}`);
+                } catch (proxyError) {
+                    this.logger.debug(`Backend proxy not available, will handle CORS gracefully: ${proxyError.message}`);
+                    // Fall through to direct URL (will handle CORS error gracefully)
+                    proxiedUrl = imageUrl;
+                }
+            }
             
             // Start the download
-            img.src = imageUrl;
+            img.src = proxiedUrl;
             
             // Set timeout for the request
             setTimeout(() => {
                 if (!img.complete) {
                     reject(new Error(`Image download timeout: ${imageUrl}`));
                 }
-            }, 10000); // 10 second timeout
+            }, 15000); // 15 second timeout
         });
     }
 

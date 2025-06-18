@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Price Checker Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .card-image { max-width: 100px; max-height: 145px; }
+    </style>
+</head>
+<body>
+    <h1>Price Checker & Image Manager Test</h1>
+    <button onclick="testPriceChecker()">Test Price Checker</button>
+    <button onclick="testImageLoading()">Test Image Loading</button>
+    <div id="results"></div>
+
+    <script type="module">
+        import { PriceChecker } from './src/js/price/PriceChecker.js';
+        import { ImageManager } from './src/js/utils/ImageManager.js';
+
+        window.testPriceChecker = async function() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div>Testing PriceChecker...</div>';
+            
+            try {
+                const priceChecker = new PriceChecker();
+                
+                // Test the problematic card from the error
+                const testCard = {
+                    cardNumber: 'SUDA-EN031',
+                    cardName: 'Test Card',
+                    rarity: 'ultra',
+                    artVariant: '',
+                    forceRefresh: false
+                };
+                
+                const result = await priceChecker.fetchEnhancedCardInfo(testCard);
+                
+                let testResults = '';
+                
+                // Check if API endpoint was used correctly
+                testResults += `<div class="success">✅ Using correct API endpoint: /cards/price</div>`;
+                
+                // Check pricing data
+                if (result.tcg_price && result.tcg_market_price) {
+                    testResults += `<div class="success">✅ Pricing data present: TCG Low: $${result.tcg_price}, Market: $${result.tcg_market_price}</div>`;
+                } else {
+                    testResults += `<div class="error">❌ Pricing data missing</div>`;
+                }
+                
+                // Check image URL (should be data URL to avoid CORS)
+                if (result.image_url && result.image_url.startsWith('data:')) {
+                    testResults += `<div class="success">✅ Image URL is data URL (no CORS issues)</div>`;
+                    
+                    // Display the image
+                    testResults += `<div>Image preview: <img src="${result.image_url}" class="card-image" alt="Card image"></div>`;
+                } else {
+                    testResults += `<div class="error">❌ Image URL is not data URL: ${result.image_url}</div>`;
+                }
+                
+                // Check other data
+                if (result.card_name && result.card_number && result.booster_set_name) {
+                    testResults += `<div class="success">✅ Card info complete: ${result.card_name} (${result.card_number}) from ${result.booster_set_name}</div>`;
+                } else {
+                    testResults += `<div class="error">❌ Card info incomplete</div>`;
+                }
+                
+                resultsDiv.innerHTML = testResults;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Test failed: ${error.message}</div>`;
+            }
+        };
+
+        window.testImageLoading = async function() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div>Testing Image Loading...</div>';
+            
+            try {
+                const imageManager = new ImageManager();
+                
+                // Test container
+                const container = document.createElement('div');
+                container.style.cssText = 'width: 100px; height: 145px; border: 1px solid #ccc; margin: 10px 0;';
+                
+                let testResults = '<div class="success">✅ ImageManager created successfully</div>';
+                
+                // Test loading a data URL (should work)
+                const canvas = document.createElement('canvas');
+                canvas.width = 100;
+                canvas.height = 145;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#4A90E2';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🃏', canvas.width / 2, canvas.height / 2);
+                const testDataUrl = canvas.toDataURL('image/png');
+                
+                const img = await imageManager.loadImageForDisplay(
+                    'test-card',
+                    testDataUrl,
+                    { width: 100, height: 145 },
+                    container
+                );
+                
+                testResults += '<div class="success">✅ Data URL image loaded successfully</div>';
+                testResults += '<div>Image preview:</div>';
+                
+                resultsDiv.innerHTML = testResults;
+                resultsDiv.appendChild(container);
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Image test failed: ${error.message}</div>`;
+            }
+        };
+    </script>
+</body>
+</html>

@@ -4051,6 +4051,57 @@ def fetch_all_cards_from_sets():
             "error": "Internal server error during card fetching"
         }), 500
 
+@app.route('/cards/image', methods=['GET'])
+def proxy_card_image():
+    """Proxy card images from YGOPRODeck API to avoid CORS issues"""
+    try:
+        image_url = request.args.get('url')
+        
+        if not image_url:
+            return jsonify({
+                "success": False,
+                "error": "image URL parameter is required"
+            }), 400
+        
+        # Validate that it's a YGOPRODeck image URL for security
+        if not image_url.startswith('https://images.ygoprodeck.com/'):
+            return jsonify({
+                "success": False,
+                "error": "Only YGOPRODeck image URLs are allowed"
+            }), 400
+        
+        # Fetch the image from YGOPRODeck
+        response = requests.get(image_url, timeout=10)
+        
+        if response.status_code == 200:
+            # Return the image with proper headers
+            from flask import Response
+            return Response(
+                response.content,
+                mimetype=response.headers.get('content-type', 'image/jpeg'),
+                headers={
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'public, max-age=86400'  # Cache for 24 hours
+                }
+            )
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to fetch image: HTTP {response.status_code}"
+            }), response.status_code
+            
+    except requests.exceptions.Timeout:
+        return jsonify({
+            "success": False,
+            "error": "Image request timeout"
+        }), 504
+    except Exception as e:
+        logger.error(f"Error proxying image: {e}")
+        return jsonify({
+            "success": False,
+            "error": "Internal server error"
+        }), 500
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({

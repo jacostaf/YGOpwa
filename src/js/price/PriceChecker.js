@@ -174,7 +174,7 @@ export class PriceChecker {
             
             this.logger.debug('Fetching enhanced card info from backend:', requestPayload);
             
-            const response = await fetch(`${this.apiUrl}/api/price-check`, {
+            const response = await fetch(`${this.apiUrl}/cards/price`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -207,18 +207,47 @@ export class PriceChecker {
      * Generate mock enhanced card information for testing (matching oldIteration.py format)
      */
     generateMockEnhancedCardInfo(cardData) {
+        // Use placeholder data URLs to avoid CORS issues during testing
+        // This creates a simple colored rectangle as a placeholder
+        const createPlaceholderDataUrl = (color = '#4A90E2', text = '🃏') => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 100;
+            canvas.height = 145;
+            const ctx = canvas.getContext('2d');
+            
+            // Fill background
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Add border
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+            
+            // Add emoji
+            ctx.fillStyle = 'white';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            
+            return canvas.toDataURL('image/png');
+        };
+        
         const mockImages = {
-            'LOB-001': 'https://images.ygoprodeck.com/images/cards/4035199.jpg', // Blue-Eyes White Dragon
-            'SDK-001': 'https://images.ygoprodeck.com/images/cards/4035199.jpg', // Blue-Eyes White Dragon
-            'MRD-001': 'https://images.ygoprodeck.com/images/cards/46986414.jpg', // Red-Eyes Black Dragon
-            'PSV-001': 'https://images.ygoprodeck.com/images/cards/6983839.jpg'   // Elemental Hero Avian
+            'LOB-001': createPlaceholderDataUrl('#4A90E2', '🐉'), // Blue dragon
+            'SDK-001': createPlaceholderDataUrl('#4A90E2', '🐉'), // Blue dragon
+            'MRD-001': createPlaceholderDataUrl('#DC143C', '🐲'), // Red dragon
+            'PSV-001': createPlaceholderDataUrl('#8A2BE2', '⚡'), // Purple with lightning
+            'SUDA-EN031': createPlaceholderDataUrl('#228B22', '🌊') // Green with wave
         };
         
         const mockSets = {
             'LOB': 'Legend of Blue Eyes White Dragon',
             'SDK': 'Starter Deck: Kaiba',
             'MRD': 'Metal Raiders',
-            'PSV': 'Pharaoh\'s Servant'
+            'PSV': 'Pharaoh\'s Servant',
+            'SUDA': 'Speed Duel Attack from the Deep'
         };
         
         const cardNumberParts = cardData.cardNumber.split('-');
@@ -241,8 +270,8 @@ export class PriceChecker {
             // Mock pricing data
             tcg_price: (basePrice * 0.8 + (Math.random() - 0.5) * variance).toFixed(2),
             tcg_market_price: (basePrice + (Math.random() - 0.5) * variance).toFixed(2),
-            // Mock image URLs
-            image_url: mockImages[cardData.cardNumber] || mockImages['LOB-001'], // Default to Blue-Eyes
+            // Mock image URLs using data URLs (no CORS issues)
+            image_url: mockImages[cardData.cardNumber] || createPlaceholderDataUrl('#696969', '🃏'), // Default gray
             image_url_small: null
         };
     }
