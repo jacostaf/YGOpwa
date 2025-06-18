@@ -1182,17 +1182,150 @@ export class SessionManager {
     }
 
     /**
-     * Export session data
+     * Export session data in multiple formats
      */
-    exportSession() {
+    exportSession(format = 'json', selectedFields = null) {
         if (!this.currentSession) {
             throw new Error('No active session to export');
         }
         
-        return {
-            ...this.currentSession,
+        const baseData = {
+            sessionId: this.currentSession.id,
+            setName: this.currentSession.setName,
+            startTime: this.currentSession.startTime,
+            endTime: this.currentSession.endTime,
+            statistics: this.currentSession.statistics,
             exportedAt: new Date().toISOString(),
             version: '2.1.0'
+        };
+        
+        if (format === 'csv') {
+            return this.exportSessionToCSV(selectedFields);
+        } else if (format === 'excel') {
+            return this.exportSessionToExcel(selectedFields);
+        } else {
+            // JSON format
+            return {
+                ...baseData,
+                cards: this.currentSession.cards
+            };
+        }
+    }
+
+    /**
+     * Export session to CSV format (Excel compatible)
+     */
+    exportSessionToCSV(selectedFields = null) {
+        if (!this.currentSession || !this.currentSession.cards.length) {
+            throw new Error('No cards in session to export');
+        }
+        
+        // Default fields if none selected
+        const defaultFields = [
+            'cardName', 'rarity', 'setCode', 'timestamp', 
+            'price', 'condition', 'quantity'
+        ];
+        
+        const fields = selectedFields || defaultFields;
+        
+        // Field mappings for display
+        const fieldLabels = {
+            cardName: 'Card Name',
+            rarity: 'Rarity',
+            setCode: 'Set Code',
+            timestamp: 'Added Time',
+            price: 'Estimated Price',
+            condition: 'Condition',
+            quantity: 'Quantity',
+            sessionId: 'Session ID',
+            setName: 'Set Name'
+        };
+        
+        // Generate CSV header
+        const header = fields.map(field => fieldLabels[field] || field).join(',');
+        
+        // Generate CSV rows
+        const rows = this.currentSession.cards.map(card => {
+            return fields.map(field => {
+                let value = '';
+                switch (field) {
+                    case 'cardName':
+                        value = card.name || '';
+                        break;
+                    case 'rarity':
+                        value = card.rarity || '';
+                        break;
+                    case 'setCode':
+                        value = card.setCode || this.currentSession.setId || '';
+                        break;
+                    case 'timestamp':
+                        value = card.timestamp ? new Date(card.timestamp).toLocaleString() : '';
+                        break;
+                    case 'price':
+                        value = card.price || '0.00';
+                        break;
+                    case 'condition':
+                        value = card.condition || 'Near Mint';
+                        break;
+                    case 'quantity':
+                        value = card.quantity || '1';
+                        break;
+                    case 'sessionId':
+                        value = this.currentSession.id;
+                        break;
+                    case 'setName':
+                        value = this.currentSession.setName;
+                        break;
+                    default:
+                        value = card[field] || '';
+                }
+                
+                // Escape commas and quotes for CSV
+                if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+                    value = `"${value.replace(/"/g, '""')}"`;
+                }
+                
+                return value;
+            }).join(',');
+        });
+        
+        const csvContent = [header, ...rows].join('\n');
+        
+        return {
+            content: csvContent,
+            filename: `YGO_Session_${this.currentSession.setName}_${new Date().toISOString().split('T')[0]}.csv`,
+            mimeType: 'text/csv'
+        };
+    }
+
+    /**
+     * Generate downloadable export file
+     */
+    generateExportFile(format = 'json', selectedFields = null) {
+        const exportData = this.exportSession(format, selectedFields);
+        
+        let content, filename, mimeType;
+        
+        if (format === 'csv') {
+            content = exportData.content;
+            filename = exportData.filename;
+            mimeType = exportData.mimeType;
+        } else {
+            // JSON format
+            content = JSON.stringify(exportData, null, 2);
+            filename = `YGO_Session_${this.currentSession.setName}_${new Date().toISOString().split('T')[0]}.json`;
+            mimeType = 'application/json';
+        }
+        
+        // Create blob and download URL
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        
+        return {
+            blob,
+            url,
+            filename,
+            cleanup: () => URL.revokeObjectURL(url)
         };
     }
 
