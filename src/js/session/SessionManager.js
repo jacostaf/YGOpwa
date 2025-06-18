@@ -20,6 +20,12 @@ export class SessionManager {
         // API Configuration (matching ygo_ripper.py)
         this.apiUrl = this.getApiUrl();
         
+        // Settings (will be updated from app)
+        this.settings = {
+            autoExtractRarity: false,
+            autoExtractArtVariant: false
+        };
+        
         // Session state
         this.currentSession = null;
         this.sessionActive = false;
@@ -62,6 +68,17 @@ export class SessionManager {
         this.commonCardNames = new Map();
         
         this.logger.info('SessionManager initialized');
+    }
+
+    /**
+     * Update settings from the app
+     */
+    updateSettings(settings) {
+        this.settings = {
+            ...this.settings,
+            ...settings
+        };
+        this.logger.debug('SessionManager settings updated:', this.settings);
     }
 
     /**
@@ -762,6 +779,77 @@ export class SessionManager {
     }
 
     /**
+     * Extract rarity information from voice text (matching oldIteration.py logic)
+     */
+    extractRarityFromVoice(voiceText) {
+        if (!this.settings.autoExtractRarity) {
+            return { cardName: voiceText, rarity: null };
+        }
+
+        // Enhanced rarity patterns to catch YGO rarity types (from oldIteration.py)
+        const rarityPatterns = [
+            /quarter century secret rare/i,
+            /quarter century secret/i,
+            /prismatic secret rare/i,
+            /prismatic secret/i,
+            /starlight rare/i,
+            /collector.*?rare/i,
+            /ghost rare/i,
+            /secret rare/i,
+            /ultimate rare/i,
+            /ultra rare/i,
+            /super rare/i,
+            /parallel rare/i,
+            /short print/i,
+            /rare/i,
+            /common/i
+        ];
+
+        for (const pattern of rarityPatterns) {
+            const match = voiceText.match(pattern);
+            if (match) {
+                const rarity = match[0];
+                const cardName = voiceText.replace(pattern, '').trim();
+                this.logger.debug(`Auto-extracted rarity: '${rarity}' from voice text`);
+                return { cardName, rarity };
+            }
+        }
+
+        return { cardName: voiceText, rarity: null };
+    }
+
+    /**
+     * Extract art variant information from voice text (matching oldIteration.py logic)
+     */
+    extractArtVariantFromVoice(voiceText) {
+        if (!this.settings.autoExtractArtVariant) {
+            return { cardName: voiceText, artVariant: null };
+        }
+
+        // Art variant patterns (from oldIteration.py)
+        const artPatterns = [
+            /art variant (\w+)/i,
+            /art (\w+)/i,
+            /variant (\w+)/i,
+            /artwork (\w+)/i,
+            /art rarity (.+?)(?:\s|$)/i,
+            /art variant (.+?)(?:\s|$)/i
+        ];
+
+        for (const pattern of artPatterns) {
+            const match = voiceText.match(pattern);
+            if (match) {
+                const artVariant = match[1];
+                const cardName = voiceText.replace(pattern, '').trim();
+                this.logger.debug(`Auto-extracted art variant: '${artVariant}' from voice text`);
+                return { cardName, artVariant };
+            }
+        }
+
+        return { cardName: voiceText, artVariant: null };
+    }
+
+    /**
      * Process voice input to identify cards
      */
     async processVoiceInput(transcript) {
@@ -770,8 +858,27 @@ export class SessionManager {
         if (!transcript || typeof transcript !== 'string') {
             return [];
         }
-        
-        const cleanTranscript = transcript.toLowerCase().trim();
+
+        // Step 1: Auto-extract rarity and art variant if enabled (matching oldIteration.py)
+        let processedText = transcript;
+        let extractedRarity = null;
+        let extractedArtVariant = null;
+
+        // Extract rarity information
+        const rarityResult = this.extractRarityFromVoice(processedText);
+        processedText = rarityResult.cardName;
+        extractedRarity = rarityResult.rarity;
+
+        // Extract art variant information
+        const artResult = this.extractArtVariantFromVoice(processedText);
+        processedText = artResult.cardName;
+        extractedArtVariant = artResult.artVariant;
+
+        if (extractedRarity || extractedArtVariant) {
+            this.logger.info(`Extracted from voice - Rarity: "${extractedRarity}", Art Variant: "${extractedArtVariant}", Card Name: "${processedText}"`);
+        }
+
+        const cleanTranscript = processedText.toLowerCase().trim();
         const recognizedCards = [];
         
         try {

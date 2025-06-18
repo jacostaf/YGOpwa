@@ -161,6 +161,11 @@ class YGORipperApp {
             };
             
             this.logger.debug('Settings loaded:', this.settings);
+            
+            // Update SessionManager with loaded settings
+            if (this.sessionManager) {
+                this.sessionManager.updateSettings(this.settings);
+            }
         } catch (error) {
             this.logger.warn('Failed to load settings, using defaults:', error);
             this.settings = {
@@ -177,6 +182,11 @@ class YGORipperApp {
                 autoExtractRarity: false,
                 autoExtractArtVariant: false
             };
+            
+            // Update SessionManager with default settings
+            if (this.sessionManager) {
+                this.sessionManager.updateSettings(this.settings);
+            }
         }
     }
 
@@ -696,6 +706,9 @@ class YGORipperApp {
             
             // Update application settings
             this.settings = { ...this.settings, ...newSettings };
+            
+            // Update SessionManager settings for auto-extraction
+            this.sessionManager.updateSettings(this.settings);
             
             // Save to storage
             await this.saveSettings();
