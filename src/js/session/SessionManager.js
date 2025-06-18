@@ -1167,19 +1167,21 @@ export class SessionManager {
             // Find all cards with the same name (exact match)
             const matchingCards = setCards.filter(card => card.name === cardName);
             
-            this.logger.debug(`Found ${matchingCards.length} cards with name: ${cardName}`);
+            this.logger.debug(`[VARIANT] Found ${matchingCards.length} cards with name: ${cardName}`);
             
             // For each matching card, create variants based on card_sets array (like oldIteration.py)
             for (const card of matchingCards) {
                 const cardSets = card.card_sets || [];
                 
-                this.logger.debug(`Processing card "${card.name}" with ${cardSets.length} card_sets entries`);
+                this.logger.debug(`[VARIANT] Processing card "${card.name}" with ${cardSets.length} card_sets entries`);
+                this.logger.debug(`[VARIANT] Card structure - name: "${card.name}", id: ${card.id}`);
                 
                 // Log the actual card structure for debugging
                 if (cardSets.length > 0) {
-                    this.logger.debug(`First card_set example:`, JSON.stringify(cardSets[0], null, 2));
+                    this.logger.debug(`[VARIANT] First card_set example:`, JSON.stringify(cardSets[0], null, 2));
+                    this.logger.debug(`[VARIANT] All card_sets:`, cardSets.map(cs => `${cs.set_rarity} [${cs.set_code}]`).join(', '));
                 } else {
-                    this.logger.debug(`Card has no card_sets array. Full card structure:`, JSON.stringify(card, null, 2));
+                    this.logger.debug(`[VARIANT] Card has no card_sets array. Full card structure:`, JSON.stringify(card, null, 2));
                 }
                 
                 if (cardSets.length === 0) {
@@ -1187,7 +1189,7 @@ export class SessionManager {
                     const variantKey = `${card.name}_Unknown_N/A`;
                     
                     if (!allVariants.some(v => v.variantKey === variantKey)) {
-                        this.logger.debug(`Created fallback variant: ${card.name} - Unknown`);
+                        this.logger.debug(`[VARIANT] Created fallback variant: ${card.name} - Unknown (no card_sets data)`);
                         allVariants.push({
                             ...card,
                             confidence: match.confidence,
@@ -1208,12 +1210,13 @@ export class SessionManager {
                         const setCode = cardSet.set_code || 'N/A';
                         const variantKey = `${card.name}_${rarity}_${setCode}`;
                         
-                        this.logger.debug(`Creating variant with rarity: "${rarity}", setCode: "${setCode}"`);
+                        this.logger.debug(`[VARIANT] Processing card_set: rarity="${cardSet.set_rarity}", setCode="${cardSet.set_code}"`);
+                        this.logger.debug(`[VARIANT] Creating variant with rarity: "${rarity}", setCode: "${setCode}"`);
                         
                         // Check if we already added this exact variant
                         if (!allVariants.some(v => v.variantKey === variantKey)) {
-                            this.logger.debug(`Created variant: ${card.name} - ${rarity} [${setCode}]`);
-                            allVariants.push({
+                            this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}]`);
+                            const newVariant = {
                                 ...card,
                                 confidence: match.confidence,
                                 method: match.method,
@@ -1225,9 +1228,11 @@ export class SessionManager {
                                     setCode: setCode,
                                     setName: cardSet.set_name || this.currentSet.name
                                 }
-                            });
+                            };
+                            this.logger.debug(`[VARIANT] Variant object displayRarity: "${newVariant.displayRarity}", setInfo:`, newVariant.setInfo);
+                            allVariants.push(newVariant);
                         } else {
-                            this.logger.debug(`Skipped duplicate variant: ${variantKey}`);
+                            this.logger.debug(`[VARIANT] Skipped duplicate variant: ${variantKey}`);
                         }
                     }
                 }
@@ -1237,8 +1242,12 @@ export class SessionManager {
         // Sort by confidence (highest first) and ensure unique confidence scores
         const sortedVariants = allVariants.sort((a, b) => b.confidence - a.confidence);
         
+        this.logger.debug(`[VARIANT] Pre-uniqueness variants:`, sortedVariants.map(v => `${v.name} - ${v.displayRarity} [${v.setInfo?.setCode}] (${v.confidence})`));
+        
         // Ensure unique confidence scores to avoid ties (similar to oldIteration.py)
         this.ensureUniqueConfidenceScores(sortedVariants);
+        
+        this.logger.debug(`[VARIANT] Final variants:`, sortedVariants.map(v => `${v.name} - ${v.displayRarity} [${v.setInfo?.setCode}] (${v.confidence})`));
         
         this.logger.info(`Generated ${sortedVariants.length} card variants for transcript: "${transcript}"`);
         
@@ -1254,16 +1263,22 @@ export class SessionManager {
             return;
         }
         
-        // Track used confidence scores (round to 1 decimal like Python)
+        this.logger.debug(`[CONFIDENCE] Starting uniqueness adjustment for ${variants.length} variants`);
+        
+        // Track used confidence scores (exactly like Python logic)
         const usedScores = new Set();
         
-        for (const variant of variants) {
+        for (let i = 0; i < variants.length; i++) {
+            const variant = variants[i];
             const originalConfidence = variant.confidence;
             let confidence = originalConfidence;
+            
+            this.logger.debug(`[CONFIDENCE] Processing variant ${i + 1}: "${variant.name}" - Original confidence: ${originalConfidence}`);
             
             // If this confidence is already used, find a unique one (exactly like Python)
             while (usedScores.has(Math.round(confidence * 10) / 10)) {
                 confidence -= 0.1;
+                this.logger.debug(`[CONFIDENCE] Confidence ${Math.round(confidence * 10) / 10} already used, trying ${confidence}`);
                 // Ensure we don't go below reasonable bounds
                 if (confidence < 10) {
                     confidence = originalConfidence + 0.1;
@@ -1282,10 +1297,14 @@ export class SessionManager {
             variant.confidence = confidence;
             usedScores.add(confidence);
             
+            this.logger.debug(`[CONFIDENCE] Final confidence for "${variant.name}": ${confidence}`);
+            
             if (confidence !== originalConfidence) {
-                this.logger.debug(`Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
+                this.logger.debug(`[CONFIDENCE] Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
             }
         }
+        
+        this.logger.debug(`[CONFIDENCE] Used scores: ${Array.from(usedScores).sort((a, b) => b - a).join(', ')}`);
     }
 
     /**
