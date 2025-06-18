@@ -834,24 +834,19 @@ export class SessionManager {
         }
 
         const cleanTranscript = processedText.toLowerCase().trim();
-        const recognizedCards = [];
         
         try {
-            // Method 1: Fuzzy matching (if enabled)
-            if (this.config.enableFuzzyMatching) {
-                const fuzzyMatches = await this.findCardsByFuzzyMatch(cleanTranscript, extractedRarity);
-                recognizedCards.push(...fuzzyMatches);
-            }
+            // Use unified matching approach like oldIteration.py - only set-specific matching with proper variant creation
+            // This avoids duplicates and ensures all results have proper rarity information
+            let recognizedCards = [];
             
-            // Method 2: Set-specific card matching (primary matching method)
             if (this.currentSet) {
-                const setMatches = await this.findCardsInCurrentSet(cleanTranscript, extractedRarity);
-                recognizedCards.push(...setMatches);
+                recognizedCards = await this.findCardsInCurrentSet(cleanTranscript, extractedRarity);
             }
             
             this.logger.info(`Found ${recognizedCards.length} potential card matches`);
             
-            // Debug output of found cards
+            // Debug output of found cards - only log variants with proper displayRarity
             if (recognizedCards.length > 0) {
                 this.logger.debug(`[VOICE PROCESSING] Found cards:`, recognizedCards.map(card => 
                     `${card.name} - ${card.displayRarity || 'Unknown'} [${card.setInfo?.setCode || 'N/A'}] (${card.confidence}%)`
