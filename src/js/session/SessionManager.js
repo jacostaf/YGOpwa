@@ -20,6 +20,12 @@ export class SessionManager {
         // API Configuration (matching ygo_ripper.py)
         this.apiUrl = this.getApiUrl();
         
+        // Settings (will be updated from app)
+        this.settings = {
+            autoExtractRarity: false,
+            autoExtractArtVariant: false
+        };
+        
         // Session state
         this.currentSession = null;
         this.sessionActive = false;
@@ -57,11 +63,21 @@ export class SessionManager {
         // Auto-save timer
         this.autoSaveTimer = null;
         
-        // Card recognition patterns (Yu-Gi-Oh specific)
-        this.cardPatterns = new Map();
+        // Common card names cache for optimization
         this.commonCardNames = new Map();
         
         this.logger.info('SessionManager initialized');
+    }
+
+    /**
+     * Update settings from the app
+     */
+    updateSettings(settings) {
+        this.settings = {
+            ...this.settings,
+            ...settings
+        };
+        this.logger.debug('SessionManager settings updated:', this.settings);
     }
 
     /**
@@ -87,9 +103,6 @@ export class SessionManager {
         try {
             // Load card sets
             await this.loadCardSets();
-            
-            // Load card recognition patterns
-            await this.loadCardPatterns();
             
             // Load last session if available
             await this.loadLastSession();
@@ -478,91 +491,15 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('Set cards request timed out after', this.config.apiTimeout, 'ms');
+                throw new Error(`Request timed out loading cards for set ${setIdentifier}. Please check if the backend is running on http://127.0.0.1:8081`);
             } else {
                 this.logger.error(`Failed to load cards for set ${setIdentifier}:`, error);
+                throw error;
             }
-            
-            // Fallback: provide sample cards for testing voice recognition
-            this.logger.warn('API failed, using sample cards for testing');
-            const sampleCards = this.getSampleCards(setIdentifier);
-            this.setCards.set(setIdentifier, sampleCards);
-            return sampleCards;
         }
     }
 
-    /**
-     * Get sample cards for testing voice recognition
-     */
-    getSampleCards(setId) {
-        return [
-            { id: `${setId}-001`, name: 'Blue-Eyes White Dragon', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-002`, name: 'Dark Magician', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-003`, name: 'Evil HERO Neos Lord', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-004`, name: 'Evil Hero Neos Lord', rarity: 'Secret Rare', setCode: setId },
-            { id: `${setId}-005`, name: 'Elemental HERO Neos', rarity: 'Super Rare', setCode: setId },
-            { id: `${setId}-006`, name: 'Red-Eyes Black Dragon', rarity: 'Ultra Rare', setCode: setId },
-            { id: `${setId}-007`, name: 'Time Wizard', rarity: 'Common', setCode: setId },
-            { id: `${setId}-008`, name: 'Mirror Force', rarity: 'Super Rare', setCode: setId },
-            { id: `${setId}-009`, name: 'Pot of Greed', rarity: 'Common', setCode: setId },
-            { id: `${setId}-010`, name: 'Mystical Space Typhoon', rarity: 'Common', setCode: setId }
-        ];
-    }
 
-
-
-    /**
-     * Load card recognition patterns
-     */
-    async loadCardPatterns() {
-        try {
-            // Load common card name patterns for better voice recognition
-            const patterns = await this.storage?.get('cardPatterns') || this.getDefaultCardPatterns();
-            
-            this.cardPatterns = new Map(patterns);
-            this.logger.debug(`Loaded ${this.cardPatterns.size} card patterns`);
-            
-        } catch (error) {
-            this.logger.warn('Failed to load card patterns:', error);
-            this.cardPatterns = new Map(this.getDefaultCardPatterns());
-        }
-    }
-
-    /**
-     * Get default card patterns
-     */
-    getDefaultCardPatterns() {
-        return [
-            // Common card name variations
-            ['blue eyes white dragon', 'Blue-Eyes White Dragon'],
-            ['dark magician', 'Dark Magician'],
-            ['red eyes black dragon', 'Red-Eyes Black Dragon'],
-            ['time wizard', 'Time Wizard'],
-            ['mirror force', 'Mirror Force'],
-            ['pot of greed', 'Pot of Greed'],
-            ['mystical space typhoon', 'Mystical Space Typhoon'],
-            ['man eater bug', 'Man-Eater Bug'],
-            ['elemental hero', 'Elemental HERO'],
-            ['cyber dragon', 'Cyber Dragon'],
-            
-            // Evil HERO specific patterns
-            ['evil hero neos lord', 'Evil HERO Neos Lord'],
-            ['evil hero NEOS lord', 'Evil HERO Neos Lord'],
-            ['evil hero neos lord', 'Evil Hero Neos Lord'],
-            ['evil HERO neos lord', 'Evil HERO Neos Lord'],
-            
-            // Common phonetic variations
-            ['dragun', 'Dragon'],
-            ['majician', 'Magician'],
-            ['elemental hero', 'Elemental HERO'],
-            ['cyber dragun', 'Cyber Dragon'],
-            ['blue i white dragun', 'Blue-Eyes White Dragon'],
-            ['red i black dragun', 'Red-Eyes Black Dragon'],
-            ['dark majician', 'Dark Magician'],
-            ['time wiserd', 'Time Wizard'],
-            ['mirror four', 'Mirror Force'],
-            ['pot of greed', 'Pot of Greed']
-        ];
-    }
 
     /**
      * Start a new session
@@ -753,6 +690,115 @@ export class SessionManager {
     }
 
     /**
+     * Adjust card quantity in the current session
+     */
+    adjustCardQuantity(cardId, adjustment) {
+        if (!this.sessionActive || !this.currentSession) {
+            throw new Error('No active session');
+        }
+        
+        const card = this.currentSession.cards.find(card => card.id === cardId);
+        if (!card) {
+            throw new Error('Card not found in session');
+        }
+        
+        // Calculate new quantity
+        const currentQuantity = card.quantity || 1;
+        const newQuantity = Math.max(1, currentQuantity + adjustment); // Minimum quantity is 1
+        
+        if (newQuantity === currentQuantity) {
+            return card; // No change needed
+        }
+        
+        card.quantity = newQuantity;
+        
+        // Update statistics
+        this.updateSessionStatistics();
+        
+        // Emit events
+        this.emitSessionUpdate(this.currentSession);
+        
+        this.logger.info(`Card quantity adjusted: ${card.name || card.id} (${currentQuantity} -> ${newQuantity})`);
+        return card;
+    }
+
+    /**
+     * Extract rarity information from voice text (matching oldIteration.py logic)
+     */
+    extractRarityFromVoice(voiceText) {
+        if (!this.settings.autoExtractRarity) {
+            this.logger.debug(`[RARITY EXTRACT] Auto-extract rarity disabled, returning original text: "${voiceText}"`);
+            return { cardName: voiceText, rarity: null };
+        }
+
+        this.logger.debug(`[RARITY EXTRACT] Processing voice text: "${voiceText}"`);
+
+        // Enhanced rarity patterns to catch YGO rarity types (exact match from oldIteration.py)
+        const rarityPatterns = [
+            /quarter century secret rare/i,
+            /quarter century secret/i,
+            /prismatic secret rare/i,
+            /prismatic secret/i,
+            /starlight rare/i,
+            /collector.*?rare/i,
+            /ghost rare/i,
+            /secret rare/i,
+            /ultimate rare/i,
+            /ultra rare/i,
+            /super rare/i,
+            /parallel rare/i,
+            /short print/i,
+            /rare/i,
+            /common/i
+        ];
+
+        for (const pattern of rarityPatterns) {
+            this.logger.debug(`[RARITY EXTRACT] Testing pattern: ${pattern}`);
+            const match = voiceText.match(pattern);
+            if (match) {
+                const rarity = match[0];
+                const cardName = voiceText.replace(pattern, '').trim();
+                this.logger.info(`[RARITY EXTRACT] SUCCESS - Extracted rarity: '${rarity}', remaining card name: '${cardName}'`);
+                return { cardName, rarity };
+            }
+        }
+
+        this.logger.debug(`[RARITY EXTRACT] No rarity patterns matched in: "${voiceText}"`);
+        return { cardName: voiceText, rarity: null };
+    }
+
+    /**
+     * Extract art variant information from voice text (matching oldIteration.py logic)
+     */
+    extractArtVariantFromVoice(voiceText) {
+        if (!this.settings.autoExtractArtVariant) {
+            return { cardName: voiceText, artVariant: null };
+        }
+
+        // Art variant patterns (from oldIteration.py)
+        const artPatterns = [
+            /art variant (\w+)/i,
+            /art (\w+)/i,
+            /variant (\w+)/i,
+            /artwork (\w+)/i,
+            /art rarity (.+?)(?:\s|$)/i,
+            /art variant (.+?)(?:\s|$)/i
+        ];
+
+        for (const pattern of artPatterns) {
+            const match = voiceText.match(pattern);
+            if (match) {
+                const artVariant = match[1];
+                const cardName = voiceText.replace(pattern, '').trim();
+                this.logger.debug(`Auto-extracted art variant: '${artVariant}' from voice text`);
+                return { cardName, artVariant };
+            }
+        }
+
+        return { cardName: voiceText, artVariant: null };
+    }
+
+    /**
      * Process voice input to identify cards
      */
     async processVoiceInput(transcript) {
@@ -761,28 +807,52 @@ export class SessionManager {
         if (!transcript || typeof transcript !== 'string') {
             return [];
         }
-        
-        const cleanTranscript = transcript.toLowerCase().trim();
-        const recognizedCards = [];
+
+        // Step 1: Auto-extract rarity and art variant if enabled (matching oldIteration.py)
+        let processedText = transcript;
+        let extractedRarity = null;
+        let extractedArtVariant = null;
+
+        this.logger.debug(`[VOICE PROCESSING] Original transcript: "${transcript}"`);
+        this.logger.debug(`[VOICE PROCESSING] Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
+        this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
+
+        // Extract rarity information
+        const rarityResult = this.extractRarityFromVoice(processedText);
+        processedText = rarityResult.cardName;
+        extractedRarity = rarityResult.rarity;
+
+        // Extract art variant information
+        const artResult = this.extractArtVariantFromVoice(processedText);
+        processedText = artResult.cardName;
+        extractedArtVariant = artResult.artVariant;
+
+        if (extractedRarity || extractedArtVariant) {
+            this.logger.info(`[VOICE PROCESSING] Extracted from voice - Rarity: "${extractedRarity}", Art Variant: "${extractedArtVariant}", Card Name: "${processedText}"`);
+        } else {
+            this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using full transcript as card name: "${processedText}"`);
+        }
+
+        const cleanTranscript = processedText.toLowerCase().trim();
         
         try {
-            // Method 1: Exact pattern matching
-            const patternMatches = this.findCardsByPattern(cleanTranscript);
-            recognizedCards.push(...patternMatches);
+            // Use unified matching approach like oldIteration.py - only set-specific matching with proper variant creation
+            // This avoids duplicates and ensures all results have proper rarity information
+            let recognizedCards = [];
             
-            // Method 2: Fuzzy matching (if enabled and no exact matches)
-            if (recognizedCards.length === 0 && this.config.enableFuzzyMatching) {
-                const fuzzyMatches = await this.findCardsByFuzzyMatch(cleanTranscript);
-                recognizedCards.push(...fuzzyMatches);
-            }
-            
-            // Method 3: Set-specific card matching
-            if (recognizedCards.length === 0 && this.currentSet) {
-                const setMatches = await this.findCardsInCurrentSet(cleanTranscript);
-                recognizedCards.push(...setMatches);
+            if (this.currentSet) {
+                recognizedCards = await this.findCardsInCurrentSet(cleanTranscript, extractedRarity);
             }
             
             this.logger.info(`Found ${recognizedCards.length} potential card matches`);
+            
+            // Debug output of found cards - only log variants with proper displayRarity
+            if (recognizedCards.length > 0) {
+                this.logger.debug(`[VOICE PROCESSING] Found cards:`, recognizedCards.map(card => 
+                    `${card.name} - ${card.displayRarity || 'Unknown'} [${card.setInfo?.setCode || 'N/A'}] (${card.confidence}%)`
+                ));
+            }
+            
             return recognizedCards;
             
         } catch (error) {
@@ -791,30 +861,12 @@ export class SessionManager {
         }
     }
 
-    /**
-     * Find cards by pattern matching
-     */
-    findCardsByPattern(transcript) {
-        const matches = [];
-        
-        for (const [pattern, cardName] of this.cardPatterns) {
-            if (transcript.includes(pattern.toLowerCase())) {
-                matches.push({
-                    name: cardName,
-                    confidence: 0.9,
-                    method: 'pattern',
-                    transcript: transcript
-                });
-            }
-        }
-        
-        return matches;
-    }
+
 
     /**
      * Find cards by fuzzy matching using advanced variant generation
      */
-     async findCardsByFuzzyMatch(transcript) {
+     async findCardsByFuzzyMatch(transcript, extractedRarity = null) {
         if (!this.currentSet) {
             return [];
         }
@@ -865,7 +917,7 @@ export class SessionManager {
             if (finalScore >= this.config.cardMatchThreshold) {
                 matches.push({
                     ...card,
-                    confidence: finalScore,
+                    confidence: finalScore * 100, // Convert to percentage like Python
                     method: `fuzzy-${bestMethod}`,
                     transcript: transcript,
                     rawScore: bestScore,
@@ -987,19 +1039,22 @@ export class SessionManager {
     }
 
     /**
-     * Find cards in current set
+     * Find cards in current set with enhanced rarity variant handling
      */
-    async findCardsInCurrentSet(transcript) {
+    async findCardsInCurrentSet(transcript, extractedRarity = null) {
         if (!this.currentSet) {
             return [];
         }
         
+        this.logger.debug(`[CARD SEARCH] Processing transcript: "${transcript}", extractedRarity: "${extractedRarity}"`);
+        
         const setCards = this.setCards.get(this.currentSet.id) || [];
-        const matches = [];
+        const initialMatches = [];
         
         // Normalize the transcript for better matching
         const normalizedTranscript = this.normalizeCardName(transcript);
         
+        // First pass: Find matching card names
         for (const card of setCards) {
             const normalizedCardName = this.normalizeCardName(card.name);
             
@@ -1009,20 +1064,20 @@ export class SessionManager {
             
             // Exact match (highest confidence)
             if (normalizedCardName === normalizedTranscript) {
-                confidence = 0.95;
+                confidence = 95;
                 matchType = 'exact';
             }
             // Fuzzy matching with similarity calculation
             else {
                 const similarity = this.calculateSimilarity(normalizedTranscript, normalizedCardName);
                 if (similarity >= this.config.cardMatchThreshold) {
-                    confidence = similarity * 0.9; // Slightly lower than exact match
+                    confidence = similarity * 90; // Slightly lower than exact match (convert to percentage)
                     matchType = 'fuzzy';
                 }
             }
             
             if (confidence > 0) {
-                matches.push({
+                initialMatches.push({
                     ...card,
                     confidence: confidence,
                     method: `set-search-${matchType}`,
@@ -1033,7 +1088,232 @@ export class SessionManager {
             }
         }
         
-        return matches.sort((a, b) => b.confidence - a.confidence);
+        // Second pass: Create variants for each matching card name with different rarities
+        // Following the logic from oldIteration.py for proper rarity variant handling
+        const allVariants = [];
+        const processedCardNames = new Set();
+        
+        for (const match of initialMatches) {
+            const cardName = match.name;
+            
+            // Skip if we already processed this card name
+            if (processedCardNames.has(cardName)) {
+                continue;
+            }
+            processedCardNames.add(cardName);
+            
+            // Find all cards with the same name (exact match)
+            const matchingCards = setCards.filter(card => card.name === cardName);
+            
+            this.logger.debug(`[VARIANT] Found ${matchingCards.length} cards with name: ${cardName}`);
+            
+            // For each matching card, create variants based on card_sets array (like oldIteration.py)
+            for (const card of matchingCards) {
+                const cardSets = card.card_sets || [];
+                
+                this.logger.debug(`[VARIANT] Processing card "${card.name}" with ${cardSets.length} card_sets entries`);
+                this.logger.debug(`[VARIANT] Card structure - name: "${card.name}", id: ${card.id}`);
+                
+                // Log the actual card structure for debugging
+                if (cardSets.length > 0) {
+                    this.logger.debug(`[VARIANT] First card_set example:`, JSON.stringify(cardSets[0], null, 2));
+                    this.logger.debug(`[VARIANT] All card_sets:`, cardSets.map(cs => `${cs.set_rarity} [${cs.set_code}]`).join(', '));
+                } else {
+                    this.logger.debug(`[VARIANT] Card has no card_sets array. Skipping as per oldIteration.py logic.`);
+                }
+                
+                // Only create variants from cards that have actual card_sets data (matching oldIteration.py logic)
+                if (cardSets.length > 0) {
+                    // Create a variant for each card_set entry (different rarities)
+                    for (const cardSet of cardSets) {
+                        // Add comprehensive debugging for this card_set entry
+                        this.logger.debug(`[VARIANT] Processing card_set entry for card: ${card.name}`, {
+                            set_rarity: cardSet.set_rarity,
+                            set_code: cardSet.set_code,
+                            set_name: cardSet.set_name,
+                            type_of_rarity: typeof cardSet.set_rarity,
+                            type_of_setcode: typeof cardSet.set_code,
+                            rarity_is_undefined: cardSet.set_rarity === undefined,
+                            rarity_is_null: cardSet.set_rarity === null,
+                            setcode_is_undefined: cardSet.set_code === undefined,
+                            setcode_is_null: cardSet.set_code === null
+                        });
+                        
+                        // Filter out card_sets entries with missing or invalid rarity
+                        if (cardSet.set_rarity === null || 
+                            cardSet.set_rarity === undefined || 
+                            typeof cardSet.set_rarity !== 'string' ||
+                            cardSet.set_rarity.trim() === '' || 
+                            cardSet.set_rarity.toLowerCase().trim() === 'unknown' ||
+                            cardSet.set_rarity.toLowerCase().trim() === 'n/a' ||
+                            cardSet.set_rarity.toLowerCase().trim() === 'undefined' ||
+                            cardSet.set_rarity.toLowerCase().trim() === 'null') {
+                            this.logger.debug(`[VARIANT] Skipping card_set with invalid rarity: "${cardSet.set_rarity}" (type: ${typeof cardSet.set_rarity}) for card: ${card.name}`);
+                            continue;
+                        }
+                        
+                        // Filter out card_sets entries with missing or invalid set code
+                        if (cardSet.set_code === null || 
+                            cardSet.set_code === undefined || 
+                            typeof cardSet.set_code !== 'string' ||
+                            cardSet.set_code.trim() === '' || 
+                            cardSet.set_code.toLowerCase().trim() === 'n/a' ||
+                            cardSet.set_code.toLowerCase().trim() === 'undefined' ||
+                            cardSet.set_code.toLowerCase().trim() === 'null') {
+                            this.logger.debug(`[VARIANT] Skipping card_set with invalid set_code: "${cardSet.set_code}" (type: ${typeof cardSet.set_code}) for card: ${card.name}`);
+                            continue;
+                        }
+                        
+                        // Only use verified valid values (no fallbacks)
+                        const rarity = cardSet.set_rarity;
+                        const setCode = cardSet.set_code;
+                        
+                        this.logger.debug(`[VARIANT] Processing valid card_set: rarity="${rarity}", setCode="${setCode}" for card: ${card.name}`);
+                        
+                        // Apply rarity filtering when extractedRarity is provided (like oldIteration.py)
+                        let confidence = match.confidence;
+                        if (extractedRarity) {
+                            const rarityScore = this.calculateRarityScore(extractedRarity, rarity);
+                            this.logger.debug(`[VARIANT] Rarity matching: "${extractedRarity}" vs "${rarity}" = ${rarityScore}%`);
+                            
+                            // Skip variants that don't match the extracted rarity well enough
+                            if (rarityScore < 70) {
+                                this.logger.debug(`[VARIANT] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
+                                continue;
+                            }
+                            
+                            // Use weighted confidence: 75% name + 25% rarity (like oldIteration.py)
+                            const nameScore = match.confidence;
+                            confidence = (nameScore * 0.75) + (rarityScore * 0.25);
+                            this.logger.debug(`[VARIANT] Weighted confidence: ${nameScore}% name + ${rarityScore}% rarity = ${confidence}%`);
+                        }
+                        
+                        const variantKey = `${card.name}_${rarity}_${setCode}`;
+                        
+                        // Check if we already added this exact variant
+                        if (!allVariants.some(v => v.variantKey === variantKey)) {
+                            this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}] (${confidence}%)`);
+                            const newVariant = {
+                                ...card,
+                                confidence: confidence,
+                                method: match.method,
+                                transcript: match.transcript,
+                                variantKey: variantKey,
+                                // Use the specific rarity and set info from this card_set
+                                displayRarity: rarity,
+                                setInfo: {
+                                    setCode: setCode,
+                                    setName: cardSet.set_name || this.currentSet.name
+                                }
+                            };
+                            this.logger.debug(`[VARIANT] Variant object displayRarity: "${newVariant.displayRarity}", setInfo:`, newVariant.setInfo);
+                            allVariants.push(newVariant);
+                        } else {
+                            this.logger.debug(`[VARIANT] Skipped duplicate variant: ${variantKey}`);
+                        }
+                    }
+                } else {
+                    this.logger.debug(`[VARIANT] Card "${card.name}" has no card_sets array. Skipping as per oldIteration.py logic.`);
+                }
+            }
+        }
+        
+        // Sort by confidence (highest first) and ensure unique confidence scores
+        const sortedVariants = allVariants.sort((a, b) => b.confidence - a.confidence);
+        
+        this.logger.debug(`[VARIANT] Pre-uniqueness variants:`, sortedVariants.map(v => `${v.name} - ${v.displayRarity} [${v.setInfo?.setCode}] (${v.confidence})`));
+        
+        // Ensure unique confidence scores to avoid ties (similar to oldIteration.py)
+        this.ensureUniqueConfidenceScores(sortedVariants);
+        
+        this.logger.debug(`[VARIANT] Final variants:`, sortedVariants.map(v => `${v.name} - ${v.displayRarity} [${v.setInfo?.setCode}] (${v.confidence})`));
+        
+        this.logger.info(`Generated ${sortedVariants.length} card variants for transcript: "${transcript}"`);
+        
+        return sortedVariants;
+    }
+
+    /**
+     * Calculate rarity matching score (similar to oldIteration.py)
+     */
+    calculateRarityScore(inputRarity, cardSetRarity) {
+        if (!inputRarity || !cardSetRarity) {
+            return 0;
+        }
+        
+        const input = inputRarity.toLowerCase().trim();
+        const cardRarity = cardSetRarity.toLowerCase().trim();
+        
+        // Exact match gets highest score
+        if (input === cardRarity) {
+            return 100;
+        }
+        
+        // Partial match gets good score
+        if (input.includes(cardRarity) || cardRarity.includes(input)) {
+            return 80;
+        }
+        
+        // Fuzzy match as fallback
+        const similarity = this.calculateSimilarity(input, cardRarity);
+        return similarity >= 70 ? similarity * 0.7 : 0;  // Scale down fuzzy matches
+    }
+
+    /**
+     * Ensure unique confidence scores to avoid ties in selection
+     * Based on the logic from oldIteration.py - fixed floating point precision issues
+     */
+    ensureUniqueConfidenceScores(variants) {
+        if (!variants || variants.length === 0) {
+            return;
+        }
+        
+        this.logger.debug(`[CONFIDENCE] Starting uniqueness adjustment for ${variants.length} variants`);
+        
+        // Track used confidence scores (exactly like Python logic)
+        const usedScores = new Set();
+        
+        for (let i = 0; i < variants.length; i++) {
+            const variant = variants[i];
+            const originalConfidence = variant.confidence;
+            let confidence = originalConfidence;
+            
+            this.logger.debug(`[CONFIDENCE] Processing variant ${i + 1}: "${variant.name}" - Original confidence: ${originalConfidence.toFixed(1)}%`);
+            
+            // If this confidence is already used, find a unique one (exactly like Python)
+            // Fix floating point precision issues by using integer arithmetic
+            let confidenceRounded = Math.round(confidence * 10) / 10;
+            while (usedScores.has(confidenceRounded)) {
+                confidence -= 0.1;
+                // Use proper rounding to avoid floating point precision issues
+                confidenceRounded = Math.round(confidence * 10) / 10;
+                this.logger.debug(`[CONFIDENCE] Confidence ${confidenceRounded} already used, trying ${confidenceRounded}`);
+                
+                // Ensure we don't go below reasonable bounds
+                if (confidenceRounded < 10) {
+                    confidence = originalConfidence + 0.1;
+                    confidenceRounded = Math.round(confidence * 10) / 10;
+                    while (usedScores.has(confidenceRounded) && confidenceRounded <= 99) {
+                        confidence += 0.1;
+                        confidenceRounded = Math.round(confidence * 10) / 10;
+                    }
+                    break;
+                }
+            }
+            
+            // Round to one decimal place and update (exactly like Python)
+            confidence = confidenceRounded;
+            variant.confidence = confidence;
+            usedScores.add(confidence);
+            
+            this.logger.debug(`[CONFIDENCE] Final confidence for "${variant.name}": ${confidence}%`);
+            
+            if (Math.abs(confidence - originalConfidence) > 0.05) { // Use tolerance for floating point comparison
+                this.logger.info(`[CONFIDENCE] Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
+            }
+        }
+        
+        this.logger.debug(`[CONFIDENCE] Used scores: ${Array.from(usedScores).sort((a, b) => b - a).join(', ')}`);
     }
 
     /**
@@ -1436,7 +1716,8 @@ export class SessionManager {
             totalValue: this.currentSession.statistics.totalValue,
             status: this.sessionActive ? 'Active' : 'Stopped',
             sessionId: this.currentSession.id,
-            startTime: this.currentSession.startTime
+            startTime: this.currentSession.startTime,
+            cards: this.currentSession.cards
         };
     }
 

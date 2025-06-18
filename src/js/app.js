@@ -150,11 +150,22 @@ class YGORipperApp {
                 autoPriceRefresh: false,
                 sessionAutoSave: true,
                 debugMode: false,
+                // Auto-confirm settings (matching oldIteration.py)
+                autoConfirm: false,
+                autoConfirmThreshold: 85,
+                // Auto-extraction settings (matching oldIteration.py)
+                autoExtractRarity: false,
+                autoExtractArtVariant: false,
                 // Override with saved settings
                 ...savedSettings
             };
             
             this.logger.debug('Settings loaded:', this.settings);
+            
+            // Update SessionManager with loaded settings
+            if (this.sessionManager) {
+                this.sessionManager.updateSettings(this.settings);
+            }
         } catch (error) {
             this.logger.warn('Failed to load settings, using defaults:', error);
             this.settings = {
@@ -163,8 +174,19 @@ class YGORipperApp {
                 voiceLanguage: 'en-US',
                 autoPriceRefresh: false,
                 sessionAutoSave: true,
-                debugMode: false
+                debugMode: false,
+                // Auto-confirm settings (matching oldIteration.py)
+                autoConfirm: false,
+                autoConfirmThreshold: 85,
+                // Auto-extraction settings (matching oldIteration.py)
+                autoExtractRarity: false,
+                autoExtractArtVariant: false
             };
+            
+            // Update SessionManager with default settings
+            if (this.sessionManager) {
+                this.sessionManager.updateSettings(this.settings);
+            }
         }
     }
 
@@ -255,6 +277,22 @@ class YGORipperApp {
 
         this.uiManager.onVoiceTest(() => {
             this.handleVoiceTest();
+        });
+
+        this.uiManager.onQuantityAdjust((cardId, adjustment) => {
+            this.handleQuantityAdjust(cardId, adjustment);
+        });
+
+        this.uiManager.onCardRemove((cardId) => {
+            this.handleCardRemove(cardId);
+        });
+
+        this.uiManager.onSettingsSave((settings) => {
+            this.handleSettingsSave(settings);
+        });
+
+        this.uiManager.onSettingsShow(() => {
+            this.handleSettingsShow();
         });
 
         // SessionManager events
@@ -581,7 +619,7 @@ class YGORipperApp {
      */
     handleVoiceStop() {
         try {
-            if (this.voiceEngine && this.voiceEngine.isListening()) {
+            if (this.voiceEngine && this.voiceEngine.isListening) {
                 this.voiceEngine.stopListening();
                 this.logger.info('Voice recognition stopped');
             }
@@ -612,6 +650,86 @@ class YGORipperApp {
     }
 
     /**
+     * Handle card quantity adjustment
+     */
+    async handleQuantityAdjust(cardId, adjustment) {
+        try {
+            this.logger.info(`Adjusting quantity for card ${cardId} by ${adjustment}`);
+            
+            const updatedCard = this.sessionManager.adjustCardQuantity(cardId, adjustment);
+            
+            // Update UI
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+            this.uiManager.showToast(`Updated quantity: ${updatedCard.name} (${updatedCard.quantity})`, 'success');
+            
+            // Auto-save if enabled
+            if (this.settings.sessionAutoSave) {
+                await this.sessionManager.saveSession();
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to adjust card quantity:', error);
+            this.uiManager.showToast('Error adjusting quantity: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle card removal
+     */
+    async handleCardRemove(cardId) {
+        try {
+            this.logger.info(`Removing card ${cardId} from session`);
+            
+            const removedCard = this.sessionManager.removeCard(cardId);
+            
+            // Update UI
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+            this.uiManager.showToast(`Removed: ${removedCard.name}`, 'success');
+            
+            // Auto-save if enabled
+            if (this.settings.sessionAutoSave) {
+                await this.sessionManager.saveSession();
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to remove card:', error);
+            this.uiManager.showToast('Error removing card: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle settings save
+     */
+    async handleSettingsSave(newSettings) {
+        try {
+            this.logger.info('Saving settings:', newSettings);
+            
+            // Update application settings
+            this.settings = { ...this.settings, ...newSettings };
+            
+            // Update SessionManager settings for auto-extraction
+            this.sessionManager.updateSettings(this.settings);
+            
+            // Save to storage
+            await this.saveSettings();
+            
+            this.logger.info('Settings saved successfully');
+            
+        } catch (error) {
+            this.logger.error('Failed to save settings:', error);
+            this.uiManager.showToast('Error saving settings: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle settings show
+     */
+    handleSettingsShow() {
+        // Show settings modal with current settings
+        this.uiManager.showSettings(this.settings);
+    }
+
+    /**
      * Handle voice recognition result
      */
     async handleVoiceResult(result) {
@@ -627,18 +745,36 @@ class YGORipperApp {
             const cards = await this.sessionManager.processVoiceInput(result.transcript);
             
             if (cards.length > 0) {
-                // Add cards to session
-                for (const card of cards) {
-                    await this.sessionManager.addCard(card);
-                }
+                // Sort cards by confidence for auto-confirm logic (highest to lowest)
+                const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
                 
-                // Update UI
-                this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
-                this.uiManager.showToast(`Added ${cards.length} card(s) to session`, 'success');
+                this.logger.info(`Found ${cards.length} card matches, best confidence: ${(sortedCards[0].confidence || 0) * 100}%`);
                 
-                // Auto-save if enabled
-                if (this.settings.sessionAutoSave) {
-                    await this.sessionManager.saveSession();
+                // Check for auto-confirm
+                const bestMatch = sortedCards[0];
+                const bestConfidencePercent = bestMatch.confidence || 0;
+                
+                if (this.settings.autoConfirm && bestConfidencePercent >= this.settings.autoConfirmThreshold) {
+                    // Auto-confirm the best match
+                    this.logger.info(`Auto-confirming: ${bestMatch.name} (${bestConfidencePercent.toFixed(1)}% confidence)`);
+                    
+                    // Add only the best match, with quantity 1
+                    await this.sessionManager.addCard({
+                        ...bestMatch,
+                        quantity: 1
+                    });
+                    
+                    // Update UI
+                    this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+                    this.uiManager.showToast(`Auto-confirmed: ${bestMatch.name} (${bestConfidencePercent.toFixed(1)}%)`, 'success');
+                    
+                    // Auto-save if enabled
+                    if (this.settings.sessionAutoSave) {
+                        await this.sessionManager.saveSession();
+                    }
+                } else {
+                    // Show card selection dialog
+                    this.showCardSelectionDialog(sortedCards, result.transcript);
                 }
             } else {
                 this.uiManager.showToast(`No cards recognized for: "${result.transcript}"`, 'warning');
@@ -686,6 +822,109 @@ class YGORipperApp {
         // Show retry button for retryable errors
         if (isRetryable) {
             // Implementation would show retry option in UI
+        }
+    }
+
+    /**
+     * Show card selection dialog when auto-confirm is disabled or confidence is below threshold
+     */
+    showCardSelectionDialog(cards, transcript) {
+        this.logger.info(`Showing card selection dialog for ${cards.length} cards`);
+        
+        // Create the dialog HTML
+        const dialogHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Select Card</h3>
+                    <button class="modal-close" type="button">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="voice-query">Voice input: "<em>${transcript}</em>"</p>
+                    <p class="instructions">Select the card you meant:</p>
+                    <div class="card-options">
+                        ${cards.map((card, index) => {
+                            const confidencePercent = (card.confidence || 0).toFixed(1);
+                            return `
+                                <div class="card-option" data-card-index="${index}">
+                                    <div class="card-info">
+                                        <div class="card-name">${card.name}</div>
+                                        <div class="card-details">
+                                            <span class="card-rarity">${card.displayRarity || card.rarity}</span>
+                                            <span class="card-confidence">${confidencePercent}% confidence</span>
+                                            ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary select-card-btn" data-card-index="${index}">
+                                        Select
+                                    </button>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    <div class="dialog-actions">
+                        <button class="btn btn-secondary" id="cancel-card-selection">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Create modal element
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = dialogHTML;
+        
+        // Show the modal
+        this.uiManager.showModal(modal);
+        
+        // Add event listeners
+        if (modal) {
+            // Handle card selection
+            modal.querySelectorAll('.select-card-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const cardIndex = parseInt(e.target.dataset.cardIndex);
+                    const selectedCard = cards[cardIndex];
+                    
+                    if (selectedCard) {
+                        this.logger.info(`User selected: ${selectedCard.name}`);
+                        
+                        // Add the selected card with quantity 1
+                        await this.sessionManager.addCard({
+                            ...selectedCard,
+                            quantity: 1
+                        });
+                        
+                        // Update UI
+                        this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+                        this.uiManager.showToast(`Added: ${selectedCard.name}`, 'success');
+                        
+                        // Auto-save if enabled
+                        if (this.settings.sessionAutoSave) {
+                            await this.sessionManager.saveSession();
+                        }
+                        
+                        // Close the modal
+                        this.uiManager.closeModal();
+                    }
+                });
+            });
+            
+            // Handle cancel
+            const cancelBtn = modal.querySelector('#cancel-card-selection');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    this.logger.info('User cancelled card selection');
+                    this.uiManager.closeModal();
+                });
+            }
+            
+            // Handle close button
+            const closeBtn = modal.querySelector('.modal-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    this.logger.info('User closed card selection dialog');
+                    this.uiManager.closeModal();
+                });
+            }
         }
     }
 

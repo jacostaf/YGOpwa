@@ -30,7 +30,11 @@ export class UIManager {
             sessionImport: [],
             voiceStart: [],
             voiceStop: [],
-            voiceTest: []
+            voiceTest: [],
+            quantityAdjust: [],
+            cardRemove: [],
+            settingsSave: [],
+            settingsShow: []
         };
         
         // UI state
@@ -251,7 +255,7 @@ export class UIManager {
         // Settings and help
         if (this.elements.settingsBtn) {
             this.elements.settingsBtn.addEventListener('click', () => {
-                this.showSettings();
+                this.emitSettingsShow();
             });
         }
 
@@ -786,6 +790,89 @@ export class UIManager {
         const hasSession = sessionInfo.cardCount > 0;
         this.elements.exportSessionBtn?.toggleAttribute('disabled', !hasSession);
         this.elements.clearSessionBtn?.toggleAttribute('disabled', !hasSession);
+        
+        // Update session cards display
+        this.displaySessionCards(sessionInfo.cards || []);
+    }
+
+    /**
+     * Display session cards with quantity adjustment buttons
+     */
+    displaySessionCards(cards) {
+        if (!this.elements.sessionCards) return;
+        
+        // Remove existing cards
+        const existingCards = this.elements.sessionCards.querySelectorAll('.session-card');
+        existingCards.forEach(card => card.remove());
+        
+        if (cards.length === 0) {
+            // Show empty state
+            if (this.elements.emptySession) {
+                this.elements.emptySession.classList.remove('hidden');
+            }
+            return;
+        }
+        
+        // Hide empty state
+        if (this.elements.emptySession) {
+            this.elements.emptySession.classList.add('hidden');
+        }
+        
+        // Display cards
+        cards.forEach(card => {
+            const cardElement = this.createSessionCardElement(card);
+            this.elements.sessionCards.appendChild(cardElement);
+        });
+    }
+
+    /**
+     * Create a session card element with quantity adjustment
+     */
+    createSessionCardElement(card) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'session-card';
+        cardDiv.dataset.cardId = card.id;
+        
+        cardDiv.innerHTML = `
+            <div class="card-info">
+                <div class="card-name">${card.name || 'Unknown Card'}</div>
+                <div class="card-details">
+                    <span class="card-rarity">${card.displayRarity || card.rarity}</span>
+                    ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
+                    ${card.price ? `<span class="card-price">$${card.price.toFixed(2)}</span>` : ''}
+                </div>
+            </div>
+            <div class="card-controls">
+                <div class="quantity-controls">
+                    <button class="btn btn-sm quantity-btn decrease-qty" data-card-id="${card.id}" title="Decrease Quantity">-</button>
+                    <span class="quantity-display">${card.quantity || 1}</span>
+                    <button class="btn btn-sm quantity-btn increase-qty" data-card-id="${card.id}" title="Increase Quantity">+</button>
+                </div>
+                <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+            </div>
+        `;
+        
+        // Add event listeners for quantity adjustment
+        const decreaseBtn = cardDiv.querySelector('.decrease-qty');
+        const increaseBtn = cardDiv.querySelector('.increase-qty');
+        const removeBtn = cardDiv.querySelector('.remove-card');
+        
+        decreaseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.emitQuantityAdjust(card.id, -1);
+        });
+        
+        increaseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.emitQuantityAdjust(card.id, 1);
+        });
+        
+        removeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.emitCardRemove(card.id);
+        });
+        
+        return cardDiv;
     }
 
     /**
@@ -995,9 +1082,15 @@ export class UIManager {
     /**
      * Show settings modal
      */
-    showSettings() {
+    showSettings(currentSettings = {}) {
         const modal = this.createModal('Settings', this.generateSettingsHTML());
         this.showModal(modal);
+        
+        // Populate current settings
+        this.populateSettingsForm(currentSettings);
+        
+        // Add event listeners for settings
+        this.setupSettingsEventListeners();
     }
 
     /**
@@ -1060,12 +1153,208 @@ export class UIManager {
      * Generate settings HTML
      */
     generateSettingsHTML() {
+        // Get current settings from the app (will be passed by the app later)
+        // For now, use default values as fallback
         return `
             <div class="settings-content">
-                <p>Settings panel will be implemented here.</p>
-                <p>This will include voice recognition settings, theme options, and other preferences.</p>
+                <div class="setting-group">
+                    <h4>Voice Recognition</h4>
+                    
+                    <div class="setting-item">
+                        <label for="auto-confirm-checkbox">
+                            <input type="checkbox" id="auto-confirm-checkbox" name="autoConfirm">
+                            Enable Auto-confirm
+                        </label>
+                        <p class="setting-description">Automatically add cards when confidence is above threshold</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="auto-confirm-threshold">Auto-confirm Threshold</label>
+                        <div class="threshold-input">
+                            <input type="range" id="auto-confirm-threshold" name="autoConfirmThreshold" 
+                                   min="70" max="95" step="5" value="85">
+                            <span class="threshold-value">85%</span>
+                        </div>
+                        <p class="setting-description">Minimum confidence required for auto-confirm (70-95%)</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="auto-extract-rarity-checkbox">
+                            <input type="checkbox" id="auto-extract-rarity-checkbox" name="autoExtractRarity">
+                            Auto-extract rarity from voice
+                        </label>
+                        <p class="setting-description">Automatically detect rarity information from voice input</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="auto-extract-art-variant-checkbox">
+                            <input type="checkbox" id="auto-extract-art-variant-checkbox" name="autoExtractArtVariant">
+                            Auto-extract art variant from voice
+                        </label>
+                        <p class="setting-description">Automatically detect art variant information from voice input</p>
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <h4>General Settings</h4>
+                    
+                    <div class="setting-item">
+                        <label for="voice-timeout">Voice Timeout (seconds)</label>
+                        <input type="number" id="voice-timeout" name="voiceTimeout" min="3" max="15" value="5">
+                        <p class="setting-description">How long to wait for voice input</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="session-auto-save">
+                            <input type="checkbox" id="session-auto-save" name="sessionAutoSave" checked>
+                            Auto-save sessions
+                        </label>
+                        <p class="setting-description">Automatically save session changes</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="theme-select">Theme</label>
+                        <select id="theme-select" name="theme">
+                            <option value="dark" selected>Dark</option>
+                            <option value="light">Light</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="settings-actions">
+                    <button class="btn btn-primary" id="save-settings">Save Settings</button>
+                    <button class="btn btn-secondary" id="reset-settings">Reset to Defaults</button>
+                </div>
             </div>
         `;
+    }
+
+    /**
+     * Populate settings form with current values
+     */
+    populateSettingsForm(settings) {
+        const autoConfirmCheckbox = document.getElementById('auto-confirm-checkbox');
+        const autoConfirmThreshold = document.getElementById('auto-confirm-threshold');
+        const thresholdValue = document.querySelector('.threshold-value');
+        const voiceTimeout = document.getElementById('voice-timeout');
+        const sessionAutoSave = document.getElementById('session-auto-save');
+        const themeSelect = document.getElementById('theme-select');
+        const autoExtractRarityCheckbox = document.getElementById('auto-extract-rarity-checkbox');
+        const autoExtractArtVariantCheckbox = document.getElementById('auto-extract-art-variant-checkbox');
+        
+        if (autoConfirmCheckbox) {
+            autoConfirmCheckbox.checked = settings.autoConfirm || false;
+        }
+        
+        if (autoConfirmThreshold) {
+            const threshold = settings.autoConfirmThreshold || 85;
+            autoConfirmThreshold.value = threshold;
+            if (thresholdValue) {
+                thresholdValue.textContent = `${threshold}%`;
+            }
+        }
+        
+        if (autoExtractRarityCheckbox) {
+            autoExtractRarityCheckbox.checked = settings.autoExtractRarity || false;
+        }
+        
+        if (autoExtractArtVariantCheckbox) {
+            autoExtractArtVariantCheckbox.checked = settings.autoExtractArtVariant || false;
+        }
+        
+        if (voiceTimeout) {
+            voiceTimeout.value = (settings.voiceTimeout || 5000) / 1000; // Convert ms to seconds
+        }
+        
+        if (sessionAutoSave) {
+            sessionAutoSave.checked = settings.sessionAutoSave !== false; // Default to true
+        }
+        
+        if (themeSelect) {
+            themeSelect.value = settings.theme || 'dark';
+        }
+    }
+
+    /**
+     * Setup event listeners for settings form
+     */
+    setupSettingsEventListeners() {
+        // Threshold slider update
+        const autoConfirmThreshold = document.getElementById('auto-confirm-threshold');
+        const thresholdValue = document.querySelector('.threshold-value');
+        
+        if (autoConfirmThreshold && thresholdValue) {
+            autoConfirmThreshold.addEventListener('input', (e) => {
+                thresholdValue.textContent = `${e.target.value}%`;
+            });
+        }
+        
+        // Save settings button
+        const saveBtn = document.getElementById('save-settings');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => {
+                this.handleSaveSettings();
+            });
+        }
+        
+        // Reset settings button
+        const resetBtn = document.getElementById('reset-settings');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                this.handleResetSettings();
+            });
+        }
+    }
+
+    /**
+     * Handle save settings
+     */
+    handleSaveSettings() {
+        const settingsData = this.collectSettingsData();
+        this.emitSettingsSave(settingsData);
+        this.closeModal();
+        this.showToast('Settings saved successfully', 'success');
+    }
+
+    /**
+     * Handle reset settings
+     */
+    handleResetSettings() {
+        // Reset to default values
+        const defaultSettings = {
+            autoConfirm: false,
+            autoConfirmThreshold: 85,
+            voiceTimeout: 5000,
+            sessionAutoSave: true,
+            theme: 'dark'
+        };
+        
+        this.populateSettingsForm(defaultSettings);
+        this.emitSettingsSave(defaultSettings);
+        this.showToast('Settings reset to defaults', 'info');
+    }
+
+    /**
+     * Collect settings data from form
+     */
+    collectSettingsData() {
+        const autoConfirmCheckbox = document.getElementById('auto-confirm-checkbox');
+        const autoConfirmThreshold = document.getElementById('auto-confirm-threshold');
+        const voiceTimeout = document.getElementById('voice-timeout');
+        const sessionAutoSave = document.getElementById('session-auto-save');
+        const themeSelect = document.getElementById('theme-select');
+        const autoExtractRarityCheckbox = document.getElementById('auto-extract-rarity-checkbox');
+        const autoExtractArtVariantCheckbox = document.getElementById('auto-extract-art-variant-checkbox');
+        
+        return {
+            autoConfirm: autoConfirmCheckbox?.checked || false,
+            autoConfirmThreshold: parseInt(autoConfirmThreshold?.value) || 85,
+            autoExtractRarity: autoExtractRarityCheckbox?.checked || false,
+            autoExtractArtVariant: autoExtractArtVariantCheckbox?.checked || false,
+            voiceTimeout: (parseInt(voiceTimeout?.value) || 5) * 1000, // Convert to ms
+            sessionAutoSave: sessionAutoSave?.checked !== false, // Default to true
+            theme: themeSelect?.value || 'dark'
+        };
     }
 
     /**
@@ -1277,6 +1566,22 @@ export class UIManager {
         this.eventListeners.voiceTest.push(callback);
     }
 
+    onQuantityAdjust(callback) {
+        this.eventListeners.quantityAdjust.push(callback);
+    }
+
+    onCardRemove(callback) {
+        this.eventListeners.cardRemove.push(callback);
+    }
+
+    onSettingsSave(callback) {
+        this.eventListeners.settingsSave.push(callback);
+    }
+
+    onSettingsShow(callback) {
+        this.eventListeners.settingsShow.push(callback);
+    }
+
     // Event emission methods
     emitTabChange(tabId) {
         this.eventListeners.tabChange.forEach(callback => {
@@ -1374,6 +1679,46 @@ export class UIManager {
                 callback();
             } catch (error) {
                 this.logger.error('Error in voice test callback:', error);
+            }
+        });
+    }
+
+    emitQuantityAdjust(cardId, adjustment) {
+        this.eventListeners.quantityAdjust.forEach(callback => {
+            try {
+                callback(cardId, adjustment);
+            } catch (error) {
+                this.logger.error('Error in quantity adjust callback:', error);
+            }
+        });
+    }
+
+    emitCardRemove(cardId) {
+        this.eventListeners.cardRemove.forEach(callback => {
+            try {
+                callback(cardId);
+            } catch (error) {
+                this.logger.error('Error in card remove callback:', error);
+            }
+        });
+    }
+
+    emitSettingsSave(settings) {
+        this.eventListeners.settingsSave.forEach(callback => {
+            try {
+                callback(settings);
+            } catch (error) {
+                this.logger.error('Error in settings save callback:', error);
+            }
+        });
+    }
+
+    emitSettingsShow() {
+        this.eventListeners.settingsShow.forEach(callback => {
+            try {
+                callback();
+            } catch (error) {
+                this.logger.error('Error in settings show callback:', error);
             }
         });
     }
