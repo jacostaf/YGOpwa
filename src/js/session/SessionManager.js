@@ -1066,11 +1066,14 @@ export class SessionManager {
             for (const card of matchingCards) {
                 const cardSets = card.card_sets || [];
                 
+                this.logger.debug(`Processing card "${card.name}" with ${cardSets.length} card_sets entries`);
+                
                 if (cardSets.length === 0) {
                     // Fallback: create single variant with unknown rarity
                     const variantKey = `${card.name}_Unknown_N/A`;
                     
                     if (!allVariants.some(v => v.variantKey === variantKey)) {
+                        this.logger.debug(`Created fallback variant: ${card.name} - Unknown`);
                         allVariants.push({
                             ...card,
                             confidence: match.confidence,
@@ -1093,6 +1096,7 @@ export class SessionManager {
                         
                         // Check if we already added this exact variant
                         if (!allVariants.some(v => v.variantKey === variantKey)) {
+                            this.logger.debug(`Created variant: ${card.name} - ${rarity} [${setCode}]`);
                             allVariants.push({
                                 ...card,
                                 confidence: match.confidence,
