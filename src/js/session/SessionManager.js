@@ -810,7 +810,7 @@ export class SessionManager {
             if (transcript.includes(pattern.toLowerCase())) {
                 matches.push({
                     name: cardName,
-                    confidence: 0.9,
+                    confidence: 90,
                     method: 'pattern',
                     transcript: transcript
                 });
@@ -874,7 +874,7 @@ export class SessionManager {
             if (finalScore >= this.config.cardMatchThreshold) {
                 matches.push({
                     ...card,
-                    confidence: finalScore,
+                    confidence: finalScore * 100, // Convert to percentage like Python
                     method: `fuzzy-${bestMethod}`,
                     transcript: transcript,
                     rawScore: bestScore,
@@ -1019,14 +1019,14 @@ export class SessionManager {
             
             // Exact match (highest confidence)
             if (normalizedCardName === normalizedTranscript) {
-                confidence = 0.95;
+                confidence = 95;
                 matchType = 'exact';
             }
             // Fuzzy matching with similarity calculation
             else {
                 const similarity = this.calculateSimilarity(normalizedTranscript, normalizedCardName);
                 if (similarity >= this.config.cardMatchThreshold) {
-                    confidence = similarity * 0.9; // Slightly lower than exact match
+                    confidence = similarity * 90; // Slightly lower than exact match (convert to percentage)
                     matchType = 'fuzzy';
                 }
             }
@@ -1132,16 +1132,20 @@ export class SessionManager {
      * Based on the logic from oldIteration.py
      */
     ensureUniqueConfidenceScores(variants) {
+        if (!variants || variants.length === 0) {
+            return;
+        }
+        
+        // Track used confidence scores (round to 1 decimal like Python)
         const usedScores = new Set();
         
         for (const variant of variants) {
             const originalConfidence = variant.confidence;
             let confidence = originalConfidence;
             
-            // Adjust confidence if it's already used (like oldIteration.py)
-            while (usedScores.has(Math.round(confidence * 10) / 10)) { // Round to 1 decimal for comparison
+            // If this confidence is already used, find a unique one (exactly like Python)
+            while (usedScores.has(Math.round(confidence * 10) / 10)) {
                 confidence -= 0.1;
-                
                 // Ensure we don't go below reasonable bounds
                 if (confidence < 10) {
                     confidence = originalConfidence + 0.1;
@@ -1155,12 +1159,12 @@ export class SessionManager {
                 }
             }
             
-            // Round to one decimal place and update
+            // Round to one decimal place and update (exactly like Python)
             confidence = Math.round(confidence * 10) / 10;
             variant.confidence = confidence;
             usedScores.add(confidence);
             
-            if (Math.abs(confidence - originalConfidence) > 0.05) { // Only log significant changes
+            if (confidence !== originalConfidence) {
                 this.logger.debug(`Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
             }
         }

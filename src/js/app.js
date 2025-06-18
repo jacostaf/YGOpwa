@@ -153,6 +153,9 @@ class YGORipperApp {
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
                 autoConfirmThreshold: 85,
+                // Auto-extraction settings (matching oldIteration.py)
+                autoExtractRarity: false,
+                autoExtractArtVariant: false,
                 // Override with saved settings
                 ...savedSettings
             };
@@ -169,7 +172,10 @@ class YGORipperApp {
                 debugMode: false,
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
-                autoConfirmThreshold: 85
+                autoConfirmThreshold: 85,
+                // Auto-extraction settings (matching oldIteration.py)
+                autoExtractRarity: false,
+                autoExtractArtVariant: false
             };
         }
     }
@@ -733,7 +739,7 @@ class YGORipperApp {
                 
                 // Check for auto-confirm
                 const bestMatch = sortedCards[0];
-                const bestConfidencePercent = (bestMatch.confidence || 0) * 100;
+                const bestConfidencePercent = bestMatch.confidence || 0;
                 
                 if (this.settings.autoConfirm && bestConfidencePercent >= this.settings.autoConfirmThreshold) {
                     // Auto-confirm the best match
@@ -824,7 +830,7 @@ class YGORipperApp {
                     <p class="instructions">Select the card you meant:</p>
                     <div class="card-options">
                         ${cards.map((card, index) => {
-                            const confidencePercent = ((card.confidence || 0) * 100).toFixed(1);
+                            const confidencePercent = (card.confidence || 0).toFixed(1);
                             return `
                                 <div class="card-option" data-card-index="${index}">
                                     <div class="card-info">

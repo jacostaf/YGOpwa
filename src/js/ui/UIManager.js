@@ -1177,6 +1177,22 @@ export class UIManager {
                         </div>
                         <p class="setting-description">Minimum confidence required for auto-confirm (70-95%)</p>
                     </div>
+                    
+                    <div class="setting-item">
+                        <label for="auto-extract-rarity-checkbox">
+                            <input type="checkbox" id="auto-extract-rarity-checkbox" name="autoExtractRarity">
+                            Auto-extract rarity from voice
+                        </label>
+                        <p class="setting-description">Automatically detect rarity information from voice input</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="auto-extract-art-variant-checkbox">
+                            <input type="checkbox" id="auto-extract-art-variant-checkbox" name="autoExtractArtVariant">
+                            Auto-extract art variant from voice
+                        </label>
+                        <p class="setting-description">Automatically detect art variant information from voice input</p>
+                    </div>
                 </div>
                 
                 <div class="setting-group">
@@ -1223,6 +1239,8 @@ export class UIManager {
         const voiceTimeout = document.getElementById('voice-timeout');
         const sessionAutoSave = document.getElementById('session-auto-save');
         const themeSelect = document.getElementById('theme-select');
+        const autoExtractRarityCheckbox = document.getElementById('auto-extract-rarity-checkbox');
+        const autoExtractArtVariantCheckbox = document.getElementById('auto-extract-art-variant-checkbox');
         
         if (autoConfirmCheckbox) {
             autoConfirmCheckbox.checked = settings.autoConfirm || false;
@@ -1234,6 +1252,14 @@ export class UIManager {
             if (thresholdValue) {
                 thresholdValue.textContent = `${threshold}%`;
             }
+        }
+        
+        if (autoExtractRarityCheckbox) {
+            autoExtractRarityCheckbox.checked = settings.autoExtractRarity || false;
+        }
+        
+        if (autoExtractArtVariantCheckbox) {
+            autoExtractArtVariantCheckbox.checked = settings.autoExtractArtVariant || false;
         }
         
         if (voiceTimeout) {
@@ -1317,10 +1343,14 @@ export class UIManager {
         const voiceTimeout = document.getElementById('voice-timeout');
         const sessionAutoSave = document.getElementById('session-auto-save');
         const themeSelect = document.getElementById('theme-select');
+        const autoExtractRarityCheckbox = document.getElementById('auto-extract-rarity-checkbox');
+        const autoExtractArtVariantCheckbox = document.getElementById('auto-extract-art-variant-checkbox');
         
         return {
             autoConfirm: autoConfirmCheckbox?.checked || false,
             autoConfirmThreshold: parseInt(autoConfirmThreshold?.value) || 85,
+            autoExtractRarity: autoExtractRarityCheckbox?.checked || false,
+            autoExtractArtVariant: autoExtractArtVariantCheckbox?.checked || false,
             voiceTimeout: (parseInt(voiceTimeout?.value) || 5) * 1000, // Convert to ms
             sessionAutoSave: sessionAutoSave?.checked !== false, // Default to true
             theme: themeSelect?.value || 'dark'
