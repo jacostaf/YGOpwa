@@ -727,10 +727,13 @@ export class SessionManager {
      */
     extractRarityFromVoice(voiceText) {
         if (!this.settings.autoExtractRarity) {
+            this.logger.debug(`[RARITY EXTRACT] Auto-extract rarity disabled, returning original text: "${voiceText}"`);
             return { cardName: voiceText, rarity: null };
         }
 
-        // Enhanced rarity patterns to catch YGO rarity types (from oldIteration.py)
+        this.logger.debug(`[RARITY EXTRACT] Processing voice text: "${voiceText}"`);
+
+        // Enhanced rarity patterns to catch YGO rarity types (exact match from oldIteration.py)
         const rarityPatterns = [
             /quarter century secret rare/i,
             /quarter century secret/i,
@@ -750,15 +753,17 @@ export class SessionManager {
         ];
 
         for (const pattern of rarityPatterns) {
+            this.logger.debug(`[RARITY EXTRACT] Testing pattern: ${pattern}`);
             const match = voiceText.match(pattern);
             if (match) {
                 const rarity = match[0];
                 const cardName = voiceText.replace(pattern, '').trim();
-                this.logger.debug(`Auto-extracted rarity: '${rarity}' from voice text`);
+                this.logger.info(`[RARITY EXTRACT] SUCCESS - Extracted rarity: '${rarity}', remaining card name: '${cardName}'`);
                 return { cardName, rarity };
             }
         }
 
+        this.logger.debug(`[RARITY EXTRACT] No rarity patterns matched in: "${voiceText}"`);
         return { cardName: voiceText, rarity: null };
     }
 
@@ -808,6 +813,10 @@ export class SessionManager {
         let extractedRarity = null;
         let extractedArtVariant = null;
 
+        this.logger.debug(`[VOICE PROCESSING] Original transcript: "${transcript}"`);
+        this.logger.debug(`[VOICE PROCESSING] Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
+        this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
+
         // Extract rarity information
         const rarityResult = this.extractRarityFromVoice(processedText);
         processedText = rarityResult.cardName;
@@ -819,7 +828,9 @@ export class SessionManager {
         extractedArtVariant = artResult.artVariant;
 
         if (extractedRarity || extractedArtVariant) {
-            this.logger.info(`Extracted from voice - Rarity: "${extractedRarity}", Art Variant: "${extractedArtVariant}", Card Name: "${processedText}"`);
+            this.logger.info(`[VOICE PROCESSING] Extracted from voice - Rarity: "${extractedRarity}", Art Variant: "${extractedArtVariant}", Card Name: "${processedText}"`);
+        } else {
+            this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using full transcript as card name: "${processedText}"`);
         }
 
         const cleanTranscript = processedText.toLowerCase().trim();
@@ -839,6 +850,14 @@ export class SessionManager {
             }
             
             this.logger.info(`Found ${recognizedCards.length} potential card matches`);
+            
+            // Debug output of found cards
+            if (recognizedCards.length > 0) {
+                this.logger.debug(`[VOICE PROCESSING] Found cards:`, recognizedCards.map(card => 
+                    `${card.name} - ${card.displayRarity || 'Unknown'} [${card.setInfo?.setCode || 'N/A'}] (${card.confidence}%)`
+                ));
+            }
+            
             return recognizedCards;
             
         } catch (error) {
@@ -1112,14 +1131,21 @@ export class SessionManager {
                 if (cardSets.length > 0) {
                     // Create a variant for each card_set entry (different rarities)
                     for (const cardSet of cardSets) {
-                        // Skip card_sets entries without valid rarity (no Unknown fallback)
-                        if (!cardSet.set_rarity || cardSet.set_rarity.trim() === '') {
-                            this.logger.debug(`[VARIANT] Skipping card_set with empty rarity: ${JSON.stringify(cardSet)}`);
+                        // Skip card_sets entries without valid rarity (stricter filtering to eliminate Unknown variants)
+                        const rarity = cardSet.set_rarity;
+                        if (!rarity || 
+                            rarity.trim() === '' || 
+                            rarity.toLowerCase().trim() === 'unknown' ||
+                            rarity.toLowerCase().trim() === 'n/a' ||
+                            rarity.toLowerCase().trim() === 'undefined' ||
+                            rarity.toLowerCase().trim() === 'null') {
+                            this.logger.debug(`[VARIANT] Skipping card_set with invalid rarity: "${rarity}" for card: ${card.name}`);
                             continue;
                         }
                         
-                        const rarity = cardSet.set_rarity;
                         const setCode = cardSet.set_code || 'N/A';
+                        
+                        this.logger.debug(`[VARIANT] Processing valid card_set: rarity="${rarity}", setCode="${setCode}" for card: ${card.name}`);
                         
                         // Apply rarity filtering when extractedRarity is provided (like oldIteration.py)
                         let confidence = match.confidence;
@@ -1141,12 +1167,9 @@ export class SessionManager {
                         
                         const variantKey = `${card.name}_${rarity}_${setCode}`;
                         
-                        this.logger.debug(`[VARIANT] Processing card_set: rarity="${cardSet.set_rarity}", setCode="${cardSet.set_code}"`);
-                        this.logger.debug(`[VARIANT] Creating variant with rarity: "${rarity}", setCode: "${setCode}"`);
-                        
                         // Check if we already added this exact variant
                         if (!allVariants.some(v => v.variantKey === variantKey)) {
-                            this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}]`);
+                            this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}] (${confidence}%)`);
                             const newVariant = {
                                 ...card,
                                 confidence: confidence,
@@ -1166,6 +1189,8 @@ export class SessionManager {
                             this.logger.debug(`[VARIANT] Skipped duplicate variant: ${variantKey}`);
                         }
                     }
+                } else {
+                    this.logger.debug(`[VARIANT] Card "${card.name}" has no card_sets array. Skipping as per oldIteration.py logic.`);
                 }
             }
         }
@@ -1213,7 +1238,7 @@ export class SessionManager {
 
     /**
      * Ensure unique confidence scores to avoid ties in selection
-     * Based on the logic from oldIteration.py
+     * Based on the logic from oldIteration.py - fixed floating point precision issues
      */
     ensureUniqueConfidenceScores(variants) {
         if (!variants || variants.length === 0) {
@@ -1230,34 +1255,38 @@ export class SessionManager {
             const originalConfidence = variant.confidence;
             let confidence = originalConfidence;
             
-            this.logger.debug(`[CONFIDENCE] Processing variant ${i + 1}: "${variant.name}" - Original confidence: ${originalConfidence}`);
+            this.logger.debug(`[CONFIDENCE] Processing variant ${i + 1}: "${variant.name}" - Original confidence: ${originalConfidence.toFixed(1)}%`);
             
             // If this confidence is already used, find a unique one (exactly like Python)
-            while (usedScores.has(Math.round(confidence * 10) / 10)) {
+            // Fix floating point precision issues by using integer arithmetic
+            let confidenceRounded = Math.round(confidence * 10) / 10;
+            while (usedScores.has(confidenceRounded)) {
                 confidence -= 0.1;
-                this.logger.debug(`[CONFIDENCE] Confidence ${Math.round(confidence * 10) / 10} already used, trying ${confidence}`);
+                // Use proper rounding to avoid floating point precision issues
+                confidenceRounded = Math.round(confidence * 10) / 10;
+                this.logger.debug(`[CONFIDENCE] Confidence ${confidenceRounded} already used, trying ${confidenceRounded}`);
+                
                 // Ensure we don't go below reasonable bounds
-                if (confidence < 10) {
+                if (confidenceRounded < 10) {
                     confidence = originalConfidence + 0.1;
-                    while (usedScores.has(Math.round(confidence * 10) / 10)) {
+                    confidenceRounded = Math.round(confidence * 10) / 10;
+                    while (usedScores.has(confidenceRounded) && confidenceRounded <= 99) {
                         confidence += 0.1;
-                        if (confidence > 99) {
-                            break;
-                        }
+                        confidenceRounded = Math.round(confidence * 10) / 10;
                     }
                     break;
                 }
             }
             
             // Round to one decimal place and update (exactly like Python)
-            confidence = Math.round(confidence * 10) / 10;
+            confidence = confidenceRounded;
             variant.confidence = confidence;
             usedScores.add(confidence);
             
-            this.logger.debug(`[CONFIDENCE] Final confidence for "${variant.name}": ${confidence}`);
+            this.logger.debug(`[CONFIDENCE] Final confidence for "${variant.name}": ${confidence}%`);
             
-            if (confidence !== originalConfidence) {
-                this.logger.debug(`[CONFIDENCE] Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
+            if (Math.abs(confidence - originalConfidence) > 0.05) { // Use tolerance for floating point comparison
+                this.logger.info(`[CONFIDENCE] Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
             }
         }
         
