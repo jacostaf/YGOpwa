@@ -828,13 +828,13 @@ export class SessionManager {
         try {
             // Method 1: Fuzzy matching (if enabled)
             if (this.config.enableFuzzyMatching) {
-                const fuzzyMatches = await this.findCardsByFuzzyMatch(cleanTranscript);
+                const fuzzyMatches = await this.findCardsByFuzzyMatch(cleanTranscript, extractedRarity);
                 recognizedCards.push(...fuzzyMatches);
             }
             
             // Method 2: Set-specific card matching (primary matching method)
             if (this.currentSet) {
-                const setMatches = await this.findCardsInCurrentSet(cleanTranscript);
+                const setMatches = await this.findCardsInCurrentSet(cleanTranscript, extractedRarity);
                 recognizedCards.push(...setMatches);
             }
             
@@ -852,7 +852,7 @@ export class SessionManager {
     /**
      * Find cards by fuzzy matching using advanced variant generation
      */
-     async findCardsByFuzzyMatch(transcript) {
+     async findCardsByFuzzyMatch(transcript, extractedRarity = null) {
         if (!this.currentSet) {
             return [];
         }
@@ -1027,10 +1027,12 @@ export class SessionManager {
     /**
      * Find cards in current set with enhanced rarity variant handling
      */
-    async findCardsInCurrentSet(transcript) {
+    async findCardsInCurrentSet(transcript, extractedRarity = null) {
         if (!this.currentSet) {
             return [];
         }
+        
+        this.logger.debug(`[CARD SEARCH] Processing transcript: "${transcript}", extractedRarity: "${extractedRarity}"`);
         
         const setCards = this.setCards.get(this.currentSet.id) || [];
         const initialMatches = [];
@@ -1110,8 +1112,33 @@ export class SessionManager {
                 if (cardSets.length > 0) {
                     // Create a variant for each card_set entry (different rarities)
                     for (const cardSet of cardSets) {
-                        const rarity = cardSet.set_rarity || 'Unknown';
+                        // Skip card_sets entries without valid rarity (no Unknown fallback)
+                        if (!cardSet.set_rarity || cardSet.set_rarity.trim() === '') {
+                            this.logger.debug(`[VARIANT] Skipping card_set with empty rarity: ${JSON.stringify(cardSet)}`);
+                            continue;
+                        }
+                        
+                        const rarity = cardSet.set_rarity;
                         const setCode = cardSet.set_code || 'N/A';
+                        
+                        // Apply rarity filtering when extractedRarity is provided (like oldIteration.py)
+                        let confidence = match.confidence;
+                        if (extractedRarity) {
+                            const rarityScore = this.calculateRarityScore(extractedRarity, rarity);
+                            this.logger.debug(`[VARIANT] Rarity matching: "${extractedRarity}" vs "${rarity}" = ${rarityScore}%`);
+                            
+                            // Skip variants that don't match the extracted rarity well enough
+                            if (rarityScore < 70) {
+                                this.logger.debug(`[VARIANT] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
+                                continue;
+                            }
+                            
+                            // Use weighted confidence: 75% name + 25% rarity (like oldIteration.py)
+                            const nameScore = match.confidence;
+                            confidence = (nameScore * 0.75) + (rarityScore * 0.25);
+                            this.logger.debug(`[VARIANT] Weighted confidence: ${nameScore}% name + ${rarityScore}% rarity = ${confidence}%`);
+                        }
+                        
                         const variantKey = `${card.name}_${rarity}_${setCode}`;
                         
                         this.logger.debug(`[VARIANT] Processing card_set: rarity="${cardSet.set_rarity}", setCode="${cardSet.set_code}"`);
@@ -1122,7 +1149,7 @@ export class SessionManager {
                             this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}]`);
                             const newVariant = {
                                 ...card,
-                                confidence: match.confidence,
+                                confidence: confidence,
                                 method: match.method,
                                 transcript: match.transcript,
                                 variantKey: variantKey,
@@ -1156,6 +1183,32 @@ export class SessionManager {
         this.logger.info(`Generated ${sortedVariants.length} card variants for transcript: "${transcript}"`);
         
         return sortedVariants;
+    }
+
+    /**
+     * Calculate rarity matching score (similar to oldIteration.py)
+     */
+    calculateRarityScore(inputRarity, cardSetRarity) {
+        if (!inputRarity || !cardSetRarity) {
+            return 0;
+        }
+        
+        const input = inputRarity.toLowerCase().trim();
+        const cardRarity = cardSetRarity.toLowerCase().trim();
+        
+        // Exact match gets highest score
+        if (input === cardRarity) {
+            return 100;
+        }
+        
+        // Partial match gets good score
+        if (input.includes(cardRarity) || cardRarity.includes(input)) {
+            return 80;
+        }
+        
+        // Fuzzy match as fallback
+        const similarity = this.calculateSimilarity(input, cardRarity);
+        return similarity >= 70 ? similarity * 0.7 : 0;  // Scale down fuzzy matches
     }
 
     /**
