@@ -429,35 +429,46 @@ export class UIManager {
     }
 
     /**
-     * Display price results with image loading
+     * Display price results with image loading and enhanced loading states
      */
     displayPriceResults(results) {
         if (!results || !this.elements.priceContent) {
             return;
         }
         
-        const html = this.generatePriceResultsHTML(results);
-        this.elements.priceContent.innerHTML = html;
+        // Show loading state first
+        this.elements.priceContent.innerHTML = `
+            <div class="price-loading">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Processing price information...</div>
+            </div>
+        `;
         
-        // Show results container
+        // Show results container immediately
         if (this.elements.priceResults) {
             this.elements.priceResults.classList.remove('hidden');
         }
         
-        // Load card image if available
-        if (results.success && results.data && results.data.image_url) {
-            this.loadCardImage(results.data);
-        }
-        
-        // Scroll to results
-        this.elements.priceResults?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'nearest' 
-        });
+        // Use setTimeout to allow loading state to be visible
+        setTimeout(() => {
+            const html = this.generatePriceResultsHTML(results);
+            this.elements.priceContent.innerHTML = html;
+            
+            // Load card image if available
+            if (results.success && results.data && results.data.image_url) {
+                this.loadCardImage(results.data);
+            }
+            
+            // Scroll to results
+            this.elements.priceResults?.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'nearest' 
+            });
+        }, 200); // Small delay to show loading state
     }
 
     /**
-     * Load and display card image
+     * Load and display card image with enhanced error handling
      */
     async loadCardImage(cardData) {
         const imageContainer = document.getElementById('card-image-container');
@@ -468,26 +479,41 @@ export class UIManager {
             const { ImageManager } = await import('../utils/ImageManager.js');
             const imageManager = new ImageManager();
             
-            // Load the image with proper error handling
-            await imageManager.loadImageForDisplay(
+            // Show loading state
+            imageManager.displayLoading(imageContainer);
+            
+            // Load the image with timeout
+            const loadPromise = imageManager.loadImageForDisplay(
                 cardData.card_number,
                 cardData.image_url,
                 imageManager.detailModeSize, // Use detail mode size for price results
                 imageContainer
             );
             
+            // Add timeout to image loading
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Image loading timeout')), 15000); // 15 second timeout
+            });
+            
+            await Promise.race([loadPromise, timeoutPromise]);
+            
+            console.log(`✅ Successfully loaded image for card ${cardData.card_number}`);
+            
         } catch (error) {
-            console.warn('Failed to load card image:', error);
+            console.warn('Failed to load card image:', error.message);
             
             // Display placeholder on error
-            imageContainer.innerHTML = `
-                <div class="card-image-placeholder">
-                    <div class="placeholder-content">
-                        <div class="placeholder-icon">🃏</div>
-                        <div class="placeholder-text">Image unavailable</div>
+            if (imageContainer) {
+                imageContainer.innerHTML = `
+                    <div class="card-image-placeholder">
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">🃏</div>
+                            <div class="placeholder-text">Image unavailable</div>
+                            <div class="placeholder-error">${error.message}</div>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
         }
     }
 

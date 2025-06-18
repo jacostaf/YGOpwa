@@ -65,12 +65,13 @@ export class PriceChecker {
         
         // Configuration
         this.config = {
-            timeout: 10000, // 10 seconds
+            timeout: 30000, // 30 seconds timeout for API calls
             retryAttempts: 3,
             retryDelay: 1000,
             enableCache: true,
             enableMultiSource: true,
-            defaultCondition: 'near-mint'
+            defaultCondition: 'near-mint',
+            enableMockData: true // Enable mock data fallback when backend fails
         };
         
         // Price history
@@ -179,7 +180,7 @@ export class PriceChecker {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(requestPayload),
-                timeout: 30000 // 30 second timeout for API calls
+                signal: AbortSignal.timeout(this.config.timeout) // Use configurable timeout
             });
             
             if (!response.ok) {
