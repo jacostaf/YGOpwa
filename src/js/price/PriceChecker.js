@@ -13,7 +13,7 @@ import { Logger } from '../utils/Logger.js';
 import { ImageManager } from '../utils/ImageManager.js';
 
 export class PriceChecker {
-    constructor(storage = null, logger = null) {
+    constructor(storage = null, logger = null, config = {}) {
         this.storage = storage;
         this.logger = logger || new Logger('PriceChecker');
         
@@ -71,7 +71,8 @@ export class PriceChecker {
             enableCache: true,
             enableMultiSource: true,
             defaultCondition: 'near-mint',
-            enableMockData: true // Enable mock data fallback when backend fails
+            enableMockData: config.enableMockData || false, // Only enable if explicitly requested
+            ...config // Allow override of any config options
         };
         
         // Price history
@@ -131,9 +132,18 @@ export class PriceChecker {
             let enhancedCardInfo = null;
             try {
                 enhancedCardInfo = await this.fetchEnhancedCardInfo(cardData);
+                this.logger.info('Successfully fetched enhanced card info from backend API');
             } catch (error) {
-                this.logger.warn('Failed to fetch enhanced card info from backend, using mock data:', error.message);
-                // Continue with mock data for now
+                this.logger.error('Failed to fetch enhanced card info from backend API:', error.message);
+                
+                // Only use mock data if explicitly enabled for development/testing
+                if (this.config.enableMockData) {
+                    this.logger.warn('Using mock data because enableMockData is true');
+                    enhancedCardInfo = this.generateMockEnhancedCardInfo(cardData);
+                } else {
+                    // Throw error to indicate API failure - don't silently fall back
+                    throw new Error(`Backend API unavailable: ${error.message}. Please ensure the backend server is running on ${this.apiUrl}`);
+                }
             }
             
             // Fetch prices from sources (this may be mock data for now)
@@ -206,10 +216,9 @@ export class PriceChecker {
             
         } catch (error) {
             this.logger.error('Backend API call failed:', error);
-            this.logger.warn('Falling back to mock data due to backend error:', error.message);
             
-            // Return mock enhanced card information for testing
-            return this.generateMockEnhancedCardInfo(cardData);
+            // Don't automatically fall back to mock data - let the caller handle this
+            throw new Error(`Backend API call failed: ${error.message}`);
         }
     }
 

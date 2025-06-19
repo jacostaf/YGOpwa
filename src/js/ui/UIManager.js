@@ -524,8 +524,17 @@ export class UIManager {
         if (!results.success) {
             return `
                 <div class="price-error">
-                    <h4>❌ Price Check Failed</h4>
-                    <p>${results.error || 'Unknown error occurred'}</p>
+                    <h4>❌ Backend API Not Available</h4>
+                    <p><strong>Error:</strong> ${results.error || 'Unknown error occurred'}</p>
+                    <div class="error-details">
+                        <h5>💡 To fix this:</h5>
+                        <ol>
+                            <li>Start the backend server: <code>python realBackendAPI.py</code></li>
+                            <li>Ensure the server is running on <code>http://127.0.0.1:8081</code></li>
+                            <li>Check that your firewall allows connections to port 8081</li>
+                        </ol>
+                        <p><em>Mock data has been disabled to ensure you use the real API.</em></p>
+                    </div>
                 </div>
             `;
         }
