@@ -411,7 +411,7 @@ export class SessionManager {
             
             this.logger.debug('Fetching enhanced card info for session card:', requestPayload);
             
-            const response = await fetch(`${this.apiUrl}/api/price-check`, {
+            const response = await fetch(`${this.apiUrl}/cards/price`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -6,7 +6,7 @@
   "main": "index.html",
   "scripts": {
     "start": "python3 -m http.server 8080 --directory .",
-    "dev": "python3 -m http.server 8080 --directory . --bind 127.0.0.1",
+    "dev": "python3 -m http.server 8082 --directory . --bind 127.0.0.1",
     "test": "node src/tests/runner.js",
     "test-voice": "node src/tests/voice.test.js",
     "build": "node scripts/build.js",
@@ -31,7 +31,6 @@
     "electron": "^32.3.3",
     "electron-builder": "^25.0.0"
   },
-  "dependencies": {},
   "engines": {
     "node": ">=16.0.0",
     "npm": ">=8.0.0"
