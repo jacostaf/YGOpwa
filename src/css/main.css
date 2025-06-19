@@ -21,21 +21,28 @@
   --color-secondary-light: #2d2d4a;  /* Lighter dark blue */
   --color-secondary-dark: #0f0f1a;   /* Darker blue */
   
-  --color-accent: #4a90e2;           /* Blue accent */
-  --color-accent-light: #7bb3f0;     /* Light blue */
-  --color-accent-dark: #2e5984;      /* Dark blue */
+  --color-accent: #ffd700;           /* Golden accent (matching primary) */
+  --color-accent-text: #000000;      /* Text on accent background */
+  --color-accent-light: #fff176;     /* Light gold */
+  --color-accent-dark: #ffb000;      /* Dark gold */
   
   --color-success: #4caf50;          /* Green */
+  --color-success-text: #ffffff;     /* Text on success background */
   --color-warning: #ff9800;          /* Orange */
+  --color-warning-text: #ffffff;     /* Text on warning background */
   --color-error: #f44336;            /* Red */
+  --color-error-text: #ffffff;       /* Text on error background */
   --color-info: #2196f3;             /* Blue */
+  --color-info-text: #ffffff;        /* Text on info background */
   
   --color-background: #0f0f1a;       /* Very dark background */
   --color-surface: #1a1a2e;          /* Card/surface background */
+  --color-surface-dark: #131329;     /* Darker surface */
   --color-surface-light: #2d2d4a;    /* Lighter surface */
   --color-surface-lighter: #404066;  /* Even lighter surface */
   
   --color-text: #ffffff;             /* Primary text */
+  --color-text-primary: #ffffff;     /* Primary text (alias) */
   --color-text-secondary: #b0b0b0;   /* Secondary text */
   --color-text-muted: #888888;       /* Muted text */
   --color-text-inverse: #000000;     /* Inverse text */
