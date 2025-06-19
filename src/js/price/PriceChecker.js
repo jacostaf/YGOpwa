@@ -71,7 +71,6 @@ export class PriceChecker {
             enableCache: true,
             enableMultiSource: true,
             defaultCondition: 'near-mint',
-            enableMockData: config.enableMockData || false, // Only enable if explicitly requested
             ...config // Allow override of any config options
         };
         
@@ -136,14 +135,8 @@ export class PriceChecker {
             } catch (error) {
                 this.logger.error('Failed to fetch enhanced card info from backend API:', error.message);
                 
-                // Only use mock data if explicitly enabled for development/testing
-                if (this.config.enableMockData) {
-                    this.logger.warn('Using mock data because enableMockData is true');
-                    enhancedCardInfo = this.generateMockEnhancedCardInfo(cardData);
-                } else {
-                    // Throw error to indicate API failure - don't silently fall back
-                    throw new Error(`Backend API unavailable: ${error.message}. Please ensure the backend server is running on ${this.apiUrl}`);
-                }
+                // Throw error to indicate API failure - don't silently fall back
+                throw new Error(`Backend API unavailable: ${error.message}. Please ensure the backend server is running on ${this.apiUrl}`);
             }
             
             // Fetch prices from sources (this may be mock data for now)
@@ -220,129 +213,6 @@ export class PriceChecker {
             // Don't automatically fall back to mock data - let the caller handle this
             throw new Error(`Backend API call failed: ${error.message}`);
         }
-    }
-
-    /**
-     * Generate mock enhanced card information for testing (matching oldIteration.py format)
-     */
-    generateMockEnhancedCardInfo(cardData) {
-        // Return mock data that matches what the user expects to see from their backend
-        // This is specifically for the SUDA-EN031 card the user mentioned
-        if (cardData.cardNumber === 'SUDA-EN031') {
-            return {
-                card_name: "Evil HERO Neos Lord - Supreme Darkness (SUDA)",
-                card_number: "SUDA-EN031",
-                card_rarity: "Ultra Rare",
-                booster_set_name: "Supreme Darkness Evil Hero Neos Lord?Language=English&Page=1",
-                card_art_variant: "Unlimited",
-                set_code: "SUDA",
-                last_price_updt: "Thu, 12 Jun 2025 03:16:19 GMT",
-                scrape_success: true,
-                source_url: "https://www.tcgplayer.com/product/610847/yugioh-supreme-darkness-evil-hero-neos-lord?Language=English&page=1",
-                // Use the exact prices the user's backend is returning
-                tcg_price: 1, // Numeric values to match backend response
-                tcg_market_price: 3.64,
-                // Use data URL to avoid CORS issues during testing
-                image_url: this.createPlaceholderDataUrl('#228B22', '🌊'),
-                image_url_small: null
-            };
-        }
-        
-        // Use placeholder data URLs to avoid CORS issues during testing
-        // This creates a simple colored rectangle as a placeholder
-        const createPlaceholderDataUrl = (color = '#4A90E2', text = '🃏') => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 100;
-            canvas.height = 145;
-            const ctx = canvas.getContext('2d');
-            
-            // Fill background
-            ctx.fillStyle = color;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Add border
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
-            
-            // Add emoji
-            ctx.fillStyle = 'white';
-            ctx.font = '48px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-            
-            return canvas.toDataURL('image/png');
-        };
-        
-        const mockImages = {
-            'LOB-001': createPlaceholderDataUrl('#4A90E2', '🐉'), // Blue dragon
-            'SDK-001': createPlaceholderDataUrl('#4A90E2', '🐉'), // Blue dragon
-            'MRD-001': createPlaceholderDataUrl('#DC143C', '🐲'), // Red dragon
-            'PSV-001': createPlaceholderDataUrl('#8A2BE2', '⚡'), // Purple with lightning
-            'SUDA-EN031': createPlaceholderDataUrl('#228B22', '🌊') // Green with wave
-        };
-        
-        const mockSets = {
-            'LOB': 'Legend of Blue Eyes White Dragon',
-            'SDK': 'Starter Deck: Kaiba',
-            'MRD': 'Metal Raiders',
-            'PSV': 'Pharaoh\'s Servant',
-            'SUDA': 'Speed Duel Attack from the Deep'
-        };
-        
-        const cardNumberParts = cardData.cardNumber.split('-');
-        const setCode = cardNumberParts[0] || 'UNK';
-        const setName = mockSets[setCode] || 'Unknown Set';
-        
-        const basePrice = this.getBasePriceByRarity(cardData.rarity);
-        const variance = basePrice * 0.2;
-        
-        return {
-            card_name: cardData.cardName || `Mock Card ${cardData.cardNumber}`,
-            card_number: cardData.cardNumber,
-            card_rarity: cardData.rarity,
-            booster_set_name: setName,
-            card_art_variant: cardData.artVariant || 'Unlimited',
-            set_code: setCode,
-            last_price_updt: new Date().toISOString(),
-            scrape_success: true,
-            source_url: `https://www.tcgplayer.com/search/yugioh/product?q=${encodeURIComponent(cardData.cardNumber)}`,
-            // Mock pricing data
-            tcg_price: (basePrice * 0.8 + (Math.random() - 0.5) * variance).toFixed(2),
-            tcg_market_price: (basePrice + (Math.random() - 0.5) * variance).toFixed(2),
-            // Mock image URLs using data URLs (no CORS issues)
-            image_url: mockImages[cardData.cardNumber] || createPlaceholderDataUrl('#696969', '🃏'), // Default gray
-            image_url_small: null
-        };
-    }
-
-    /**
-     * Create placeholder data URL for cards
-     */
-    createPlaceholderDataUrl(color = '#4A90E2', text = '🃏') {
-        const canvas = document.createElement('canvas');
-        canvas.width = 100;
-        canvas.height = 145;
-        const ctx = canvas.getContext('2d');
-        
-        // Fill background
-        ctx.fillStyle = color;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Add border
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
-        
-        // Add emoji
-        ctx.fillStyle = 'white';
-        ctx.font = '48px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-        
-        return canvas.toDataURL('image/png');
     }
 
     /**
@@ -559,96 +429,27 @@ export class PriceChecker {
      * Fetch price from TCGPlayer
      */
     async fetchFromTCGPlayer(cardData) {
-        // Mock implementation - in a real app, this would call the actual API
-        // For demo purposes, return simulated data
-        
-        await this.simulateDelay(500, 2000); // Simulate API delay
-        
-        // Simulate different prices based on rarity
-        const basePrice = this.getBasePriceByRarity(cardData.rarity);
-        const variance = basePrice * 0.2; // 20% variance
-        
-        return {
-            marketPrice: basePrice + (Math.random() - 0.5) * variance,
-            lowPrice: basePrice * 0.8,
-            highPrice: basePrice * 1.3,
-            medianPrice: basePrice,
-            listings: Math.floor(Math.random() * 50) + 5,
-            lastUpdated: new Date().toISOString(),
-            url: `https://www.tcgplayer.com/search/yugioh/product?q=${encodeURIComponent(cardData.cardNumber)}`
-        };
+        // This would be the actual TCGPlayer API implementation
+        // For now, we only rely on the backend API for price data
+        throw new Error('TCGPlayer direct API not implemented - use backend API instead');
     }
 
     /**
      * Fetch price from Cardmarket
      */
     async fetchFromCardmarket(cardData) {
-        // Mock implementation
-        await this.simulateDelay(800, 2500);
-        
-        const basePrice = this.getBasePriceByRarity(cardData.rarity);
-        const variance = basePrice * 0.25;
-        
-        return {
-            averagePrice: basePrice + (Math.random() - 0.5) * variance,
-            lowPrice: basePrice * 0.75,
-            trendPrice: basePrice * 1.1,
-            germanProLow: basePrice * 0.9,
-            suggestedPrice: basePrice * 1.05,
-            listings: Math.floor(Math.random() * 30) + 3,
-            lastUpdated: new Date().toISOString(),
-            url: `https://www.cardmarket.com/en/YuGiOh/Products/Search?searchString=${encodeURIComponent(cardData.cardNumber)}`
-        };
+        // This would be the actual Cardmarket API implementation
+        // For now, we only rely on the backend API for price data
+        throw new Error('Cardmarket direct API not implemented - use backend API instead');
     }
 
     /**
      * Fetch price from PriceCharting
      */
     async fetchFromPriceCharting(cardData) {
-        // Mock implementation
-        await this.simulateDelay(300, 1500);
-        
-        const basePrice = this.getBasePriceByRarity(cardData.rarity);
-        const variance = basePrice * 0.15;
-        
-        return {
-            priceChartingPrice: basePrice + (Math.random() - 0.5) * variance,
-            ungraded: basePrice,
-            gradedPrices: {
-                psa9: basePrice * 2.5,
-                psa10: basePrice * 4.0,
-                bgs9: basePrice * 2.2,
-                bgs10: basePrice * 3.8
-            },
-            lastUpdated: new Date().toISOString(),
-            url: `https://www.pricecharting.com/search-products?q=${encodeURIComponent(cardData.cardNumber)}&type=yugioh`
-        };
-    }
-
-    /**
-     * Get base price by rarity (for simulation)
-     */
-    getBasePriceByRarity(rarity) {
-        const rarityPrices = {
-            'common': 0.25,
-            'rare': 1.50,
-            'super': 5.00,
-            'ultra': 15.00,
-            'secret': 35.00,
-            'ghost': 75.00,
-            'prismatic': 100.00,
-            'starlight': 500.00
-        };
-        
-        return rarityPrices[rarity.toLowerCase()] || 1.00;
-    }
-
-    /**
-     * Simulate API delay
-     */
-    async simulateDelay(min = 500, max = 2000) {
-        const delay = Math.random() * (max - min) + min;
-        return new Promise(resolve => setTimeout(resolve, delay));
+        // This would be the actual PriceCharting API implementation
+        // For now, we only rely on the backend API for price data
+        throw new Error('PriceCharting direct API not implemented - use backend API instead');
     }
 
     /**
