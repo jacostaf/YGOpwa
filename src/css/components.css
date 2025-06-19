@@ -962,8 +962,8 @@
 .session-cards.consolidated {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--card-size, 120px), 1fr));
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs);
+  gap: 2px;
+  padding: 0;
 }
 
 .session-card.consolidated {
@@ -993,6 +993,7 @@
   align-items: center;
   justify-content: center;
   position: relative;
+  margin-bottom: 1px;
 }
 
 .session-card.consolidated .card-image {
@@ -1029,7 +1030,7 @@
 }
 
 .session-card.consolidated .card-info {
-  padding: 2px var(--spacing-xs);
+  padding: 1px 2px;
   text-align: center;
   flex-shrink: 0;
 }
@@ -1038,20 +1039,22 @@
   font-size: 0.75em;
   font-weight: 600;
   color: var(--color-text-primary);
-  margin-bottom: 2px;
-  line-height: 1.1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-bottom: 1px;
+  line-height: 1.2;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
-  min-height: 1.6em; /* Ensures consistent height */
+  overflow: hidden;
+  max-height: 2.7em; /* 3 lines at 1.2 line-height */
 }
 
 .session-card.consolidated .card-rarity {
   font-size: 0.65em;
   color: var(--color-text-secondary);
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
 .session-card.consolidated .card-prices {
