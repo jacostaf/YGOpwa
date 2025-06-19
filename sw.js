@@ -52,13 +52,13 @@ const ROUTE_CONFIG = [
     cache: RUNTIME_CACHE
   },
   {
-    pattern: /\.(png|jpg|jpeg|gif|svg|ico)$/,
-    strategy: CACHE_STRATEGIES.CACHE_FIRST,
+    pattern: /\/ygo-image-proxy\//,
+    strategy: 'ygo-image-proxy',
     cache: RUNTIME_CACHE
   },
   {
-    pattern: /\/ygo-image-proxy\//,
-    strategy: 'ygo-image-proxy',
+    pattern: /\.(png|jpg|jpeg|gif|svg|ico)$/,
+    strategy: CACHE_STRATEGIES.CACHE_FIRST,
     cache: RUNTIME_CACHE
   }
 ];
