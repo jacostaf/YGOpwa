@@ -311,10 +311,16 @@ export class ImageManager {
         const wrapper = document.createElement('div');
         wrapper.className = 'card-image-wrapper';
         
-        // Clone the image to avoid issues with multiple containers
-        const displayImg = img.cloneNode(true);
+        // Create new image element instead of cloning to fix data URL display issues
+        const displayImg = new Image();
+        displayImg.src = img.src; // Copy the src instead of cloning
         displayImg.className = 'card-image';
         displayImg.alt = 'Yu-Gi-Oh Card';
+        
+        // Copy styles from original image
+        displayImg.style.width = img.style.width;
+        displayImg.style.height = img.style.height;
+        displayImg.style.objectFit = img.style.objectFit;
         
         wrapper.appendChild(displayImg);
         container.appendChild(wrapper);
