@@ -142,6 +142,24 @@ export class ImageManager {
      */
     async downloadAndProcessImage(imageUrl, size) {
         return new Promise(async (resolve, reject) => {
+            // For YGOPRODeck images, always use backend proxy to avoid CORS issues
+            // Never try to load them directly due to CORS restrictions
+            if (imageUrl && imageUrl.startsWith('https://images.ygoprodeck.com/')) {
+                this.logger.debug(`YGOPRODeck image detected, using backend proxy: ${imageUrl}`);
+                try {
+                    const proxyResult = await this.loadImageViaProxy(imageUrl, size);
+                    resolve(proxyResult);
+                    return;
+                } catch (proxyError) {
+                    this.logger.warn(`Backend proxy failed for ${imageUrl}:`, proxyError.message);
+                    // Fallback to placeholder for YGOPRODeck images
+                    const placeholderImg = this.createPlaceholderImage(size);
+                    resolve(placeholderImg);
+                    return;
+                }
+            }
+            
+            // For non-YGOPRODeck images, use normal loading
             const img = new Image();
             
             // Set up event handlers
@@ -156,42 +174,55 @@ export class ImageManager {
             img.onerror = (error) => {
                 this.logger.error(`Failed to download image: ${imageUrl}`, error);
                 
-                // If it's a YGOPRODeck image that failed, try to create a placeholder
-                if (imageUrl.startsWith('https://images.ygoprodeck.com/') || 
-                    imageUrl.startsWith('http://127.0.0.1:8081/cards/image')) {
-                    this.logger.debug(`Creating data URL placeholder for failed YGOPRODeck image: ${imageUrl}`);
-                    
-                    // Create a placeholder data URL image
-                    const placeholderImg = this.createPlaceholderImage(size);
-                    resolve(placeholderImg);
-                } else {
-                    reject(new Error(`Failed to download image: ${imageUrl}`));
-                }
+                // For non-YGOPRODeck images, create a placeholder
+                const placeholderImg = this.createPlaceholderImage(size);
+                resolve(placeholderImg);
             };
             
-            // For YGOPRODeck images, always use backend proxy to avoid CORS issues
-            let finalUrl = imageUrl;
-            if (imageUrl.startsWith('https://images.ygoprodeck.com/')) {
-                finalUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
-                this.logger.debug(`Using backend proxy for image: ${imageUrl} -> ${finalUrl}`);
-            }
-            
             // Start the download
-            img.src = finalUrl;
+            img.src = imageUrl;
             
             // Set timeout for the request
             setTimeout(() => {
                 if (!img.complete) {
-                    // If it's a YGOPRODeck image that timed out, create a placeholder
-                    if (imageUrl.startsWith('https://images.ygoprodeck.com/')) {
-                        this.logger.debug(`Creating placeholder for timed out image: ${imageUrl}`);
-                        const placeholderImg = this.createPlaceholderImage(size);
-                        resolve(placeholderImg);
-                    } else {
-                        reject(new Error(`Image download timeout: ${imageUrl}`));
-                    }
+                    this.logger.debug(`Creating placeholder for timed out image: ${imageUrl}`);
+                    const placeholderImg = this.createPlaceholderImage(size);
+                    resolve(placeholderImg);
                 }
             }, 15000); // 15 second timeout
+        });
+    }
+
+    /**
+     * Load image via backend proxy
+     * @private
+     */
+    async loadImageViaProxy(imageUrl, size) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            
+            const proxyUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
+            this.logger.debug(`Loading via proxy: ${imageUrl} -> ${proxyUrl}`);
+            
+            img.onload = () => {
+                this.logger.debug(`Successfully loaded image via proxy: ${imageUrl}`);
+                const processedImg = this.processImage(img, size);
+                resolve(processedImg);
+            };
+            
+            img.onerror = (error) => {
+                this.logger.error(`Proxy image loading failed: ${proxyUrl}`, error);
+                reject(new Error(`Proxy failed for ${imageUrl}`));
+            };
+            
+            img.src = proxyUrl;
+            
+            // Timeout for proxy requests
+            setTimeout(() => {
+                if (!img.complete) {
+                    reject(new Error(`Proxy timeout for ${imageUrl}`));
+                }
+            }, 10000); // 10 second timeout for proxy
         });
     }
 

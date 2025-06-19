@@ -231,8 +231,8 @@ export class PriceChecker {
                 scrape_success: true,
                 source_url: "https://www.tcgplayer.com/product/610847/yugioh-supreme-darkness-evil-hero-neos-lord?Language=English&page=1",
                 // Use the exact prices the user's backend is returning
-                tcg_price: "1.00",
-                tcg_market_price: "3.64",
+                tcg_price: 1, // Numeric values to match backend response
+                tcg_market_price: 3.64,
                 // Use data URL to avoid CORS issues during testing
                 image_url: this.createPlaceholderDataUrl('#228B22', '🌊'),
                 image_url_small: null
