@@ -121,6 +121,8 @@ export class UIManager {
         this.elements.currentSet = document.getElementById('current-set');
         this.elements.cardsCount = document.getElementById('cards-count');
         this.elements.totalValue = document.getElementById('total-value');
+        this.elements.tcgLowTotal = document.getElementById('tcg-low-total');
+        this.elements.tcgMarketTotal = document.getElementById('tcg-market-total');
         this.elements.sessionStatus = document.getElementById('session-status');
         this.elements.setsCount = document.getElementById('sets-count');
         this.elements.totalSetsCount = document.getElementById('total-sets-count');
@@ -938,6 +940,17 @@ export class UIManager {
             this.elements.totalValue.textContent = `$${sessionInfo.totalValue.toFixed(2)}`;
         }
         
+        // Update separate pricing totals
+        if (this.elements.tcgLowTotal) {
+            const tcgLowTotal = sessionInfo.statistics?.tcgLowTotal || 0;
+            this.elements.tcgLowTotal.textContent = `$${tcgLowTotal.toFixed(2)}`;
+        }
+        
+        if (this.elements.tcgMarketTotal) {
+            const tcgMarketTotal = sessionInfo.statistics?.tcgMarketTotal || 0;
+            this.elements.tcgMarketTotal.textContent = `$${tcgMarketTotal.toFixed(2)}`;
+        }
+        
         if (this.elements.sessionStatus) {
             this.elements.sessionStatus.textContent = sessionInfo.status;
             this.elements.sessionStatus.className = `stat-value status-badge ${sessionInfo.isActive ? 'active' : 'inactive'}`;
@@ -1016,6 +1029,7 @@ export class UIManager {
         const cardName = card.card_name || card.name || 'Unknown Card';
         const rarity = card.card_rarity || card.displayRarity || card.rarity || 'Unknown';
         const setCode = card.set_code || card.setInfo?.setCode || '';
+        const cardNumber = card.card_number || '';
         const setName = card.booster_set_name || card.setInfo?.setName || '';
         const price = card.price || parseFloat(card.tcg_market_price || card.tcg_price || '0');
         const hasEnhancedInfo = card.hasEnhancedInfo || false;
@@ -1055,6 +1069,12 @@ export class UIManager {
                             <div class="info-row">
                                 <span class="info-label">Set:</span>
                                 <span class="info-value">${setCode}</span>
+                            </div>
+                        ` : ''}
+                        ${cardNumber ? `
+                            <div class="info-row">
+                                <span class="info-label">Card #:</span>
+                                <span class="info-value">${cardNumber}</span>
                             </div>
                         ` : ''}
                         ${setName ? `

@@ -490,6 +490,10 @@ class YGORipperApp {
                                 <span>Set Code</span>
                             </label>
                             <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="cardNumber" checked>
+                                <span>Card Number</span>
+                            </label>
+                            <label class="checkbox-option">
                                 <input type="checkbox" name="field" value="timestamp" checked>
                                 <span>Added Time</span>
                             </label>

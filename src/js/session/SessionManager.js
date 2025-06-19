@@ -1644,26 +1644,19 @@ export class SessionManager {
             return;
         }
         
-        const stats = this.currentSession.statistics;
         const cards = this.currentSession.cards;
         
-        // Basic statistics
-        stats.totalCards = cards.length;
-        stats.totalValue = cards.reduce((sum, card) => sum + (card.price || 0), 0);
+        // Use the enhanced statistics calculation
+        const newStats = this.calculateSessionStatistics(cards);
         
-        // Rarity breakdown
-        stats.rarityBreakdown = {};
-        cards.forEach(card => {
-            const rarity = card.rarity || 'Unknown';
-            stats.rarityBreakdown[rarity] = (stats.rarityBreakdown[rarity] || 0) + 1;
-        });
-        
-        // Session duration
+        // Preserve session duration calculation
         if (this.currentSession.startTime) {
             const start = new Date(this.currentSession.startTime);
             const end = this.currentSession.endTime ? new Date(this.currentSession.endTime) : new Date();
-            stats.sessionDuration = end.getTime() - start.getTime();
+            newStats.sessionDuration = end.getTime() - start.getTime();
         }
+        
+        this.currentSession.statistics = newStats;
     }
 
     /**
@@ -1814,7 +1807,7 @@ export class SessionManager {
         
         // Default fields if none selected
         const defaultFields = [
-            'cardName', 'rarity', 'setCode', 'timestamp', 
+            'cardName', 'rarity', 'setCode', 'cardNumber', 'timestamp', 
             'tcgLow', 'tcgMarket', 'condition', 'quantity'
         ];
         
@@ -1825,6 +1818,7 @@ export class SessionManager {
             cardName: 'Card Name',
             rarity: 'Rarity',
             setCode: 'Set Code',
+            cardNumber: 'Card Number',
             timestamp: 'Added Time',
             price: 'Estimated Price',
             tcgLow: 'TCG Low Price',
@@ -1850,7 +1844,10 @@ export class SessionManager {
                         value = card.card_rarity || card.rarity || '';
                         break;
                     case 'setCode':
-                        value = card.setCode || this.currentSession.setId || '';
+                        value = card.set_code || card.setCode || this.currentSession.setId || '';
+                        break;
+                    case 'cardNumber':
+                        value = card.card_number || '';
                         break;
                     case 'timestamp':
                         value = card.timestamp ? new Date(card.timestamp).toLocaleString() : '';
@@ -2170,6 +2167,21 @@ export class SessionManager {
             
             // Extract cards array
             const cards = legacyData.cards || [];
+            this.logger.info(`[IMPORT DEBUG] Starting conversion of ${cards.length} cards from legacy format`);
+            
+            // Log first few cards for debugging
+            if (cards.length > 0) {
+                this.logger.info(`[IMPORT DEBUG] Sample cards from import:`, cards.slice(0, 3).map(card => ({
+                    name: card?.name || card?.card_name,
+                    rarity: card?.card_rarity || card?.rarity,
+                    tcg_price: card?.tcg_price,
+                    tcg_market_price: card?.tcg_market_price,
+                    set_code: card?.set_code,
+                    card_number: card?.card_number,
+                    type: typeof card,
+                    hasName: !!(card?.name || card?.card_name)
+                })));
+            }
             
             // Determine set information
             let setId = null;
@@ -2251,11 +2263,58 @@ export class SessionManager {
             }
             
             // Process cards to ensure they have required fields and clean up data
-            const processedCards = cards.map((card, index) => {
+            const processedCards = [];
+            const skippedCards = [];
+            
+            this.logger.info(`[IMPORT DEBUG] Processing ${cards.length} cards...`);
+            
+            cards.forEach((card, index) => {
+                this.logger.debug(`[IMPORT DEBUG] Processing card ${index + 1}/${cards.length}:`, {
+                    name: card?.name || card?.card_name,
+                    type: typeof card,
+                    isNull: card === null,
+                    isUndefined: card === undefined,
+                    isObject: typeof card === 'object' && card !== null
+                });
+                
                 if (!card || typeof card !== 'object') {
-                    this.logger.warn(`Skipping invalid card at index ${index}:`, card);
-                    return null;
+                    this.logger.warn(`[IMPORT DEBUG] Skipping invalid card at index ${index}: ${card} (type: ${typeof card})`);
+                    skippedCards.push({
+                        index,
+                        reason: 'Invalid card object',
+                        card: card,
+                        type: typeof card
+                    });
+                    return;
                 }
+                
+                // Check for required fields
+                const cardName = card.name || card.card_name;
+                if (!cardName || typeof cardName !== 'string' || cardName.trim() === '') {
+                    this.logger.warn(`[IMPORT DEBUG] Skipping card at index ${index}: Missing or invalid name. Card data:`, {
+                        name: card.name,
+                        card_name: card.card_name,
+                        hasName: !!card.name,
+                        hasCardName: !!card.card_name,
+                        nameType: typeof card.name,
+                        cardNameType: typeof card.card_name
+                    });
+                    skippedCards.push({
+                        index,
+                        reason: 'Missing or invalid name',
+                        card: {
+                            name: card.name,
+                            card_name: card.card_name,
+                            // Include a few other fields for debugging
+                            tcg_price: card.tcg_price,
+                            tcg_market_price: card.tcg_market_price,
+                            set_code: card.set_code
+                        }
+                    });
+                    return;
+                }
+                
+                this.logger.debug(`[IMPORT DEBUG] Card ${index + 1} "${cardName}" passed validation, processing...`);
                 
                 const processedCard = {
                     // Preserve all original card data
@@ -2265,11 +2324,11 @@ export class SessionManager {
                     quantity: typeof card.quantity === 'number' ? card.quantity : 1,
                     addedAt: card.timestamp || card.addedAt || new Date().toISOString(),
                     // Ensure name exists
-                    name: card.name || card.card_name || `Unknown Card ${index + 1}`
+                    name: cardName
                 };
                 
                 // Debug: Log the original card data for pricing fields
-                this.logger.info(`[CARD PROCESSING DEBUG] Original card ${index + 1} "${card.name || card.card_name}": tcg_price=${card.tcg_price}, tcg_market_price=${card.tcg_market_price}, price_status=${card.price_status}`);
+                this.logger.info(`[CARD PROCESSING DEBUG] Original card ${index + 1} "${cardName}": tcg_price=${card.tcg_price}, tcg_market_price=${card.tcg_market_price}, price_status=${card.price_status}`);
                 this.logger.info(`[CARD PROCESSING DEBUG] Processed card ${index + 1} "${processedCard.name}": tcg_price=${processedCard.tcg_price}, tcg_market_price=${processedCard.tcg_market_price}, price_status=${processedCard.price_status}`);
                 
                 // Clean up contaminated set name fields (remove URL fragments)
@@ -2296,8 +2355,57 @@ export class SessionManager {
                 }
                 
                 // Process images for this card
-                return this.processCardImages(processedCard);
-            }).filter(card => card !== null); // Remove any null entries
+                const finalCard = this.processCardImages(processedCard);
+                processedCards.push(finalCard);
+                
+                this.logger.debug(`[IMPORT DEBUG] Successfully processed card ${index + 1}: "${cardName}"`);
+            });
+            
+            // Log comprehensive import summary
+            this.logger.info(`[IMPORT SUMMARY] Import processing complete:`, {
+                totalInputCards: cards.length,
+                successfullyProcessed: processedCards.length,
+                skippedCards: skippedCards.length,
+                skippedReasons: skippedCards.reduce((acc, skip) => {
+                    acc[skip.reason] = (acc[skip.reason] || 0) + 1;
+                    return acc;
+                }, {})
+            });
+            
+            // Log details about skipped cards
+            if (skippedCards.length > 0) {
+                this.logger.warn(`[IMPORT SUMMARY] Skipped cards details:`, skippedCards);
+                skippedCards.forEach(skipped => {
+                    this.logger.warn(`[IMPORT SUMMARY] Skipped card at index ${skipped.index}: ${skipped.reason}`, skipped.card);
+                });
+            }
+            
+            // Check for specific cards mentioned by the user
+            const specificCards = ['Metalflame Swordsman', 'Primite Dragon Ether Beryl'];
+            specificCards.forEach(targetCard => {
+                const foundCard = processedCards.find(card => 
+                    (card.name && card.name.toLowerCase().includes(targetCard.toLowerCase())) ||
+                    (card.card_name && card.card_name.toLowerCase().includes(targetCard.toLowerCase()))
+                );
+                
+                if (foundCard) {
+                    this.logger.info(`[IMPORT SUMMARY] ✅ Found target card "${targetCard}": ${foundCard.name || foundCard.card_name}`);
+                } else {
+                    this.logger.warn(`[IMPORT SUMMARY] ❌ Target card "${targetCard}" not found in processed cards`);
+                    
+                    // Check if it was in the original input
+                    const originalCard = cards.find(card => 
+                        (card?.name && card.name.toLowerCase().includes(targetCard.toLowerCase())) ||
+                        (card?.card_name && card.card_name.toLowerCase().includes(targetCard.toLowerCase()))
+                    );
+                    
+                    if (originalCard) {
+                        this.logger.warn(`[IMPORT SUMMARY] Target card "${targetCard}" was present in input but got skipped:`, originalCard);
+                    } else {
+                        this.logger.info(`[IMPORT SUMMARY] Target card "${targetCard}" was not present in input data`);
+                    }
+                }
+            });
             
             // Calculate statistics
             const statistics = this.calculateSessionStatistics(processedCards);
@@ -2315,7 +2423,7 @@ export class SessionManager {
                 statistics: statistics
             };
             
-            this.logger.info(`Converted legacy session: ${processedCards.length} cards, set: ${setName}`);
+            this.logger.info(`[IMPORT SUMMARY] Converted legacy session: ${processedCards.length}/${cards.length} cards processed successfully, set: ${setName}`);
             
             return convertedSession;
             
@@ -2332,6 +2440,8 @@ export class SessionManager {
         const stats = {
             totalCards: 0,
             totalValue: 0,
+            tcgLowTotal: 0,
+            tcgMarketTotal: 0,
             rarityBreakdown: {},
             sessionDuration: 0
         };
@@ -2340,11 +2450,22 @@ export class SessionManager {
             const quantity = card.quantity || 1;
             stats.totalCards += quantity;
             
-            // Add to total value if price information is available
-            if (card.tcg_price && typeof card.tcg_price === 'number') {
-                stats.totalValue += card.tcg_price * quantity;
-            } else if (card.tcg_market_price && typeof card.tcg_market_price === 'number') {
-                stats.totalValue += card.tcg_market_price * quantity;
+            // Calculate separate totals for TCG Low and Market prices
+            if (card.tcg_price && typeof parseFloat(card.tcg_price) === 'number' && !isNaN(parseFloat(card.tcg_price))) {
+                stats.tcgLowTotal += parseFloat(card.tcg_price) * quantity;
+            }
+            
+            if (card.tcg_market_price && typeof parseFloat(card.tcg_market_price) === 'number' && !isNaN(parseFloat(card.tcg_market_price))) {
+                stats.tcgMarketTotal += parseFloat(card.tcg_market_price) * quantity;
+            }
+            
+            // Add to total value - prioritize market price, fall back to low price
+            if (card.tcg_market_price && typeof parseFloat(card.tcg_market_price) === 'number' && !isNaN(parseFloat(card.tcg_market_price))) {
+                stats.totalValue += parseFloat(card.tcg_market_price) * quantity;
+            } else if (card.tcg_price && typeof parseFloat(card.tcg_price) === 'number' && !isNaN(parseFloat(card.tcg_price))) {
+                stats.totalValue += parseFloat(card.tcg_price) * quantity;
+            } else if (card.price && typeof card.price === 'number') {
+                stats.totalValue += card.price * quantity;
             }
             
             // Count rarity breakdown
