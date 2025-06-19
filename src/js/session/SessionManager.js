@@ -38,6 +38,9 @@ export class SessionManager {
         this.setCards = new Map(); // Cache for set-specific card data
         this.searchTerm = '';
         
+        // Pricing data loading tracking
+        this.loadingPriceData = new Set(); // Track cards with pending price requests
+        
         // Event listeners
         this.listeners = {
             sessionStart: [],
@@ -700,6 +703,9 @@ export class SessionManager {
                 ...cardData
             };
             
+            // Track this card for pricing data loading
+            this.loadingPriceData.add(enhancedCard.id);
+            
             // Try to fetch enhanced pricing information for the card
             try {
                 const enhancedInfo = await this.fetchEnhancedCardInfo(cardData);
@@ -739,6 +745,9 @@ export class SessionManager {
                 this.logger.warn('Failed to fetch enhanced card info, using basic data:', enhanceError.message);
                 // Continue with basic card data
                 enhancedCard.hasEnhancedInfo = false;
+            } finally {
+                // Remove from loading tracking regardless of success/failure
+                this.loadingPriceData.delete(enhancedCard.id);
             }
             
             // Add to session
@@ -1559,11 +1568,65 @@ export class SessionManager {
     }
 
     /**
+     * Wait for all pricing data to finish loading
+     * @param {number} timeout - Maximum time to wait in milliseconds (default: 30 seconds)
+     * @returns {Promise<boolean>} - True if all pricing data loaded, false if timed out
+     */
+    async waitForPricingDataToLoad(timeout = 30000) {
+        const startTime = Date.now();
+        
+        this.logger.info(`Waiting for pricing data to load for ${this.loadingPriceData.size} cards...`);
+        
+        return new Promise((resolve) => {
+            const checkInterval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                
+                // Check if all pricing data has loaded
+                if (this.loadingPriceData.size === 0) {
+                    clearInterval(checkInterval);
+                    this.logger.info('All pricing data loaded successfully');
+                    resolve(true);
+                    return;
+                }
+                
+                // Check for timeout
+                if (elapsed >= timeout) {
+                    clearInterval(checkInterval);
+                    this.logger.warn(`Timeout waiting for pricing data (${this.loadingPriceData.size} cards still loading)`);
+                    resolve(false);
+                    return;
+                }
+                
+                // Log progress every 2 seconds
+                if (elapsed % 2000 < 500) {
+                    this.logger.debug(`Still waiting for ${this.loadingPriceData.size} cards to load pricing data...`);
+                }
+            }, 500); // Check every 500ms
+        });
+    }
+
+    /**
      * Export session data in multiple formats
      */
-    exportSession(format = 'json', selectedFields = null) {
+    /**
+     * Export session data in multiple formats
+     * @param {string} format - Export format ('json', 'csv', 'excel')
+     * @param {Array} selectedFields - Fields to include in export
+     * @param {boolean} waitForPricing - Whether to wait for pricing data to load (default: true)
+     * @returns {Promise<Object>} - Export data
+     */
+    async exportSession(format = 'json', selectedFields = null, waitForPricing = true) {
         if (!this.currentSession) {
             throw new Error('No active session to export');
+        }
+        
+        // Wait for pricing data to load if requested
+        if (waitForPricing && this.loadingPriceData.size > 0) {
+            this.logger.info('Export waiting for pricing data to finish loading...');
+            const pricingLoaded = await this.waitForPricingDataToLoad();
+            if (!pricingLoaded) {
+                this.logger.warn('Export proceeding despite some pricing data still loading');
+            }
         }
         
         const baseData = {
@@ -1754,9 +1817,13 @@ export class SessionManager {
 
     /**
      * Generate downloadable export file
+     * @param {string} format - Export format ('json', 'csv', 'excel')
+     * @param {Array} selectedFields - Fields to include in export
+     * @param {boolean} waitForPricing - Whether to wait for pricing data to load (default: true)
+     * @returns {Promise<Object>} - Export file data
      */
-    generateExportFile(format = 'json', selectedFields = null) {
-        const exportData = this.exportSession(format, selectedFields);
+    async generateExportFile(format = 'json', selectedFields = null, waitForPricing = true) {
+        const exportData = await this.exportSession(format, selectedFields, waitForPricing);
         
         let content, filename, mimeType;
         
@@ -1781,6 +1848,40 @@ export class SessionManager {
             filename,
             cleanup: () => URL.revokeObjectURL(url)
         };
+    }
+
+    /**
+     * Process card images (similar to addCard logic)
+     * Ensures card images are properly extracted and set
+     */
+    processCardImages(card) {
+        try {
+            // Extract image URLs from card_images array if available (YGO API format)
+            if (card.card_images && Array.isArray(card.card_images) && card.card_images.length > 0) {
+                const firstImage = card.card_images[0];
+                card.image_url = firstImage.image_url || card.image_url;
+                card.image_url_small = firstImage.image_url_small || card.image_url_small;
+                card.image_url_cropped = firstImage.image_url_cropped || card.image_url_cropped;
+                this.logger.debug(`Processed image URLs from card_images for card ${card.name || card.id}: ${firstImage.image_url}`);
+            }
+            
+            // Ensure at least some image URL exists if not already set
+            if (!card.image_url && !card.image_url_small && !card.image_url_cropped) {
+                // Try to construct a basic image URL if we have card ID or name
+                if (card.id && typeof card.id === 'number') {
+                    // YGO API format image URLs
+                    card.image_url = `https://storage.googleapis.com/ygoprodeck.com/pics/${card.id}.jpg`;
+                    card.image_url_small = `https://storage.googleapis.com/ygoprodeck.com/pics_small/${card.id}.jpg`;
+                    card.image_url_cropped = `https://storage.googleapis.com/ygoprodeck.com/pics_artgame/${card.id}.jpg`;
+                    this.logger.debug(`Generated image URLs for card ${card.name || card.id} using card ID: ${card.id}`);
+                }
+            }
+            
+            return card;
+        } catch (error) {
+            this.logger.warn('Failed to process card images:', error);
+            return card;
+        }
     }
 
     /**
@@ -1819,6 +1920,12 @@ export class SessionManager {
             
             // Set as current session
             this.currentSession = processedSession;
+            
+            // Process images for all cards in the session
+            if (this.currentSession.cards && Array.isArray(this.currentSession.cards)) {
+                this.currentSession.cards = this.currentSession.cards.map(card => this.processCardImages(card));
+                this.logger.info(`Processed images for ${this.currentSession.cards.length} imported cards`);
+            }
             
             // Find the set
             if (processedSession.setId) {
@@ -1927,7 +2034,7 @@ export class SessionManager {
                     return null;
                 }
                 
-                return {
+                const processedCard = {
                     // Preserve all original card data
                     ...card,
                     // Ensure required fields exist
@@ -1937,6 +2044,9 @@ export class SessionManager {
                     // Ensure name exists
                     name: card.name || card.card_name || `Unknown Card ${index + 1}`
                 };
+                
+                // Process images for this card
+                return this.processCardImages(processedCard);
             }).filter(card => card !== null); // Remove any null entries
             
             // Calculate statistics

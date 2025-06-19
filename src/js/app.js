@@ -552,9 +552,12 @@ class YGORipperApp {
     /**
      * Perform the actual session export
      */
-    performSessionExport(format, selectedFields) {
+    async performSessionExport(format, selectedFields) {
         try {
-            const exportFile = this.sessionManager.generateExportFile(format, selectedFields);
+            // Show loading state
+            this.uiManager.showToast('Preparing export, waiting for pricing data...', 'info');
+            
+            const exportFile = await this.sessionManager.generateExportFile(format, selectedFields);
             
             // Create download link
             const a = document.createElement('a');
