@@ -204,18 +204,24 @@ export class ImageManager {
             if (imageUrl && imageUrl.startsWith('https://images.ygoprodeck.com/')) {
                 this.logger.debug(`YGOPRODeck image detected, using proxy strategies: ${imageUrl}`);
                 
-                // Strategy 1: Try service worker proxy first
-                try {
-                    const serviceWorkerResult = await this.loadImageViaServiceWorkerProxy(imageUrl, size);
-                    resolve(serviceWorkerResult);
-                    return;
-                } catch (serviceWorkerError) {
-                    this.logger.warn(`Service worker proxy failed for ${imageUrl}:`, serviceWorkerError.message);
+                // Strategy 1: Try service worker proxy first (if available)
+                if (this.serviceWorkerSupported) {
+                    try {
+                        const serviceWorkerResult = await this.loadImageViaServiceWorkerProxy(imageUrl, size);
+                        this.logger.info(`✅ Successfully loaded via service worker proxy: ${imageUrl}`);
+                        resolve(serviceWorkerResult);
+                        return;
+                    } catch (serviceWorkerError) {
+                        this.logger.warn(`Service worker proxy failed for ${imageUrl}:`, serviceWorkerError.message);
+                    }
+                } else {
+                    this.logger.debug('Service worker not supported, skipping service worker proxy');
                 }
                 
                 // Strategy 2: Try backend proxy as fallback
                 try {
                     const backendResult = await this.loadImageViaBackendProxy(imageUrl, size);
+                    this.logger.info(`✅ Successfully loaded via backend proxy: ${imageUrl}`);
                     resolve(backendResult);
                     return;
                 } catch (backendError) {
@@ -226,6 +232,7 @@ export class ImageManager {
                 try {
                     this.logger.warn(`Using public proxy as last resort for ${imageUrl}`);
                     const publicProxyResult = await this.loadImageViaPublicProxy(imageUrl, size);
+                    this.logger.info(`✅ Successfully loaded via public proxy: ${imageUrl}`);
                     resolve(publicProxyResult);
                     return;
                 } catch (publicProxyError) {
@@ -233,7 +240,7 @@ export class ImageManager {
                 }
                 
                 // All proxy strategies failed, create placeholder
-                this.logger.error(`All proxy strategies failed for YGOPRODeck image: ${imageUrl}`);
+                this.logger.error(`❌ All proxy strategies failed for YGOPRODeck image: ${imageUrl}`);
                 const placeholderImg = this.createPlaceholderImage(size);
                 resolve(placeholderImg);
                 return;

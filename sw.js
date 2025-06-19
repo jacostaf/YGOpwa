@@ -57,7 +57,7 @@ const ROUTE_CONFIG = [
     cache: RUNTIME_CACHE
   },
   {
-    pattern: /^\/ygo-image-proxy\//,
+    pattern: /\/ygo-image-proxy\//,
     strategy: 'ygo-image-proxy',
     cache: RUNTIME_CACHE
   }
@@ -117,13 +117,18 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
   
+  // Debug logging for YGO image proxy requests
+  if (url.pathname.includes('/ygo-image-proxy/')) {
+    console.log('[SW] YGO image proxy request detected:', request.url);
+  }
+  
   // Skip non-GET requests
   if (request.method !== 'GET') {
     return;
   }
   
-  // Skip cross-origin requests (unless specifically configured)
-  if (url.origin !== location.origin && !request.url.includes('/ygo-image-proxy/')) {
+  // Skip cross-origin requests (unless it's a YGO image proxy request)
+  if (url.origin !== location.origin && !url.pathname.includes('/ygo-image-proxy/')) {
     return;
   }
   
@@ -131,9 +136,12 @@ self.addEventListener('fetch', (event) => {
   const routeConfig = findRouteConfig(request.url);
   
   if (routeConfig) {
+    console.log('[SW] Handling request with strategy:', routeConfig.strategy, 'for', request.url);
     event.respondWith(
       handleRequest(request, routeConfig)
     );
+  } else {
+    console.log('[SW] No route config found for:', request.url);
   }
 });
 
