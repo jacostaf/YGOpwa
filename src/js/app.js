@@ -287,6 +287,14 @@ class YGORipperApp {
             this.handleCardRemove(cardId);
         });
 
+        this.uiManager.onPricingRefresh((cardId) => {
+            this.handlePricingRefresh(cardId);
+        });
+
+        this.uiManager.onBulkPricingRefresh(() => {
+            this.handleBulkPricingRefresh();
+        });
+
         this.uiManager.onSettingsSave((settings) => {
             this.handleSettingsSave(settings);
         });
@@ -714,6 +722,68 @@ class YGORipperApp {
         } catch (error) {
             this.logger.error('Failed to remove card:', error);
             this.uiManager.showToast('Error removing card: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle pricing refresh for a card
+     */
+    async handlePricingRefresh(cardId) {
+        try {
+            this.logger.info(`Refreshing pricing for card ${cardId}`);
+            
+            // Show loading toast
+            this.uiManager.showToast('Refreshing pricing data...', 'info');
+            
+            const updatedCard = await this.sessionManager.refreshCardPricing(cardId);
+            
+            // Update UI
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+            this.uiManager.showToast(`Pricing refreshed: ${updatedCard.name}`, 'success');
+            
+            // Auto-save if enabled
+            if (this.sessionManager.config && this.sessionManager.config.autoSave) {
+                await this.sessionManager.saveSession();
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to refresh pricing:', error);
+            this.uiManager.showToast('Error refreshing pricing: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle bulk pricing refresh for imported cards
+     */
+    async handleBulkPricingRefresh() {
+        try {
+            this.logger.info('Starting bulk pricing refresh for imported cards');
+            
+            // Get info about imported cards
+            const importedInfo = this.sessionManager.getImportedCardsInfo();
+            
+            if (!importedInfo.hasImportedCards) {
+                this.uiManager.showToast('No imported cards found to refresh', 'warning');
+                return;
+            }
+            
+            // Show loading toast
+            this.uiManager.showToast(`Refreshing pricing for ${importedInfo.importedCards} imported cards...`, 'info');
+            
+            const updatedCards = await this.sessionManager.refreshAllCardsPricing(true); // Only imported cards
+            
+            // Update UI
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+            this.uiManager.showToast(`Pricing refreshed for ${updatedCards.length} cards`, 'success');
+            
+            // Auto-save if enabled
+            if (this.sessionManager.config && this.sessionManager.config.autoSave) {
+                await this.sessionManager.saveSession();
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to refresh bulk pricing:', error);
+            this.uiManager.showToast('Error refreshing pricing: ' + error.message, 'error');
         }
     }
 
