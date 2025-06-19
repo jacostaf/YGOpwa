@@ -1600,7 +1600,7 @@ export class SessionManager {
         // Default fields if none selected
         const defaultFields = [
             'cardName', 'rarity', 'setCode', 'timestamp', 
-            'price', 'condition', 'quantity'
+            'tcgLow', 'tcgMarket', 'condition', 'quantity'
         ];
         
         const fields = selectedFields || defaultFields;
@@ -1612,6 +1612,8 @@ export class SessionManager {
             setCode: 'Set Code',
             timestamp: 'Added Time',
             price: 'Estimated Price',
+            tcgLow: 'TCG Low Price',
+            tcgMarket: 'TCG Market Price',
             condition: 'Condition',
             quantity: 'Quantity',
             sessionId: 'Session ID',
@@ -1630,7 +1632,7 @@ export class SessionManager {
                         value = card.name || '';
                         break;
                     case 'rarity':
-                        value = card.rarity || '';
+                        value = card.card_rarity || card.rarity || '';
                         break;
                     case 'setCode':
                         value = card.setCode || this.currentSession.setId || '';
@@ -1639,7 +1641,14 @@ export class SessionManager {
                         value = card.timestamp ? new Date(card.timestamp).toLocaleString() : '';
                         break;
                     case 'price':
-                        value = card.price || '0.00';
+                        // Fallback price field - use market price first, then low price
+                        value = card.tcg_market_price || card.tcg_price || card.price || '0.00';
+                        break;
+                    case 'tcgLow':
+                        value = card.tcg_price || '0.00';
+                        break;
+                    case 'tcgMarket':
+                        value = card.tcg_market_price || '0.00';
                         break;
                     case 'condition':
                         value = card.condition || 'Near Mint';
@@ -1666,11 +1675,79 @@ export class SessionManager {
             }).join(',');
         });
         
-        const csvContent = [header, ...rows].join('\n');
+        // Calculate totals for numeric fields
+        const totals = {};
+        const numericFields = ['quantity', 'tcgLow', 'tcgMarket', 'price'];
+        
+        // Initialize totals
+        numericFields.forEach(field => {
+            totals[field] = 0;
+        });
+        
+        // Calculate totals
+        this.currentSession.cards.forEach(card => {
+            const quantity = parseFloat(card.quantity) || 1;
+            
+            // For quantity, just sum up
+            if (fields.includes('quantity')) {
+                totals.quantity += quantity;
+            }
+            
+            // For prices, multiply by quantity to get total value
+            if (fields.includes('tcgLow')) {
+                const tcgLow = parseFloat(card.tcg_price) || 0;
+                totals.tcgLow += tcgLow * quantity;
+            }
+            
+            if (fields.includes('tcgMarket')) {
+                const tcgMarket = parseFloat(card.tcg_market_price) || 0;
+                totals.tcgMarket += tcgMarket * quantity;
+            }
+            
+            if (fields.includes('price')) {
+                const price = parseFloat(card.tcg_market_price || card.tcg_price || card.price) || 0;
+                totals.price += price * quantity;
+            }
+        });
+        
+        // Generate totals row
+        const totalsRow = fields.map(field => {
+            switch (field) {
+                case 'cardName':
+                    return 'TOTAL';
+                case 'quantity':
+                    return totals.quantity.toString();
+                case 'tcgLow':
+                    return totals.tcgLow.toFixed(2);
+                case 'tcgMarket':
+                    return totals.tcgMarket.toFixed(2);
+                case 'price':
+                    return totals.price.toFixed(2);
+                default:
+                    return '';
+            }
+        }).join(',');
+        
+        const csvContent = [header, ...rows, totalsRow].join('\n');
         
         return {
             content: csvContent,
             filename: `YGO_Session_${this.currentSession.setName}_${new Date().toISOString().split('T')[0]}.csv`,
+            mimeType: 'text/csv'
+        };
+    }
+
+    /**
+     * Export session to Excel format (Excel compatible CSV)
+     */
+    exportSessionToExcel(selectedFields = null) {
+        // For now, Excel export is the same as CSV export since it's Excel compatible
+        // In the future, this could be enhanced to generate actual .xlsx files
+        const csvExport = this.exportSessionToCSV(selectedFields);
+        
+        return {
+            content: csvExport.content,
+            filename: csvExport.filename.replace('.csv', '.csv'), // Keep as CSV for Excel compatibility
             mimeType: 'text/csv'
         };
     }

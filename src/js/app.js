@@ -486,6 +486,14 @@ class YGORipperApp {
                                 <span>Added Time</span>
                             </label>
                             <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="tcgLow" checked>
+                                <span>TCG Low Price</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="tcgMarket" checked>
+                                <span>TCG Market Price</span>
+                            </label>
+                            <label class="checkbox-option">
                                 <input type="checkbox" name="field" value="price">
                                 <span>Estimated Price</span>
                             </label>
