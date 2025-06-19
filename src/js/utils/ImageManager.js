@@ -30,9 +30,37 @@ export class ImageManager {
         this.loadingPromises = new Map(); // Store loading promises to avoid duplicate requests
         
         // Error handling
-        this.failedImages = new Set(); // Track images that failed to load
+        this.failedImages = new Map(); // Track images that failed to load with timestamps
         this.retryDelay = 1000; // Initial retry delay in ms
         this.maxRetries = 3; // Maximum number of retry attempts
+        
+        // Service worker support detection
+        this.serviceWorkerSupported = 'serviceWorker' in navigator;
+        this.serviceWorkerReady = false;
+        
+        // Initialize service worker check
+        this.checkServiceWorker();
+    }
+
+    /**
+     * Check if service worker is available and ready
+     * @private
+     */
+    async checkServiceWorker() {
+        if (!this.serviceWorkerSupported) {
+            this.logger.warn('Service Worker not supported in this browser');
+            return;
+        }
+        
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            if (registration && registration.active) {
+                this.serviceWorkerReady = true;
+                this.logger.debug('Service Worker is ready for image proxying');
+            }
+        } catch (error) {
+            this.logger.warn('Service Worker check failed:', error.message);
+        }
     }
 
     /**
@@ -101,9 +129,9 @@ export class ImageManager {
         this.loadingImages.add(cardId);
         
         try {
-            // Check if we've already failed to load this image
-            if (this.failedImages.has(imageUrl)) {
-                throw new Error(`Image previously failed to load: ${imageUrl}`);
+            // Check if we've recently failed to load this image (with timeout)
+            if (this.isImageRecentlyFailed(imageUrl)) {
+                throw new Error(`Image recently failed to load: ${imageUrl}`);
             }
             
             this.logger.debug(`Loading image for card ${cardId} from ${imageUrl}`);
@@ -124,16 +152,46 @@ export class ImageManager {
             this.cacheImageInMemory(cacheKey, img);
             await this.cacheImageData(cacheKey, img);
             
+            // Remove from failed images set if it was there
+            this.failedImages.delete(imageUrl);
+            
             this.logger.debug(`Successfully loaded and cached image for card ${cardId}`);
             return img;
             
         } catch (error) {
             this.logger.error(`Failed to load image for card ${cardId}:`, error);
-            this.failedImages.add(imageUrl);
+            this.markImageAsFailed(imageUrl);
             throw error;
         } finally {
             this.loadingImages.delete(cardId);
         }
+    }
+
+    /**
+     * Check if an image has recently failed (within the last 5 minutes)
+     * @private
+     */
+    isImageRecentlyFailed(imageUrl) {
+        const failedEntry = this.failedImages.get ? this.failedImages.get(imageUrl) : null;
+        if (!failedEntry) return false;
+        
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        return failedEntry.timestamp > fiveMinutesAgo;
+    }
+
+    /**
+     * Mark an image as failed with timestamp
+     * @private
+     */
+    markImageAsFailed(imageUrl) {
+        // Convert Set to Map if needed for timestamp tracking
+        if (!this.failedImages.has || typeof this.failedImages.set !== 'function') {
+            const oldFailed = Array.from(this.failedImages);
+            this.failedImages = new Map();
+            oldFailed.forEach(url => this.failedImages.set(url, { timestamp: Date.now() }));
+        }
+        
+        this.failedImages.set(imageUrl, { timestamp: Date.now() });
     }
 
     /**
@@ -142,21 +200,43 @@ export class ImageManager {
      */
     async downloadAndProcessImage(imageUrl, size) {
         return new Promise(async (resolve, reject) => {
-            // For YGOPRODeck images, always use backend proxy to avoid CORS issues
-            // Never try to load them directly due to CORS restrictions
+            // For YGOPRODeck images, use multiple proxy strategies
             if (imageUrl && imageUrl.startsWith('https://images.ygoprodeck.com/')) {
-                this.logger.debug(`YGOPRODeck image detected, using backend proxy: ${imageUrl}`);
+                this.logger.debug(`YGOPRODeck image detected, using proxy strategies: ${imageUrl}`);
+                
+                // Strategy 1: Try service worker proxy first
                 try {
-                    const proxyResult = await this.loadImageViaProxy(imageUrl, size);
-                    resolve(proxyResult);
+                    const serviceWorkerResult = await this.loadImageViaServiceWorkerProxy(imageUrl, size);
+                    resolve(serviceWorkerResult);
                     return;
-                } catch (proxyError) {
-                    this.logger.warn(`Backend proxy failed for ${imageUrl}:`, proxyError.message);
-                    // Fallback to placeholder for YGOPRODeck images
-                    const placeholderImg = this.createPlaceholderImage(size);
-                    resolve(placeholderImg);
-                    return;
+                } catch (serviceWorkerError) {
+                    this.logger.warn(`Service worker proxy failed for ${imageUrl}:`, serviceWorkerError.message);
                 }
+                
+                // Strategy 2: Try backend proxy as fallback
+                try {
+                    const backendResult = await this.loadImageViaBackendProxy(imageUrl, size);
+                    resolve(backendResult);
+                    return;
+                } catch (backendError) {
+                    this.logger.warn(`Backend proxy failed for ${imageUrl}:`, backendError.message);
+                }
+                
+                // Strategy 3: Try public CORS proxies as last resort (with warning)
+                try {
+                    this.logger.warn(`Using public proxy as last resort for ${imageUrl}`);
+                    const publicProxyResult = await this.loadImageViaPublicProxy(imageUrl, size);
+                    resolve(publicProxyResult);
+                    return;
+                } catch (publicProxyError) {
+                    this.logger.warn(`All proxies failed for ${imageUrl}:`, publicProxyError.message);
+                }
+                
+                // All proxy strategies failed, create placeholder
+                this.logger.error(`All proxy strategies failed for YGOPRODeck image: ${imageUrl}`);
+                const placeholderImg = this.createPlaceholderImage(size);
+                resolve(placeholderImg);
+                return;
             }
             
             // For non-YGOPRODeck images, use normal loading
@@ -194,25 +274,34 @@ export class ImageManager {
     }
 
     /**
-     * Load image via backend proxy
+     * Load image via service worker proxy (primary method)
      * @private
      */
-    async loadImageViaProxy(imageUrl, size) {
+    async loadImageViaServiceWorkerProxy(imageUrl, size) {
+        // Check if service worker is ready
+        if (!this.serviceWorkerReady) {
+            await this.checkServiceWorker();
+            if (!this.serviceWorkerReady) {
+                throw new Error('Service Worker not ready');
+            }
+        }
+        
         return new Promise((resolve, reject) => {
             const img = new Image();
             
-            const proxyUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
-            this.logger.debug(`Loading via proxy: ${imageUrl} -> ${proxyUrl}`);
+            // Use service worker proxy endpoint
+            const proxyUrl = `/ygo-image-proxy/${encodeURIComponent(imageUrl)}`;
+            this.logger.debug(`Loading via service worker proxy: ${imageUrl} -> ${proxyUrl}`);
             
             img.onload = () => {
-                this.logger.debug(`Successfully loaded image via proxy: ${imageUrl}`);
+                this.logger.debug(`Successfully loaded image via service worker proxy: ${imageUrl}`);
                 const processedImg = this.processImage(img, size);
                 resolve(processedImg);
             };
             
             img.onerror = (error) => {
-                this.logger.error(`Proxy image loading failed: ${proxyUrl}`, error);
-                reject(new Error(`Proxy failed for ${imageUrl}`));
+                this.logger.error(`Service worker proxy image loading failed: ${proxyUrl}`, error);
+                reject(new Error(`Service worker proxy failed for ${imageUrl}`));
             };
             
             img.src = proxyUrl;
@@ -220,10 +309,91 @@ export class ImageManager {
             // Timeout for proxy requests
             setTimeout(() => {
                 if (!img.complete) {
-                    reject(new Error(`Proxy timeout for ${imageUrl}`));
+                    reject(new Error(`Service worker proxy timeout for ${imageUrl}`));
                 }
-            }, 10000); // 10 second timeout for proxy
+            }, 15000); // 15 second timeout
         });
+    }
+
+    /**
+     * Load image via backend proxy (fallback method)
+     * @private
+     */
+    async loadImageViaBackendProxy(imageUrl, size) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            
+            const proxyUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
+            this.logger.debug(`Loading via backend proxy: ${imageUrl} -> ${proxyUrl}`);
+            
+            img.onload = () => {
+                this.logger.debug(`Successfully loaded image via backend proxy: ${imageUrl}`);
+                const processedImg = this.processImage(img, size);
+                resolve(processedImg);
+            };
+            
+            img.onerror = (error) => {
+                this.logger.error(`Backend proxy image loading failed: ${proxyUrl}`, error);
+                reject(new Error(`Backend proxy failed for ${imageUrl}`));
+            };
+            
+            img.src = proxyUrl;
+            
+            // Timeout for proxy requests
+            setTimeout(() => {
+                if (!img.complete) {
+                    reject(new Error(`Backend proxy timeout for ${imageUrl}`));
+                }
+            }, 10000); // 10 second timeout for backend proxy
+        });
+    }
+
+    /**
+     * Load image via public CORS proxy (last resort fallback)
+     * @private
+     */
+    async loadImageViaPublicProxy(imageUrl, size) {
+        const publicProxies = [
+            `https://cors-anywhere.herokuapp.com/${imageUrl}`,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(imageUrl)}`
+        ];
+        
+        for (const proxyUrl of publicProxies) {
+            try {
+                this.logger.debug(`Trying public proxy: ${proxyUrl}`);
+                
+                const response = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    
+                    img.onload = () => {
+                        this.logger.debug(`Successfully loaded image via public proxy: ${proxyUrl}`);
+                        const processedImg = this.processImage(img, size);
+                        resolve(processedImg);
+                    };
+                    
+                    img.onerror = (error) => {
+                        reject(new Error(`Public proxy failed: ${proxyUrl}`));
+                    };
+                    
+                    img.src = proxyUrl;
+                    
+                    // Short timeout for public proxies
+                    setTimeout(() => {
+                        if (!img.complete) {
+                            reject(new Error(`Public proxy timeout: ${proxyUrl}`));
+                        }
+                    }, 8000); // 8 second timeout
+                });
+                
+                return response;
+                
+            } catch (error) {
+                this.logger.debug(`Public proxy failed: ${proxyUrl}`, error.message);
+                // Continue to next proxy
+            }
+        }
+        
+        throw new Error('All public proxies failed');
     }
 
     /**
@@ -517,7 +687,8 @@ export class ImageManager {
             memoryCache: this.imageCache.size,
             localStorageCache: localStorageCount,
             failedImages: this.failedImages.size,
-            currentlyLoading: this.loadingImages.size
+            currentlyLoading: this.loadingImages.size,
+            serviceWorkerReady: this.serviceWorkerReady
         };
     }
 }

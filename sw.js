@@ -55,6 +55,11 @@ const ROUTE_CONFIG = [
     pattern: /\.(png|jpg|jpeg|gif|svg|ico)$/,
     strategy: CACHE_STRATEGIES.CACHE_FIRST,
     cache: RUNTIME_CACHE
+  },
+  {
+    pattern: /^\/ygo-image-proxy\//,
+    strategy: 'ygo-image-proxy',
+    cache: RUNTIME_CACHE
   }
 ];
 
@@ -118,7 +123,7 @@ self.addEventListener('fetch', (event) => {
   }
   
   // Skip cross-origin requests (unless specifically configured)
-  if (url.origin !== location.origin) {
+  if (url.origin !== location.origin && !request.url.includes('/ygo-image-proxy/')) {
     return;
   }
   
@@ -161,6 +166,9 @@ async function handleRequest(request, config) {
       
       case CACHE_STRATEGIES.CACHE_ONLY:
         return await cacheOnly(request, cacheName);
+      
+      case 'ygo-image-proxy':
+        return await handleYgoImageProxy(request, cacheName);
       
       default:
         return await networkFirst(request, cacheName);
@@ -261,6 +269,104 @@ async function cacheOnly(request, cacheName) {
   }
   
   throw new Error('Resource not found in cache');
+}
+
+/**
+ * Handle YGOPRODeck Image Proxy Requests
+ * Proxies YGOPRODeck images to avoid CORS issues and implements proper caching
+ */
+async function handleYgoImageProxy(request, cacheName) {
+  const url = new URL(request.url);
+  const imageUrl = decodeURIComponent(url.pathname.replace('/ygo-image-proxy/', ''));
+  
+  console.log('[SW] YGO Image Proxy request for:', imageUrl);
+  
+  // Validate that this is a YGOPRODeck image URL
+  if (!imageUrl.startsWith('https://images.ygoprodeck.com/')) {
+    console.error('[SW] Invalid YGO image URL:', imageUrl);
+    return new Response('Invalid image URL', { status: 400 });
+  }
+  
+  const cache = await caches.open(cacheName);
+  
+  // Create a cache key based on the original image URL
+  const cacheKey = new Request(request.url);
+  
+  // Check cache first
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    console.log('[SW] Serving YGO image from cache:', imageUrl);
+    return cached;
+  }
+  
+  try {
+    console.log('[SW] Fetching YGO image from network:', imageUrl);
+    
+    // Fetch the image with appropriate headers to avoid CORS issues
+    const response = await fetch(imageUrl, {
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'User-Agent': 'YGO-Ripper-PWA/2.1.0',
+        'Accept': 'image/*,*/*;q=0.8',
+        'Referer': 'https://db.ygoprodeck.com/'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    // Clone the response for caching
+    const responseClone = response.clone();
+    
+    // Create a response with appropriate headers for caching
+    const headers = new Headers(response.headers);
+    headers.set('Cache-Control', 'public, max-age=604800'); // 7 days
+    headers.set('Access-Control-Allow-Origin', '*');
+    
+    const cachedResponse = new Response(await response.arrayBuffer(), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: headers
+    });
+    
+    // Cache the response
+    await cache.put(cacheKey, cachedResponse.clone());
+    console.log('[SW] Cached YGO image:', imageUrl);
+    
+    return cachedResponse;
+    
+  } catch (error) {
+    console.error('[SW] Failed to fetch YGO image:', imageUrl, error);
+    
+    // Return a placeholder image on error
+    return await createPlaceholderImageResponse();
+  }
+}
+
+/**
+ * Create a placeholder image response
+ */
+async function createPlaceholderImageResponse() {
+  // Create a simple placeholder SVG
+  const placeholderSvg = `
+    <svg width="200" height="290" xmlns="http://www.w3.org/2000/svg">
+      <rect width="200" height="290" fill="#4A90E2" stroke="#333" stroke-width="2"/>
+      <text x="100" y="145" text-anchor="middle" fill="white" font-family="Arial" font-size="48">🃏</text>
+      <text x="100" y="180" text-anchor="middle" fill="white" font-family="Arial" font-size="14">Image unavailable</text>
+    </svg>
+  `;
+  
+  return new Response(placeholderSvg, {
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      'Content-Type': 'image/svg+xml',
+      'Cache-Control': 'public, max-age=300', // 5 minutes for placeholder
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
 }
 
 /**
