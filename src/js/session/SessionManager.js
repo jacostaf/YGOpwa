@@ -577,7 +577,8 @@ export class SessionManager {
                 endTime: null,
                 statistics: {
                     totalCards: 0,
-                    totalValue: 0,
+                    tcgLowTotal: 0,
+                    tcgMarketTotal: 0,
                     rarityBreakdown: {},
                     sessionDuration: 0
                 }
@@ -2277,6 +2278,7 @@ export class SessionManager {
                     isObject: typeof card === 'object' && card !== null
                 });
                 
+                // Basic validation - only skip truly invalid objects
                 if (!card || typeof card !== 'object') {
                     this.logger.warn(`[IMPORT DEBUG] Skipping invalid card at index ${index}: ${card} (type: ${typeof card})`);
                     skippedCards.push({
@@ -2288,7 +2290,7 @@ export class SessionManager {
                     return;
                 }
                 
-                // Check for required fields
+                // Check for card name - be more flexible about the source
                 const cardName = card.name || card.card_name;
                 if (!cardName || typeof cardName !== 'string' || cardName.trim() === '') {
                     this.logger.warn(`[IMPORT DEBUG] Skipping card at index ${index}: Missing or invalid name. Card data:`, {
@@ -2297,7 +2299,11 @@ export class SessionManager {
                         hasName: !!card.name,
                         hasCardName: !!card.card_name,
                         nameType: typeof card.name,
-                        cardNameType: typeof card.card_name
+                        cardNameType: typeof card.card_name,
+                        // Include some other fields for debugging
+                        id: card.id,
+                        tcg_price: card.tcg_price,
+                        tcg_market_price: card.tcg_market_price
                     });
                     skippedCards.push({
                         index,
@@ -2305,7 +2311,7 @@ export class SessionManager {
                         card: {
                             name: card.name,
                             card_name: card.card_name,
-                            // Include a few other fields for debugging
+                            id: card.id,
                             tcg_price: card.tcg_price,
                             tcg_market_price: card.tcg_market_price,
                             set_code: card.set_code
@@ -2329,7 +2335,6 @@ export class SessionManager {
                 
                 // Debug: Log the original card data for pricing fields
                 this.logger.info(`[CARD PROCESSING DEBUG] Original card ${index + 1} "${cardName}": tcg_price=${card.tcg_price}, tcg_market_price=${card.tcg_market_price}, price_status=${card.price_status}`);
-                this.logger.info(`[CARD PROCESSING DEBUG] Processed card ${index + 1} "${processedCard.name}": tcg_price=${processedCard.tcg_price}, tcg_market_price=${processedCard.tcg_market_price}, price_status=${processedCard.price_status}`);
                 
                 // Clean up contaminated set name fields (remove URL fragments)
                 if (processedCard.booster_set_name && processedCard.booster_set_name.includes('?')) {
@@ -2351,7 +2356,7 @@ export class SessionManager {
                     
                     this.logger.info(`[IMPORT DEBUG] Preserved pricing for ${processedCard.name}: TCG Low: $${card.tcg_price}, TCG Market: $${card.tcg_market_price}, Status: ${processedCard.price_status}, ImportedPricing: ${processedCard.importedPricing}`);
                 } else {
-                    this.logger.warn(`[IMPORT DEBUG] Card ${processedCard.name} has no pricing data to preserve`);
+                    this.logger.debug(`[IMPORT DEBUG] Card ${processedCard.name} has no pricing data to preserve`);
                 }
                 
                 // Process images for this card
@@ -2379,33 +2384,6 @@ export class SessionManager {
                     this.logger.warn(`[IMPORT SUMMARY] Skipped card at index ${skipped.index}: ${skipped.reason}`, skipped.card);
                 });
             }
-            
-            // Check for specific cards mentioned by the user
-            const specificCards = ['Metalflame Swordsman', 'Primite Dragon Ether Beryl'];
-            specificCards.forEach(targetCard => {
-                const foundCard = processedCards.find(card => 
-                    (card.name && card.name.toLowerCase().includes(targetCard.toLowerCase())) ||
-                    (card.card_name && card.card_name.toLowerCase().includes(targetCard.toLowerCase()))
-                );
-                
-                if (foundCard) {
-                    this.logger.info(`[IMPORT SUMMARY] ✅ Found target card "${targetCard}": ${foundCard.name || foundCard.card_name}`);
-                } else {
-                    this.logger.warn(`[IMPORT SUMMARY] ❌ Target card "${targetCard}" not found in processed cards`);
-                    
-                    // Check if it was in the original input
-                    const originalCard = cards.find(card => 
-                        (card?.name && card.name.toLowerCase().includes(targetCard.toLowerCase())) ||
-                        (card?.card_name && card.card_name.toLowerCase().includes(targetCard.toLowerCase()))
-                    );
-                    
-                    if (originalCard) {
-                        this.logger.warn(`[IMPORT SUMMARY] Target card "${targetCard}" was present in input but got skipped:`, originalCard);
-                    } else {
-                        this.logger.info(`[IMPORT SUMMARY] Target card "${targetCard}" was not present in input data`);
-                    }
-                }
-            });
             
             // Calculate statistics
             const statistics = this.calculateSessionStatistics(processedCards);
@@ -2439,7 +2417,6 @@ export class SessionManager {
     calculateSessionStatistics(cards) {
         const stats = {
             totalCards: 0,
-            totalValue: 0,
             tcgLowTotal: 0,
             tcgMarketTotal: 0,
             rarityBreakdown: {},
@@ -2451,21 +2428,17 @@ export class SessionManager {
             stats.totalCards += quantity;
             
             // Calculate separate totals for TCG Low and Market prices
-            if (card.tcg_price && typeof parseFloat(card.tcg_price) === 'number' && !isNaN(parseFloat(card.tcg_price))) {
-                stats.tcgLowTotal += parseFloat(card.tcg_price) * quantity;
+            // Fix: Properly parse string prices and check for valid numbers
+            const tcgLowPrice = parseFloat(card.tcg_price);
+            if (card.tcg_price && !isNaN(tcgLowPrice) && tcgLowPrice > 0) {
+                stats.tcgLowTotal += tcgLowPrice * quantity;
+                this.logger.debug(`Added TCG Low: ${card.name} - $${tcgLowPrice} x ${quantity} = $${tcgLowPrice * quantity}`);
             }
             
-            if (card.tcg_market_price && typeof parseFloat(card.tcg_market_price) === 'number' && !isNaN(parseFloat(card.tcg_market_price))) {
-                stats.tcgMarketTotal += parseFloat(card.tcg_market_price) * quantity;
-            }
-            
-            // Add to total value - prioritize market price, fall back to low price
-            if (card.tcg_market_price && typeof parseFloat(card.tcg_market_price) === 'number' && !isNaN(parseFloat(card.tcg_market_price))) {
-                stats.totalValue += parseFloat(card.tcg_market_price) * quantity;
-            } else if (card.tcg_price && typeof parseFloat(card.tcg_price) === 'number' && !isNaN(parseFloat(card.tcg_price))) {
-                stats.totalValue += parseFloat(card.tcg_price) * quantity;
-            } else if (card.price && typeof card.price === 'number') {
-                stats.totalValue += card.price * quantity;
+            const tcgMarketPrice = parseFloat(card.tcg_market_price);
+            if (card.tcg_market_price && !isNaN(tcgMarketPrice) && tcgMarketPrice > 0) {
+                stats.tcgMarketTotal += tcgMarketPrice * quantity;
+                this.logger.debug(`Added TCG Market: ${card.name} - $${tcgMarketPrice} x ${quantity} = $${tcgMarketPrice * quantity}`);
             }
             
             // Count rarity breakdown
@@ -2473,6 +2446,7 @@ export class SessionManager {
             stats.rarityBreakdown[rarity] = (stats.rarityBreakdown[rarity] || 0) + quantity;
         });
         
+        this.logger.info(`Session statistics calculated: ${stats.totalCards} cards, TCG Low Total: $${stats.tcgLowTotal.toFixed(2)}, TCG Market Total: $${stats.tcgMarketTotal.toFixed(2)}`);
         return stats;
     }
 
@@ -2565,8 +2539,11 @@ export class SessionManager {
                 isActive: false,
                 setName: 'None',
                 cardCount: 0,
-                totalValue: 0,
-                status: 'No active session'
+                status: 'No active session',
+                statistics: {
+                    tcgLowTotal: 0,
+                    tcgMarketTotal: 0
+                }
             };
         }
         
@@ -2574,11 +2551,11 @@ export class SessionManager {
             isActive: this.sessionActive,
             setName: this.currentSession.setName,
             cardCount: this.currentSession.cards.length,
-            totalValue: this.currentSession.statistics.totalValue,
             status: this.sessionActive ? 'Active' : 'Stopped',
             sessionId: this.currentSession.id,
             startTime: this.currentSession.startTime,
-            cards: this.currentSession.cards
+            cards: this.currentSession.cards,
+            statistics: this.currentSession.statistics
         };
     }
 
@@ -2759,172 +2736,5 @@ export class SessionManager {
         
         this.logger.info('Import pricing validation report:', report);
         return report;
-    }
-
-    // Utility methods
-    generateSessionId() {
-        return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    generateCardId() {
-        return `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    // Getter methods
-    getCardSets() {
-        return [...this.cardSets];
-    }
-
-    getCurrentSession() {
-        return this.currentSession;
-    }
-
-    getCurrentSessionInfo() {
-        if (!this.currentSession) {
-            return {
-                isActive: false,
-                setName: 'None',
-                cardCount: 0,
-                totalValue: 0,
-                status: 'No active session'
-            };
-        }
-        
-        return {
-            isActive: this.sessionActive,
-            setName: this.currentSession.setName,
-            cardCount: this.currentSession.cards.length,
-            totalValue: this.currentSession.statistics.totalValue,
-            status: this.sessionActive ? 'Active' : 'Stopped',
-            sessionId: this.currentSession.id,
-            startTime: this.currentSession.startTime,
-            cards: this.currentSession.cards
-        };
-    }
-
-    isSessionActive() {
-        return this.sessionActive;
-    }
-
-    // Event handling
-    onSessionStart(callback) {
-        this.listeners.sessionStart.push(callback);
-    }
-
-    onSessionStop(callback) {
-        this.listeners.sessionStop.push(callback);
-    }
-
-    onSessionUpdate(callback) {
-        this.listeners.sessionUpdate.push(callback);
-    }
-
-    onCardAdded(callback) {
-        this.listeners.cardAdded.push(callback);
-    }
-
-    onCardRemoved(callback) {
-        this.listeners.cardRemoved.push(callback);
-    }
-
-    onSessionClear(callback) {
-        this.listeners.sessionClear.push(callback);
-    }
-
-    emitSessionStart(session) {
-        this.listeners.sessionStart.forEach(callback => {
-            try {
-                callback(session);
-            } catch (error) {
-                this.logger.error('Error in session start callback:', error);
-            }
-        });
-    }
-
-    emitSessionStop(session) {
-        this.listeners.sessionStop.forEach(callback => {
-            try {
-                callback(session);
-            } catch (error) {
-                this.logger.error('Error in session stop callback:', error);
-            }
-        });
-    }
-
-    emitSessionUpdate(session) {
-        this.listeners.sessionUpdate.forEach(callback => {
-            try {
-                callback(session);
-            } catch (error) {
-                this.logger.error('Error in session update callback:', error);
-            }
-        });
-    }
-
-    emitCardAdded(card) {
-        this.listeners.cardAdded.forEach(callback => {
-            try {
-                callback(card);
-            } catch (error) {
-                this.logger.error('Error in card added callback:', error);
-            }
-        });
-    }
-
-    emitCardRemoved(card) {
-        this.listeners.cardRemoved.forEach(callback => {
-            try {
-                callback(card);
-            } catch (error) {
-                this.logger.error('Error in card removed callback:', error);
-            }
-        });
-    }
-
-    emitSessionClear() {
-        this.listeners.sessionClear.forEach(callback => {
-            try {
-                callback();
-            } catch (error) {
-                this.logger.error('Error in session clear callback:', error);
-            }
-        });
-    }
-
-    /**
-     * General event emitter method
-     */
-    emit(eventName, data) {
-        if (this.listeners[eventName]) {
-            this.listeners[eventName].forEach(callback => {
-                try {
-                    callback(data);
-                } catch (error) {
-                    this.logger.error(`Error in ${eventName} callback:`, error);
-                }
-            });
-        }
-    }
-
-    /**
-     * Add event listener
-     */
-    addEventListener(eventName, callback) {
-        if (!this.listeners[eventName]) {
-            this.listeners[eventName] = [];
-        }
-        this.listeners[eventName].push(callback);
-    }
-
-    /**
-     * Remove event listener
-     */
-    removeEventListener(eventName, callback) {
-        if (this.listeners[eventName]) {
-            const index = this.listeners[eventName].indexOf(callback);
-            if (index > -1) {
-                this.listeners[eventName].splice(index, 1);
-            }
-        }
     }
 }

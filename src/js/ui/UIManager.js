@@ -120,7 +120,6 @@ export class UIManager {
         this.elements.startSessionBtn = document.getElementById('start-session-btn');
         this.elements.currentSet = document.getElementById('current-set');
         this.elements.cardsCount = document.getElementById('cards-count');
-        this.elements.totalValue = document.getElementById('total-value');
         this.elements.tcgLowTotal = document.getElementById('tcg-low-total');
         this.elements.tcgMarketTotal = document.getElementById('tcg-market-total');
         this.elements.sessionStatus = document.getElementById('session-status');
@@ -934,10 +933,6 @@ export class UIManager {
         
         if (this.elements.cardsCount) {
             this.elements.cardsCount.textContent = sessionInfo.cardCount.toString();
-        }
-        
-        if (this.elements.totalValue) {
-            this.elements.totalValue.textContent = `$${sessionInfo.totalValue.toFixed(2)}`;
         }
         
         // Update separate pricing totals
