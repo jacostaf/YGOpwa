@@ -677,8 +677,10 @@ export class SessionManager {
 
     /**
      * Add a card to the current session with enhanced price and image data
+     * @param {Object} cardData - Card data to add
+     * @param {boolean} forceRefreshPricing - Whether to force refresh pricing data even for imported cards
      */
-    async addCard(cardData) {
+    async addCard(cardData, forceRefreshPricing = false) {
         if (!this.sessionActive || !this.currentSession) {
             throw new Error('No active session');
         }
@@ -704,19 +706,22 @@ export class SessionManager {
             };
             
             // Check if this card has valid imported pricing data that should be preserved
-            const hasValidImportedPricing = cardData.importedPricing === true || 
-                                          (cardData.price_status === 'imported') ||
-                                          (cardData.price_status === 'loaded' && 
-                                           (cardData.tcg_price || cardData.tcg_market_price));
+            // Only skip API calls if forceRefreshPricing is false
+            const hasValidImportedPricing = !forceRefreshPricing && (
+                cardData.importedPricing === true || 
+                (cardData.price_status === 'imported') ||
+                (cardData.price_status === 'loaded' && 
+                 (cardData.tcg_price || cardData.tcg_market_price))
+            );
             
             this.logger.info(`[ADD CARD DEBUG] Checking pricing for card: ${cardData.name}`);
-            this.logger.info(`[ADD CARD DEBUG] importedPricing: ${cardData.importedPricing}, price_status: ${cardData.price_status}, tcg_price: ${cardData.tcg_price}, tcg_market_price: ${cardData.tcg_market_price}`);
+            this.logger.info(`[ADD CARD DEBUG] forceRefreshPricing: ${forceRefreshPricing}, importedPricing: ${cardData.importedPricing}, price_status: ${cardData.price_status}, tcg_price: ${cardData.tcg_price}, tcg_market_price: ${cardData.tcg_market_price}`);
             this.logger.info(`[ADD CARD DEBUG] hasValidImportedPricing: ${hasValidImportedPricing}`);
             
             // Track this card for pricing data loading only if we need to fetch pricing
             if (!hasValidImportedPricing) {
                 this.loadingPriceData.add(enhancedCard.id);
-                this.logger.info(`[ADD CARD DEBUG] Will fetch pricing for card: ${cardData.name}`);
+                this.logger.info(`[ADD CARD DEBUG] Will fetch pricing for card: ${cardData.name} (forceRefresh: ${forceRefreshPricing})`);
             } else {
                 this.logger.info(`[ADD CARD DEBUG] Will preserve existing pricing for card: ${cardData.name}`);
             }
@@ -833,6 +838,113 @@ export class SessionManager {
         
         this.logger.info('Card removed from session:', removedCard.name || removedCard.id);
         return removedCard;
+    }
+
+    /**
+     * Refresh pricing data for a specific card in the current session
+     * @param {string} cardId - ID of the card to refresh pricing for
+     * @returns {Promise<Object>} - Updated card object
+     */
+    async refreshCardPricing(cardId) {
+        if (!this.sessionActive || !this.currentSession) {
+            throw new Error('No active session');
+        }
+        
+        const cardIndex = this.currentSession.cards.findIndex(card => card.id === cardId);
+        if (cardIndex === -1) {
+            throw new Error('Card not found in session');
+        }
+        
+        const card = this.currentSession.cards[cardIndex];
+        
+        try {
+            this.logger.info(`Refreshing pricing data for card: ${card.name}`);
+            
+            // Force refresh pricing by calling addCard with forceRefreshPricing = true
+            // But we need to update the existing card instead of adding a new one
+            
+            // Track this card for pricing data loading
+            this.loadingPriceData.add(card.id);
+            
+            try {
+                const enhancedInfo = await this.fetchEnhancedCardInfo(card);
+                if (enhancedInfo) {
+                    // Update the existing card with fresh pricing data
+                    Object.assign(card, {
+                        // Price information
+                        tcg_price: enhancedInfo.tcg_price,
+                        tcg_market_price: enhancedInfo.tcg_market_price,
+                        price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
+                        
+                        // Update pricing status
+                        price_status: 'refreshed',
+                        last_price_updt: enhancedInfo.last_price_updt || new Date().toISOString(),
+                        importedPricing: false, // No longer using imported pricing
+                        
+                        // Update other enhanced info if available
+                        source_url: enhancedInfo.source_url || card.source_url,
+                        scrape_success: enhancedInfo.scrape_success
+                    });
+                    
+                    this.logger.info(`Pricing refreshed for: ${card.name} - New TCG Low: $${enhancedInfo.tcg_price || 'N/A'}, New TCG Market: $${enhancedInfo.tcg_market_price || 'N/A'}`);
+                } else {
+                    this.logger.warn(`No enhanced pricing info available for: ${card.name}`);
+                }
+            } catch (enhanceError) {
+                this.logger.warn(`Failed to refresh pricing for ${card.name}:`, enhanceError.message);
+                throw new Error(`Failed to refresh pricing: ${enhanceError.message}`);
+            } finally {
+                // Remove from loading tracking
+                this.loadingPriceData.delete(card.id);
+            }
+            
+            // Update session statistics
+            this.updateSessionStatistics();
+            
+            // Emit events
+            this.emitSessionUpdate(this.currentSession);
+            
+            this.logger.info(`Pricing refresh completed for card: ${card.name}`);
+            return card;
+            
+        } catch (error) {
+            this.logger.error(`Failed to refresh pricing for card ${cardId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Refresh pricing data for all cards in the current session
+     * @param {boolean} onlyImportedCards - If true, only refresh cards with imported pricing
+     * @returns {Promise<Array>} - Array of updated cards
+     */
+    async refreshAllCardsPricing(onlyImportedCards = false) {
+        if (!this.sessionActive || !this.currentSession) {
+            throw new Error('No active session');
+        }
+        
+        const cardsToRefresh = onlyImportedCards 
+            ? this.currentSession.cards.filter(card => 
+                card.importedPricing === true || 
+                card.price_status === 'imported' || 
+                card.price_status === 'loaded')
+            : this.currentSession.cards;
+        
+        this.logger.info(`Starting bulk pricing refresh for ${cardsToRefresh.length} cards${onlyImportedCards ? ' (imported only)' : ''}...`);
+        
+        const refreshPromises = cardsToRefresh.map(card => 
+            this.refreshCardPricing(card.id).catch(error => {
+                this.logger.warn(`Failed to refresh pricing for card ${card.name}:`, error.message);
+                return null; // Continue with other cards even if one fails
+            })
+        );
+        
+        const results = await Promise.all(refreshPromises);
+        const successCount = results.filter(result => result !== null).length;
+        
+        this.logger.info(`Bulk pricing refresh completed: ${successCount}/${cardsToRefresh.length} cards updated successfully`);
+        
+        return results.filter(result => result !== null);
     }
 
     /**
@@ -2281,6 +2393,42 @@ export class SessionManager {
         return `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
+    /**
+     * Get information about cards with imported pricing data
+     * @returns {Object} - Statistics about imported cards
+     */
+    getImportedCardsInfo() {
+        if (!this.currentSession || !this.currentSession.cards) {
+            return {
+                totalCards: 0,
+                importedCards: 0,
+                cardsWithPricing: 0,
+                importedCardsWithPricing: 0
+            };
+        }
+        
+        const totalCards = this.currentSession.cards.length;
+        const importedCards = this.currentSession.cards.filter(card => 
+            card.importedPricing === true || 
+            card.price_status === 'imported' || 
+            card.price_status === 'loaded'
+        );
+        const cardsWithPricing = this.currentSession.cards.filter(card => 
+            card.tcg_price || card.tcg_market_price
+        );
+        const importedCardsWithPricing = importedCards.filter(card => 
+            card.tcg_price || card.tcg_market_price
+        );
+        
+        return {
+            totalCards,
+            importedCards: importedCards.length,
+            cardsWithPricing: cardsWithPricing.length,
+            importedCardsWithPricing: importedCardsWithPricing.length,
+            hasImportedCards: importedCards.length > 0
+        };
+    }
+
     // Getter methods
     getCardSets() {
         return [...this.cardSets];
@@ -2490,5 +2638,172 @@ export class SessionManager {
         
         this.logger.info('Import pricing validation report:', report);
         return report;
+    }
+
+    // Utility methods
+    generateSessionId() {
+        return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    generateCardId() {
+        return `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    // Getter methods
+    getCardSets() {
+        return [...this.cardSets];
+    }
+
+    getCurrentSession() {
+        return this.currentSession;
+    }
+
+    getCurrentSessionInfo() {
+        if (!this.currentSession) {
+            return {
+                isActive: false,
+                setName: 'None',
+                cardCount: 0,
+                totalValue: 0,
+                status: 'No active session'
+            };
+        }
+        
+        return {
+            isActive: this.sessionActive,
+            setName: this.currentSession.setName,
+            cardCount: this.currentSession.cards.length,
+            totalValue: this.currentSession.statistics.totalValue,
+            status: this.sessionActive ? 'Active' : 'Stopped',
+            sessionId: this.currentSession.id,
+            startTime: this.currentSession.startTime,
+            cards: this.currentSession.cards
+        };
+    }
+
+    isSessionActive() {
+        return this.sessionActive;
+    }
+
+    // Event handling
+    onSessionStart(callback) {
+        this.listeners.sessionStart.push(callback);
+    }
+
+    onSessionStop(callback) {
+        this.listeners.sessionStop.push(callback);
+    }
+
+    onSessionUpdate(callback) {
+        this.listeners.sessionUpdate.push(callback);
+    }
+
+    onCardAdded(callback) {
+        this.listeners.cardAdded.push(callback);
+    }
+
+    onCardRemoved(callback) {
+        this.listeners.cardRemoved.push(callback);
+    }
+
+    onSessionClear(callback) {
+        this.listeners.sessionClear.push(callback);
+    }
+
+    emitSessionStart(session) {
+        this.listeners.sessionStart.forEach(callback => {
+            try {
+                callback(session);
+            } catch (error) {
+                this.logger.error('Error in session start callback:', error);
+            }
+        });
+    }
+
+    emitSessionStop(session) {
+        this.listeners.sessionStop.forEach(callback => {
+            try {
+                callback(session);
+            } catch (error) {
+                this.logger.error('Error in session stop callback:', error);
+            }
+        });
+    }
+
+    emitSessionUpdate(session) {
+        this.listeners.sessionUpdate.forEach(callback => {
+            try {
+                callback(session);
+            } catch (error) {
+                this.logger.error('Error in session update callback:', error);
+            }
+        });
+    }
+
+    emitCardAdded(card) {
+        this.listeners.cardAdded.forEach(callback => {
+            try {
+                callback(card);
+            } catch (error) {
+                this.logger.error('Error in card added callback:', error);
+            }
+        });
+    }
+
+    emitCardRemoved(card) {
+        this.listeners.cardRemoved.forEach(callback => {
+            try {
+                callback(card);
+            } catch (error) {
+                this.logger.error('Error in card removed callback:', error);
+            }
+        });
+    }
+
+    emitSessionClear() {
+        this.listeners.sessionClear.forEach(callback => {
+            try {
+                callback();
+            } catch (error) {
+                this.logger.error('Error in session clear callback:', error);
+            }
+        });
+    }
+
+    /**
+     * General event emitter method
+     */
+    emit(eventName, data) {
+        if (this.listeners[eventName]) {
+            this.listeners[eventName].forEach(callback => {
+                try {
+                    callback(data);
+                } catch (error) {
+                    this.logger.error(`Error in ${eventName} callback:`, error);
+                }
+            });
+        }
+    }
+
+    /**
+     * Add event listener
+     */
+    addEventListener(eventName, callback) {
+        if (!this.listeners[eventName]) {
+            this.listeners[eventName] = [];
+        }
+        this.listeners[eventName].push(callback);
+    }
+
+    /**
+     * Remove event listener
+     */
+    removeEventListener(eventName, callback) {
+        if (this.listeners[eventName]) {
+            const index = this.listeners[eventName].indexOf(callback);
+            if (index > -1) {
+                this.listeners[eventName].splice(index, 1);
+            }
+        }
     }
 }
