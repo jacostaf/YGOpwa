@@ -263,6 +263,10 @@
                         <div class="section-header">
                             <h2>Current Session</h2>
                             <div class="header-actions">
+                                <button id="refresh-pricing-btn" class="btn btn-secondary" disabled title="Refresh pricing data for imported cards">
+                                    <span class="btn-icon">🔄</span>
+                                    Refresh Pricing
+                                </button>
                                 <button id="export-session-btn" class="btn btn-secondary" disabled>
                                     <span class="btn-icon">📥</span>
                                     Export
@@ -287,8 +291,12 @@
                                 <span class="stat-value" id="cards-count">0</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-label">Total Value:</span>
-                                <span class="stat-value" id="total-value">$0.00</span>
+                                <span class="stat-label">TCG Low Total:</span>
+                                <span class="stat-value" id="tcg-low-total">$0.00</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">TCG Market Total:</span>
+                                <span class="stat-value" id="tcg-market-total">$0.00</span>
                             </div>
                             <div class="stat-item full-width">
                                 <span class="stat-label">Status:</span>

@@ -28,11 +28,13 @@ export class UIManager {
             sessionClear: [],
             sessionExport: [],
             sessionImport: [],
+            bulkPricingRefresh: [],
             voiceStart: [],
             voiceStop: [],
             voiceTest: [],
             quantityAdjust: [],
             cardRemove: [],
+            pricingRefresh: [],
             settingsSave: [],
             settingsShow: []
         };
@@ -118,7 +120,8 @@ export class UIManager {
         this.elements.startSessionBtn = document.getElementById('start-session-btn');
         this.elements.currentSet = document.getElementById('current-set');
         this.elements.cardsCount = document.getElementById('cards-count');
-        this.elements.totalValue = document.getElementById('total-value');
+        this.elements.tcgLowTotal = document.getElementById('tcg-low-total');
+        this.elements.tcgMarketTotal = document.getElementById('tcg-market-total');
         this.elements.sessionStatus = document.getElementById('session-status');
         this.elements.setsCount = document.getElementById('sets-count');
         this.elements.totalSetsCount = document.getElementById('total-sets-count');
@@ -134,6 +137,7 @@ export class UIManager {
         // Session tracker elements
         this.elements.sessionCards = document.getElementById('session-cards');
         this.elements.emptySession = document.getElementById('empty-session');
+        this.elements.refreshPricingBtn = document.getElementById('refresh-pricing-btn');
         this.elements.exportSessionBtn = document.getElementById('export-session-btn');
         this.elements.importSessionBtn = document.getElementById('import-session-btn');
         this.elements.clearSessionBtn = document.getElementById('clear-session-btn');
@@ -234,6 +238,12 @@ export class UIManager {
         }
 
         // Session tracker controls
+        if (this.elements.refreshPricingBtn) {
+            this.elements.refreshPricingBtn.addEventListener('click', () => {
+                this.emitBulkPricingRefresh();
+            });
+        }
+
         if (this.elements.exportSessionBtn) {
             this.elements.exportSessionBtn.addEventListener('click', () => {
                 this.emitSessionExport();
@@ -925,8 +935,15 @@ export class UIManager {
             this.elements.cardsCount.textContent = sessionInfo.cardCount.toString();
         }
         
-        if (this.elements.totalValue) {
-            this.elements.totalValue.textContent = `$${sessionInfo.totalValue.toFixed(2)}`;
+        // Update separate pricing totals
+        if (this.elements.tcgLowTotal) {
+            const tcgLowTotal = sessionInfo.statistics?.tcgLowTotal || 0;
+            this.elements.tcgLowTotal.textContent = `$${tcgLowTotal.toFixed(2)}`;
+        }
+        
+        if (this.elements.tcgMarketTotal) {
+            const tcgMarketTotal = sessionInfo.statistics?.tcgMarketTotal || 0;
+            this.elements.tcgMarketTotal.textContent = `$${tcgMarketTotal.toFixed(2)}`;
         }
         
         if (this.elements.sessionStatus) {
@@ -938,6 +955,28 @@ export class UIManager {
         const hasSession = sessionInfo.cardCount > 0;
         this.elements.exportSessionBtn?.toggleAttribute('disabled', !hasSession);
         this.elements.clearSessionBtn?.toggleAttribute('disabled', !hasSession);
+        
+        // Enable/disable refresh pricing button based on whether there are imported cards
+        if (this.elements.refreshPricingBtn && this.app && this.app.sessionManager) {
+            try {
+                const importedInfo = this.app.sessionManager.getImportedCardsInfo();
+                const hasImportedCards = importedInfo.hasImportedCards;
+                
+                this.elements.refreshPricingBtn.toggleAttribute('disabled', !hasImportedCards);
+                
+                // Update button tooltip with imported cards count
+                if (hasImportedCards) {
+                    this.elements.refreshPricingBtn.title = `Refresh pricing data for ${importedInfo.importedCards} imported cards`;
+                    this.elements.refreshPricingBtn.style.display = '';
+                } else {
+                    this.elements.refreshPricingBtn.title = 'No imported cards to refresh';
+                    this.elements.refreshPricingBtn.style.display = hasSession ? '' : 'none';
+                }
+            } catch (error) {
+                // Fallback to simple logic if there's an error
+                this.elements.refreshPricingBtn.toggleAttribute('disabled', !hasSession);
+            }
+        }
         
         // Update session cards display
         this.displaySessionCards(sessionInfo.cards || []);
@@ -985,6 +1024,7 @@ export class UIManager {
         const cardName = card.card_name || card.name || 'Unknown Card';
         const rarity = card.card_rarity || card.displayRarity || card.rarity || 'Unknown';
         const setCode = card.set_code || card.setInfo?.setCode || '';
+        const cardNumber = card.card_number || '';
         const setName = card.booster_set_name || card.setInfo?.setName || '';
         const price = card.price || parseFloat(card.tcg_market_price || card.tcg_price || '0');
         const hasEnhancedInfo = card.hasEnhancedInfo || false;
@@ -1026,6 +1066,16 @@ export class UIManager {
                                 <span class="info-value">${setCode}</span>
                             </div>
                         ` : ''}
+                        ${cardNumber ? `
+                            <div class="info-row">
+                                <span class="info-label">Card #:</span>
+                                <span class="info-value">${cardNumber}</span>
+                            </div>
+                        ` : ''}
+                        <div class="info-row">
+                            <span class="info-label">Art Variant:</span>
+                            <span class="info-value">${card.art_variant || card.card_art_variant || 'N/A'}</span>
+                        </div>
                         ${setName ? `
                             <div class="info-row">
                                 <span class="info-label">Set Name:</span>
@@ -1067,7 +1117,12 @@ export class UIManager {
                         <span class="quantity-display">${card.quantity || 1}</span>
                         <button class="btn btn-sm quantity-btn increase-qty" data-card-id="${card.id}" title="Increase Quantity">+</button>
                     </div>
-                    <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+                    <div class="action-controls">
+                        ${(card.importedPricing === true || card.price_status === 'imported' || card.price_status === 'loaded') ? `
+                            <button class="btn btn-sm btn-secondary refresh-pricing" data-card-id="${card.id}" title="Refresh Pricing Data">🔄</button>
+                        ` : ''}
+                        <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -1076,6 +1131,7 @@ export class UIManager {
         const decreaseBtn = cardDiv.querySelector('.decrease-qty');
         const increaseBtn = cardDiv.querySelector('.increase-qty');
         const removeBtn = cardDiv.querySelector('.remove-card');
+        const refreshPricingBtn = cardDiv.querySelector('.refresh-pricing');
         
         decreaseBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1091,6 +1147,14 @@ export class UIManager {
             e.preventDefault();
             this.emitCardRemove(card.id);
         });
+        
+        // Add event listener for pricing refresh if button exists
+        if (refreshPricingBtn) {
+            refreshPricingBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.emitPricingRefresh(card.id);
+            });
+        }
         
         // Load card image if available
         if (card.image_url) {
@@ -1823,6 +1887,10 @@ export class UIManager {
         this.eventListeners.sessionImport.push(callback);
     }
 
+    onBulkPricingRefresh(callback) {
+        this.eventListeners.bulkPricingRefresh.push(callback);
+    }
+
     onVoiceStart(callback) {
         this.eventListeners.voiceStart.push(callback);
     }
@@ -1841,6 +1909,10 @@ export class UIManager {
 
     onCardRemove(callback) {
         this.eventListeners.cardRemove.push(callback);
+    }
+
+    onPricingRefresh(callback) {
+        this.eventListeners.pricingRefresh.push(callback);
     }
 
     onSettingsSave(callback) {
@@ -1922,6 +1994,16 @@ export class UIManager {
         });
     }
 
+    emitBulkPricingRefresh() {
+        this.eventListeners.bulkPricingRefresh.forEach(callback => {
+            try {
+                callback();
+            } catch (error) {
+                this.logger.error('Error in bulk pricing refresh callback:', error);
+            }
+        });
+    }
+
     emitVoiceStart() {
         this.eventListeners.voiceStart.forEach(callback => {
             try {
@@ -1968,6 +2050,16 @@ export class UIManager {
                 callback(cardId);
             } catch (error) {
                 this.logger.error('Error in card remove callback:', error);
+            }
+        });
+    }
+
+    emitPricingRefresh(cardId) {
+        this.eventListeners.pricingRefresh.forEach(callback => {
+            try {
+                callback(cardId);
+            } catch (error) {
+                this.logger.error('Error in pricing refresh callback:', error);
             }
         });
     }
