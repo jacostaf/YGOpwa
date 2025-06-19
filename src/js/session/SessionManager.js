@@ -1719,15 +1719,28 @@ export class SessionManager {
             
             let processedSessionData;
             
-            // Check if this is legacy format (has cards array but no setId)
-            if (!sessionData.setId && sessionData.cards && Array.isArray(sessionData.cards)) {
+            // Detect format type
+            if (sessionData.setId) {
+                // Future format with explicit setId (not currently used but prepared for)
+                processedSessionData = sessionData;
+            } else if (sessionData.sessionId && sessionData.setName) {
+                // Current export format (has sessionId, setName, statistics, version, etc.)
+                this.logger.info('Detected current export format');
+                processedSessionData = {
+                    setId: this.extractSetIdFromSetName(sessionData.setName),
+                    setName: sessionData.setName,
+                    cards: sessionData.cards || [],
+                    startTime: sessionData.startTime,
+                    endTime: sessionData.endTime,
+                    statistics: sessionData.statistics || {}
+                };
+            } else if (sessionData.cards && Array.isArray(sessionData.cards) && 
+                      (sessionData.current_set || sessionData.last_saved)) {
+                // Legacy format from oldIteration.py (has current_set, last_saved)
                 this.logger.info('Detected legacy pack_session.json format, converting...');
                 processedSessionData = this.convertLegacySessionData(sessionData);
-            } else if (sessionData.setId) {
-                // New format
-                processedSessionData = sessionData;
             } else {
-                throw new Error('Invalid session data: missing setId and cards array');
+                throw new Error('Invalid session data: unrecognized format');
             }
             
             // Stop current session if active
@@ -1862,6 +1875,31 @@ export class SessionManager {
         
         this.logger.info(`Converted legacy session: ${totalCards} cards, set: ${setName} (${setId})`);
         return convertedSession;
+    }
+
+    /**
+     * Extract setId from setName by finding matching set in cardSets
+     * This is used when importing current export format that only has setName
+     */
+    extractSetIdFromSetName(setName) {
+        if (!setName) return 'UNKNOWN';
+        
+        // Try to find matching set in our loaded sets
+        const matchingSet = this.cardSets.find(set => 
+            set.name === setName ||
+            set.set_name === setName ||
+            set.id === setName ||
+            set.code === setName
+        );
+        
+        if (matchingSet) {
+            return matchingSet.id || matchingSet.code || matchingSet.set_code || setName;
+        }
+        
+        // If no match found, try to extract a short code from the name
+        // For example: "Supreme Darkness" -> could be "SUDA" but we don't know without data
+        // So we'll just use the name as-is
+        return setName;
     }
 
     /**

@@ -73,8 +73,29 @@ const legacySessionData = {
     "last_saved": "2025-06-10T20:51:00.000000"
 };
 
-// Sample new format data
-const newSessionData = {
+// Sample new format data (current export format)
+const currentExportData = {
+    "sessionId": "session-123",
+    "setName": "Supreme Darkness",
+    "cards": [
+        {
+            "name": "Metalflame Swordsman",
+            "rarity": "Ultra Rare",
+            "setCode": "SUDA",
+            "price": 2.12,
+            "timestamp": "2025-06-10T20:41:06.638802"
+        }
+    ],
+    "startTime": "2025-06-10T20:40:00.000000",
+    "statistics": {
+        "totalCards": 1,
+        "totalValue": 2.12
+    },
+    "version": "2.1.0"
+};
+
+// Sample future format data (with explicit setId)
+const futureFormatData = {
     "setId": "SUDA",
     "setName": "Supreme Darkness",
     "cards": [
@@ -115,8 +136,8 @@ async function testLegacyImport() {
     }
 }
 
-async function testNewFormatImport() {
-    console.log('Testing new format import...');
+async function testCurrentFormatImport() {
+    console.log('Testing current export format import...');
     
     const logger = new Logger('SessionImportTest');
     const sessionManager = new SessionManager(null, logger);
@@ -133,11 +154,38 @@ async function testNewFormatImport() {
     ];
     
     try {
-        const result = await sessionManager.importSession(newSessionData);
-        console.log('✅ New format import succeeded');
+        const result = await sessionManager.importSession(currentExportData);
+        console.log('✅ Current format import succeeded');
         return true;
     } catch (error) {
-        console.log('❌ New format import failed:', error.message);
+        console.log('❌ Current format import failed:', error.message);
+        return false;
+    }
+}
+
+async function testFutureFormatImport() {
+    console.log('Testing future format import...');
+    
+    const logger = new Logger('SessionImportTest');
+    const sessionManager = new SessionManager(null, logger);
+    
+    // Mock the cardSets for testing
+    sessionManager.cardSets = [
+        {
+            id: 'SUDA',
+            name: 'Supreme Darkness',
+            code: 'SUDA',
+            set_name: 'Supreme Darkness',
+            set_code: 'SUDA'
+        }
+    ];
+    
+    try {
+        const result = await sessionManager.importSession(futureFormatData);
+        console.log('✅ Future format import succeeded');
+        return true;
+    } catch (error) {
+        console.log('❌ Future format import failed:', error.message);
         return false;
     }
 }
