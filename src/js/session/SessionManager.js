@@ -1708,12 +1708,13 @@ export class SessionManager {
 
     /**
      * Import session data
+     * Supports both new format (with setId) and legacy format (with cards array)
      */
     async importSession(sessionData) {
         try {
             // Validate session data
-            if (!sessionData || !sessionData.setId) {
-                throw new Error('Invalid session data');
+            if (!sessionData) {
+                throw new Error('Invalid session data: No data provided');
             }
             
             // Stop current session if active
@@ -1721,31 +1722,200 @@ export class SessionManager {
                 await this.stopSession();
             }
             
-            // Import the session
-            this.currentSession = {
-                ...sessionData,
-                id: this.generateSessionId(), // Generate new ID
-                importedAt: new Date().toISOString()
-            };
+            let processedSession;
+            
+            // Check if this is legacy format (has cards array but no setId)
+            if (!sessionData.setId && Array.isArray(sessionData.cards)) {
+                this.logger.info('Detected legacy session format, converting...');
+                processedSession = await this.convertLegacySessionFormat(sessionData);
+            } else if (sessionData.setId) {
+                // New format - use as is
+                this.logger.info('Detected new session format');
+                processedSession = {
+                    ...sessionData,
+                    id: this.generateSessionId(), // Generate new ID
+                    importedAt: new Date().toISOString()
+                };
+            } else {
+                throw new Error('Invalid session data: Missing required fields (setId or cards array)');
+            }
+            
+            // Set as current session
+            this.currentSession = processedSession;
             
             // Find the set
-            this.currentSet = this.cardSets.find(s => s.id === sessionData.setId);
-            this.sessionActive = true;
-            
-            // Load set cards
-            if (this.currentSet) {
-                await this.loadSetCards(this.currentSet.id);
+            if (processedSession.setId) {
+                this.currentSet = this.cardSets.find(s => s.id === processedSession.setId || s.code === processedSession.setId || s.name === processedSession.setId);
+                
+                // Load set cards if we found the set
+                if (this.currentSet) {
+                    await this.loadSetCards(this.currentSet.id);
+                } else {
+                    this.logger.warn(`Could not find card set for ID: ${processedSession.setId}`);
+                }
             }
+            
+            this.sessionActive = true;
             
             this.emitSessionUpdate(this.currentSession);
             
-            this.logger.info('Session imported successfully');
+            this.logger.info(`Session imported successfully with ${this.currentSession.cards.length} cards`);
             return this.currentSession;
             
         } catch (error) {
             this.logger.error('Failed to import session:', error);
             throw error;
         }
+    }
+
+    /**
+     * Convert legacy session format to new format
+     * Legacy format: { cards: [...], current_set: "...", set_cards: [...], last_saved: "..." }
+     * New format: { id: "...", setId: "...", setName: "...", cards: [...], startTime: "...", ... }
+     */
+    async convertLegacySessionFormat(legacyData) {
+        try {
+            this.logger.info('Converting legacy session format...');
+            
+            // Extract cards array
+            const cards = legacyData.cards || [];
+            
+            // Determine set information
+            let setId = null;
+            let setName = null;
+            
+            // Try to extract set info from current_set field
+            if (legacyData.current_set) {
+                if (typeof legacyData.current_set === 'string') {
+                    setName = legacyData.current_set;
+                    setId = legacyData.current_set;
+                } else if (typeof legacyData.current_set === 'object') {
+                    setName = legacyData.current_set.name || legacyData.current_set.set_name;
+                    setId = legacyData.current_set.id || legacyData.current_set.code || legacyData.current_set.set_code;
+                }
+            }
+            
+            // If no set info from current_set, try to infer from first card
+            if (!setId && cards.length > 0) {
+                const firstCard = cards[0];
+                
+                // Try various fields that might contain set info
+                if (firstCard.target_set_name) {
+                    setName = firstCard.target_set_name;
+                    setId = firstCard.set_code || firstCard.target_set_name;
+                } else if (firstCard.booster_set_name) {
+                    setName = firstCard.booster_set_name;
+                    setId = firstCard.set_code || firstCard.booster_set_name;
+                } else if (firstCard.card_sets && Array.isArray(firstCard.card_sets) && firstCard.card_sets.length > 0) {
+                    const cardSet = firstCard.card_sets[0];
+                    setName = cardSet.set_name;
+                    setId = cardSet.set_code;
+                    this.logger.debug(`Extracted set info from card_sets: ${setName} (${setId})`);
+                }
+                
+                // Additional fallback - look for common set-related fields
+                if (!setId) {
+                    if (firstCard.set_name && firstCard.set_code) {
+                        setName = firstCard.set_name;
+                        setId = firstCard.set_code;
+                    } else if (firstCard.card_name && firstCard.card_name.includes(' - ')) {
+                        // Try to extract set from card name format like "Card Name - Set Name (CODE)"
+                        const nameParts = firstCard.card_name.split(' - ');
+                        if (nameParts.length > 1) {
+                            const setInfo = nameParts[1];
+                            const codeMatch = setInfo.match(/\(([^)]+)\)$/);
+                            if (codeMatch) {
+                                setId = codeMatch[1];
+                                setName = setInfo.replace(/\s*\([^)]+\)$/, '');
+                            } else {
+                                setName = setInfo;
+                                setId = setInfo;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Use fallback if still no set info
+            if (!setId) {
+                setId = 'imported-session';
+                setName = 'Imported Session';
+                this.logger.warn('Could not determine set information from legacy data, using fallback');
+            }
+            
+            // Process cards to ensure they have required fields
+            const processedCards = cards.map((card, index) => {
+                if (!card || typeof card !== 'object') {
+                    this.logger.warn(`Skipping invalid card at index ${index}:`, card);
+                    return null;
+                }
+                
+                return {
+                    // Preserve all original card data
+                    ...card,
+                    // Ensure required fields exist
+                    id: card.id || this.generateCardId(),
+                    quantity: typeof card.quantity === 'number' ? card.quantity : 1,
+                    addedAt: card.timestamp || card.addedAt || new Date().toISOString(),
+                    // Ensure name exists
+                    name: card.name || card.card_name || `Unknown Card ${index + 1}`
+                };
+            }).filter(card => card !== null); // Remove any null entries
+            
+            // Calculate statistics
+            const statistics = this.calculateSessionStatistics(processedCards);
+            
+            // Create new format session
+            const convertedSession = {
+                id: this.generateSessionId(),
+                setId: setId,
+                setName: setName,
+                cards: processedCards,
+                startTime: legacyData.last_saved || new Date().toISOString(),
+                endTime: null, // Session is being imported as active
+                importedAt: new Date().toISOString(),
+                legacyImport: true,
+                statistics: statistics
+            };
+            
+            this.logger.info(`Converted legacy session: ${processedCards.length} cards, set: ${setName}`);
+            
+            return convertedSession;
+            
+        } catch (error) {
+            this.logger.error('Failed to convert legacy session format:', error);
+            throw new Error(`Failed to convert legacy session format: ${error.message}`);
+        }
+    }
+
+    /**
+     * Calculate session statistics from cards array
+     */
+    calculateSessionStatistics(cards) {
+        const stats = {
+            totalCards: 0,
+            totalValue: 0,
+            rarityBreakdown: {},
+            sessionDuration: 0
+        };
+        
+        cards.forEach(card => {
+            const quantity = card.quantity || 1;
+            stats.totalCards += quantity;
+            
+            // Add to total value if price information is available
+            if (card.tcg_price && typeof card.tcg_price === 'number') {
+                stats.totalValue += card.tcg_price * quantity;
+            } else if (card.tcg_market_price && typeof card.tcg_market_price === 'number') {
+                stats.totalValue += card.tcg_market_price * quantity;
+            }
+            
+            // Count rarity breakdown
+            const rarity = card.card_rarity || card.rarity || 'Unknown';
+            stats.rarityBreakdown[rarity] = (stats.rarityBreakdown[rarity] || 0) + quantity;
+        });
+        
+        return stats;
     }
 
     /**
