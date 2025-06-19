@@ -709,9 +709,16 @@ export class SessionManager {
                                           (cardData.price_status === 'loaded' && 
                                            (cardData.tcg_price || cardData.tcg_market_price));
             
+            this.logger.info(`[ADD CARD DEBUG] Checking pricing for card: ${cardData.name}`);
+            this.logger.info(`[ADD CARD DEBUG] importedPricing: ${cardData.importedPricing}, price_status: ${cardData.price_status}, tcg_price: ${cardData.tcg_price}, tcg_market_price: ${cardData.tcg_market_price}`);
+            this.logger.info(`[ADD CARD DEBUG] hasValidImportedPricing: ${hasValidImportedPricing}`);
+            
             // Track this card for pricing data loading only if we need to fetch pricing
             if (!hasValidImportedPricing) {
                 this.loadingPriceData.add(enhancedCard.id);
+                this.logger.info(`[ADD CARD DEBUG] Will fetch pricing for card: ${cardData.name}`);
+            } else {
+                this.logger.info(`[ADD CARD DEBUG] Will preserve existing pricing for card: ${cardData.name}`);
             }
             
             // Try to fetch enhanced pricing information only if we don't have valid imported pricing
@@ -759,9 +766,28 @@ export class SessionManager {
                     this.loadingPriceData.delete(enhancedCard.id);
                 }
             } else {
-                // Use imported pricing data
-                this.logger.info(`Using imported pricing data for: ${cardData.name} - TCG Low: $${cardData.tcg_price || 'N/A'}, TCG Market: $${cardData.tcg_market_price || 'N/A'}`);
+                // Use imported pricing data - ensure it's properly preserved
+                this.logger.info(`[PRICING PRESERVATION] Using imported pricing data for: ${cardData.name} - TCG Low: $${cardData.tcg_price || 'N/A'}, TCG Market: $${cardData.tcg_market_price || 'N/A'}`);
+                
+                // Ensure pricing data is not overwritten
+                enhancedCard.tcg_price = cardData.tcg_price;
+                enhancedCard.tcg_market_price = cardData.tcg_market_price;
+                enhancedCard.price = cardData.price || parseFloat(cardData.tcg_market_price || cardData.tcg_price || '0');
+                enhancedCard.price_status = cardData.price_status || 'imported';
+                enhancedCard.importedPricing = true;
+                
+                // Preserve other important data
+                enhancedCard.card_name = cardData.card_name || cardData.name;
+                enhancedCard.card_rarity = cardData.card_rarity || cardData.rarity;
+                enhancedCard.set_code = cardData.set_code;
+                enhancedCard.card_number = cardData.card_number;
+                enhancedCard.last_price_updt = cardData.last_price_updt;
+                enhancedCard.source_url = cardData.source_url;
+                enhancedCard.scrape_success = cardData.scrape_success;
+                
                 enhancedCard.hasEnhancedInfo = false; // Mark as not enhanced since we're using imported data
+                
+                this.logger.info(`[PRICING PRESERVATION] Pricing data preserved for: ${cardData.name} - TCG Low: $${enhancedCard.tcg_price}, TCG Market: $${enhancedCard.tcg_market_price}`);
             }
             
             // Add to session
@@ -1956,7 +1982,9 @@ export class SessionManager {
                                 cleanedCard.price = parseFloat(cleanedCard.tcg_market_price || cleanedCard.tcg_price || '0');
                             }
                             
-                            this.logger.debug(`Preserved pricing for new format card ${cleanedCard.name}: TCG Low: $${cleanedCard.tcg_price}, TCG Market: $${cleanedCard.tcg_market_price}`);
+                            this.logger.info(`[IMPORT DEBUG - NEW FORMAT] Preserved pricing for ${cleanedCard.name}: TCG Low: $${cleanedCard.tcg_price}, TCG Market: $${cleanedCard.tcg_market_price}, Status: ${cleanedCard.price_status}, ImportedPricing: ${cleanedCard.importedPricing}`);
+                        } else {
+                            this.logger.warn(`[IMPORT DEBUG - NEW FORMAT] Card ${cleanedCard.name} has no pricing data to preserve`);
                         }
                         
                         return cleanedCard;
@@ -1977,7 +2005,9 @@ export class SessionManager {
                     
                     // Log pricing data for imported cards to help with debugging
                     if (processedCard.tcg_price || processedCard.tcg_market_price) {
-                        this.logger.info(`Imported card ${index + 1} "${processedCard.name}" pricing: TCG Low: $${processedCard.tcg_price || 'N/A'}, TCG Market: $${processedCard.tcg_market_price || 'N/A'}, Status: ${processedCard.price_status || 'N/A'}`);
+                        this.logger.info(`[FINAL IMPORT DEBUG] Imported card ${index + 1} "${processedCard.name}" final pricing: TCG Low: $${processedCard.tcg_price || 'N/A'}, TCG Market: $${processedCard.tcg_market_price || 'N/A'}, Status: ${processedCard.price_status || 'N/A'}, ImportedPricing: ${processedCard.importedPricing}`);
+                    } else {
+                        this.logger.warn(`[FINAL IMPORT DEBUG] Imported card ${index + 1} "${processedCard.name}" has no pricing data after processing`);
                     }
                     
                     return processedCard;
@@ -2126,6 +2156,10 @@ export class SessionManager {
                     name: card.name || card.card_name || `Unknown Card ${index + 1}`
                 };
                 
+                // Debug: Log the original card data for pricing fields
+                this.logger.info(`[CARD PROCESSING DEBUG] Original card ${index + 1} "${card.name || card.card_name}": tcg_price=${card.tcg_price}, tcg_market_price=${card.tcg_market_price}, price_status=${card.price_status}`);
+                this.logger.info(`[CARD PROCESSING DEBUG] Processed card ${index + 1} "${processedCard.name}": tcg_price=${processedCard.tcg_price}, tcg_market_price=${processedCard.tcg_market_price}, price_status=${processedCard.price_status}`);
+                
                 // Clean up contaminated set name fields (remove URL fragments)
                 if (processedCard.booster_set_name && processedCard.booster_set_name.includes('?')) {
                     const cleanSetName = processedCard.booster_set_name.split('?')[0].trim();
@@ -2144,7 +2178,9 @@ export class SessionManager {
                         processedCard.price = parseFloat(card.tcg_market_price || card.tcg_price || '0');
                     }
                     
-                    this.logger.debug(`Preserved pricing for ${processedCard.name}: TCG Low: $${card.tcg_price}, TCG Market: $${card.tcg_market_price}`);
+                    this.logger.info(`[IMPORT DEBUG] Preserved pricing for ${processedCard.name}: TCG Low: $${card.tcg_price}, TCG Market: $${card.tcg_market_price}, Status: ${processedCard.price_status}, ImportedPricing: ${processedCard.importedPricing}`);
+                } else {
+                    this.logger.warn(`[IMPORT DEBUG] Card ${processedCard.name} has no pricing data to preserve`);
                 }
                 
                 // Process images for this card
