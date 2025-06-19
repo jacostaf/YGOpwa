@@ -962,24 +962,23 @@
 .session-cards.consolidated {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--card-size, 120px), 1fr));
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs);
 }
 
 .session-card.consolidated {
   display: flex;
   flex-direction: column;
   width: var(--card-size, 120px);
-  border: 2px solid var(--color-border);
   border-radius: var(--border-radius-md);
   background: var(--color-surface);
   transition: all var(--transition-fast);
   cursor: pointer;
   position: relative;
+  overflow: hidden;
 }
 
 .session-card.consolidated:hover {
-  border-color: var(--color-accent);
   box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
   transform: translateY(-2px);
 }
@@ -1030,7 +1029,7 @@
 }
 
 .session-card.consolidated .card-info {
-  padding: var(--spacing-xs);
+  padding: 2px var(--spacing-xs);
   text-align: center;
   flex-shrink: 0;
 }
