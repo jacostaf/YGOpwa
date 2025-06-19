@@ -683,6 +683,15 @@ export class SessionManager {
         try {
             this.logger.debug('Adding card to session with data:', cardData);
             
+            // Extract image URLs from card_images array if available (YGO API format)
+            if (cardData.card_images && cardData.card_images.length > 0) {
+                const firstImage = cardData.card_images[0];
+                cardData.image_url = firstImage.image_url;
+                cardData.image_url_small = firstImage.image_url_small;
+                cardData.image_url_cropped = firstImage.image_url_cropped;
+                this.logger.debug(`Extracted image URLs from card_images for card ${cardData.name || cardData.id}: ${firstImage.image_url}`);
+            }
+            
             // First create the basic enhanced card
             const enhancedCard = {
                 id: this.generateCardId(),
@@ -711,9 +720,10 @@ export class SessionManager {
                         set_code: enhancedInfo.set_code,
                         last_price_updt: enhancedInfo.last_price_updt,
                         
-                        // Image information
-                        image_url: enhancedInfo.image_url,
-                        image_url_small: enhancedInfo.image_url_small,
+                        // Image information - use enhanced info if available, otherwise fall back to extracted URLs
+                        image_url: enhancedInfo.image_url || cardData.image_url,
+                        image_url_small: enhancedInfo.image_url_small || cardData.image_url_small,
+                        image_url_cropped: cardData.image_url_cropped, // This is typically not in enhanced info
                         
                         // Source information
                         scrape_success: enhancedInfo.scrape_success,

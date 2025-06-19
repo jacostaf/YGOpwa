@@ -162,6 +162,9 @@ export class ImageManager {
             // For non-YGOPRODeck images, use normal loading
             const img = new Image();
             
+            // Set crossOrigin for cross-origin images to avoid tainted canvas issues
+            img.crossOrigin = 'anonymous';
+            
             // Set up event handlers
             img.onload = () => {
                 this.logger.debug(`Image downloaded successfully: ${imageUrl}`);
@@ -203,6 +206,10 @@ export class ImageManager {
             
             const proxyUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
             this.logger.debug(`Loading via proxy: ${imageUrl} -> ${proxyUrl}`);
+            
+            // Set crossOrigin to anonymous to avoid CORS tainted canvas issues
+            // This allows canvas operations like toDataURL() to work with the proxy-loaded images
+            img.crossOrigin = 'anonymous';
             
             img.onload = () => {
                 this.logger.debug(`Successfully loaded image via proxy: ${imageUrl}`);
@@ -311,10 +318,16 @@ export class ImageManager {
         const wrapper = document.createElement('div');
         wrapper.className = 'card-image-wrapper';
         
-        // Clone the image to avoid issues with multiple containers
-        const displayImg = img.cloneNode(true);
+        // Create new image element instead of cloning to fix data URL display issues
+        const displayImg = new Image();
+        displayImg.src = img.src; // Copy the src instead of cloning
         displayImg.className = 'card-image';
         displayImg.alt = 'Yu-Gi-Oh Card';
+        
+        // Copy styles from original image
+        displayImg.style.width = img.style.width;
+        displayImg.style.height = img.style.height;
+        displayImg.style.objectFit = img.style.objectFit;
         
         wrapper.appendChild(displayImg);
         container.appendChild(wrapper);

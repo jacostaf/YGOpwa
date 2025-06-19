@@ -477,9 +477,14 @@ export class PriceChecker {
             // Pricing information
             tcg_price: enhancedCardInfo.tcg_price || null,
             tcg_market_price: enhancedCardInfo.tcg_market_price || null,
-            // Image information
-            image_url: enhancedCardInfo.image_url || this.getDefaultImageUrl(cardData.cardNumber),
-            image_url_small: enhancedCardInfo.image_url_small || null
+            // Image information - extract from card_images array if available
+            image_url: enhancedCardInfo.image_url || 
+                       (cardData.card_images && cardData.card_images.length > 0 ? cardData.card_images[0].image_url : null) ||
+                       cardData.image_url || 
+                       this.getDefaultImageUrl(cardData.cardNumber),
+            image_url_small: enhancedCardInfo.image_url_small || 
+                            (cardData.card_images && cardData.card_images.length > 0 ? cardData.card_images[0].image_url_small : null) ||
+                            cardData.image_url_small
         } : {
             // Fallback to basic card information
             card_name: cardData.cardName || 'N/A',
@@ -493,8 +498,11 @@ export class PriceChecker {
             source_url: '',
             tcg_price: null,
             tcg_market_price: null,
-            image_url: this.getDefaultImageUrl(cardData.cardNumber),
-            image_url_small: null
+            image_url: (cardData.card_images && cardData.card_images.length > 0 ? cardData.card_images[0].image_url : null) ||
+                       cardData.image_url || 
+                       this.getDefaultImageUrl(cardData.cardNumber),
+            image_url_small: (cardData.card_images && cardData.card_images.length > 0 ? cardData.card_images[0].image_url_small : null) ||
+                            cardData.image_url_small
         };
         
         // Calculate aggregated statistics from source results
