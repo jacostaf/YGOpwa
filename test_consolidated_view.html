@@ -76,6 +76,99 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Additional test cards for better grid demonstration -->
+            <div class="session-card enhanced">
+                <div class="session-card-content">
+                    <div class="card-image-section">
+                        <div class="card-image-container">
+                            <div class="card-image-placeholder">
+                                <div class="placeholder-icon">🃏</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-details-section">
+                        <div class="card-header">
+                            <div class="card-name">Dark Magician</div>
+                            <div class="card-enhancement-indicator">✨</div>
+                        </div>
+                        <div class="card-info-grid">
+                            <div class="info-row">
+                                <span class="info-label">Rarity:</span>
+                                <span class="info-value">Super Rare</span>
+                            </div>
+                        </div>
+                        <div class="card-pricing">
+                            <div class="pricing-info">
+                                <div class="price-item">
+                                    <span class="price-label">TCG Low:</span>
+                                    <span class="price-value">$1.25</span>
+                                </div>
+                                <div class="price-item primary">
+                                    <span class="price-label">TCG Market:</span>
+                                    <span class="price-value">$3.99</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-controls">
+                        <div class="quantity-controls">
+                            <button class="btn btn-sm quantity-btn">-</button>
+                            <span class="quantity-display">2</span>
+                            <button class="btn btn-sm quantity-btn">+</button>
+                        </div>
+                        <div class="action-controls">
+                            <button class="btn btn-sm btn-danger remove-card">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="session-card enhanced">
+                <div class="session-card-content">
+                    <div class="card-image-section">
+                        <div class="card-image-container">
+                            <div class="card-image-placeholder">
+                                <div class="placeholder-icon">🃏</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-details-section">
+                        <div class="card-header">
+                            <div class="card-name">Red-Eyes Black Dragon</div>
+                            <div class="card-enhancement-indicator">✨</div>
+                        </div>
+                        <div class="card-info-grid">
+                            <div class="info-row">
+                                <span class="info-label">Rarity:</span>
+                                <span class="info-value">Rare</span>
+                            </div>
+                        </div>
+                        <div class="card-pricing">
+                            <div class="pricing-info">
+                                <div class="price-item">
+                                    <span class="price-label">TCG Low:</span>
+                                    <span class="price-value">$0.75</span>
+                                </div>
+                                <div class="price-item primary">
+                                    <span class="price-label">TCG Market:</span>
+                                    <span class="price-value">$1.50</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-controls">
+                        <div class="quantity-controls">
+                            <button class="btn btn-sm quantity-btn">-</button>
+                            <span class="quantity-display">1</span>
+                            <button class="btn btn-sm quantity-btn">+</button>
+                        </div>
+                        <div class="action-controls">
+                            <button class="btn btn-sm btn-danger remove-card">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -95,7 +188,14 @@
                 
                 // Convert to consolidated view
                 const cards = sessionCards.querySelectorAll('.session-card.enhanced');
-                cards.forEach(card => {
+                const testCards = [
+                    { name: 'Blue-Eyes White Dragon', rarity: 'Ultra Rare', low: '$2.50', market: '$4.99', quantity: 1 },
+                    { name: 'Dark Magician', rarity: 'Super Rare', low: '$1.25', market: '$3.99', quantity: 2 },
+                    { name: 'Red-Eyes Black Dragon', rarity: 'Rare', low: '$0.75', market: '$1.50', quantity: 1 }
+                ];
+                
+                cards.forEach((card, index) => {
+                    const cardData = testCards[index] || testCards[0];
                     card.className = 'session-card consolidated';
                     card.innerHTML = `
                         <div class="card-image-container">
@@ -104,14 +204,14 @@
                             </div>
                         </div>
                         <div class="card-info">
-                            <div class="card-name">Blue-Eyes White Dragon</div>
-                            <div class="card-rarity">Ultra Rare</div>
+                            <div class="card-name">${cardData.name}</div>
+                            <div class="card-rarity">${cardData.rarity}</div>
                             <div class="card-prices">
-                                <div class="price tcg-low">Low: $2.50</div>
-                                <div class="price tcg-market">Market: $4.99</div>
+                                <div class="price tcg-low">Low: ${cardData.low}</div>
+                                <div class="price tcg-market">Market: ${cardData.market}</div>
                             </div>
                         </div>
-                        <div class="quantity-badge">1</div>
+                        ${cardData.quantity > 1 ? `<div class="quantity-badge">${cardData.quantity}</div>` : ''}
                     `;
                 });
             } else {
