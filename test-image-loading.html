@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Loading Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .image-container {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            margin: 10px 0;
+            text-align: center;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card-image {
+            max-width: 200px;
+            max-height: 290px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .test-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.loading {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .cache-stats {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Loading Test</h1>
+    <p>This page tests the enhanced image loading functionality with service worker proxy support.</p>
+
+    <div class="test-section">
+        <h2>Service Worker Status</h2>
+        <div id="sw-status" class="status loading">Checking service worker...</div>
+        <button id="refresh-sw" class="test-button">Refresh Status</button>
+    </div>
+
+    <div class="test-section">
+        <h2>YGOPRODeck Image Loading Test</h2>
+        <div id="status1" class="status">Ready to test</div>
+        <div id="image-container1" class="image-container">
+            Click "Load Image" to test
+        </div>
+        <button id="load-image1" class="test-button">Load YGOPRODeck Image</button>
+        <button id="clear-image1" class="test-button">Clear</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Cache Statistics</h2>
+        <div id="cache-stats" class="cache-stats">Loading...</div>
+        <button id="refresh-stats" class="test-button">Refresh Stats</button>
+        <button id="clear-cache" class="test-button">Clear Cache</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Multiple Images Test</h2>
+        <div id="status2" class="status">Ready to test multiple images</div>
+        <div id="multiple-images" style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <!-- Multiple image containers will be created here -->
+        </div>
+        <button id="load-multiple" class="test-button">Load Multiple Images</button>
+        <button id="clear-multiple" class="test-button">Clear All</button>
+    </div>
+
+    <script type="module">
+        import { ImageManager } from './src/js/utils/ImageManager.js';
+
+        let imageManager;
+        
+        // Test YGOPRODeck image URLs
+        const testImages = [
+            'https://images.ygoprodeck.com/images/cards/89631139.jpg', // Blue-Eyes White Dragon
+            'https://images.ygoprodeck.com/images/cards/70903634.jpg', // Dark Magician
+            'https://images.ygoprodeck.com/images/cards/55144522.jpg', // Pot of Greed
+            'https://images.ygoprodeck.com/images/cards/34124316.jpg', // Jinzo
+            'https://images.ygoprodeck.com/images/cards/26412047.jpg'  // Exodia the Forbidden One
+        ];
+
+        async function initializeTest() {
+            try {
+                imageManager = new ImageManager();
+                updateServiceWorkerStatus();
+                updateCacheStats();
+                
+                // Set up event listeners
+                document.getElementById('refresh-sw').addEventListener('click', updateServiceWorkerStatus);
+                document.getElementById('load-image1').addEventListener('click', loadSingleImage);
+                document.getElementById('clear-image1').addEventListener('click', clearSingleImage);
+                document.getElementById('refresh-stats').addEventListener('click', updateCacheStats);
+                document.getElementById('clear-cache').addEventListener('click', clearCache);
+                document.getElementById('load-multiple').addEventListener('click', loadMultipleImages);
+                document.getElementById('clear-multiple').addEventListener('click', clearMultipleImages);
+
+                console.log('Image loading test initialized');
+            } catch (error) {
+                console.error('Failed to initialize test:', error);
+                document.getElementById('status1').textContent = 'Initialization failed: ' + error.message;
+                document.getElementById('status1').className = 'status error';
+            }
+        }
+
+        async function updateServiceWorkerStatus() {
+            const statusEl = document.getElementById('sw-status');
+            
+            try {
+                if (!('serviceWorker' in navigator)) {
+                    statusEl.textContent = 'Service Worker not supported in this browser';
+                    statusEl.className = 'status error';
+                    return;
+                }
+
+                const registration = await navigator.serviceWorker.ready;
+                if (registration && registration.active) {
+                    statusEl.textContent = 'Service Worker is active and ready';
+                    statusEl.className = 'status success';
+                } else {
+                    statusEl.textContent = 'Service Worker is not active';
+                    statusEl.className = 'status error';
+                }
+            } catch (error) {
+                statusEl.textContent = 'Service Worker status check failed: ' + error.message;
+                statusEl.className = 'status error';
+            }
+        }
+
+        async function loadSingleImage() {
+            const statusEl = document.getElementById('status1');
+            const containerEl = document.getElementById('image-container1');
+            
+            statusEl.textContent = 'Loading image...';
+            statusEl.className = 'status loading';
+            
+            try {
+                // Show loading indicator in container
+                containerEl.innerHTML = '<div>Loading image...</div>';
+                
+                // Load the first test image
+                const imageUrl = testImages[0];
+                const cardId = 'test-card-1';
+                
+                console.log('Loading image:', imageUrl);
+                
+                await imageManager.loadImageForDisplay(
+                    cardId,
+                    imageUrl,
+                    imageManager.detailModeSize,
+                    containerEl
+                );
+                
+                statusEl.textContent = 'Image loaded successfully!';
+                statusEl.className = 'status success';
+                
+                updateCacheStats();
+                
+            } catch (error) {
+                console.error('Failed to load image:', error);
+                statusEl.textContent = 'Failed to load image: ' + error.message;
+                statusEl.className = 'status error';
+                containerEl.innerHTML = '<div>Image loading failed</div>';
+            }
+        }
+
+        function clearSingleImage() {
+            document.getElementById('image-container1').innerHTML = 'Click "Load Image" to test';
+            document.getElementById('status1').textContent = 'Ready to test';
+            document.getElementById('status1').className = 'status';
+        }
+
+        async function loadMultipleImages() {
+            const statusEl = document.getElementById('status2');
+            const containerEl = document.getElementById('multiple-images');
+            
+            statusEl.textContent = 'Loading multiple images...';
+            statusEl.className = 'status loading';
+            
+            // Clear existing content
+            containerEl.innerHTML = '';
+            
+            try {
+                // Create containers for each image
+                const imageContainers = testImages.map((url, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'image-container';
+                    div.style.width = '120px';
+                    div.style.height = '150px';
+                    div.innerHTML = `Loading ${index + 1}...`;
+                    containerEl.appendChild(div);
+                    return div;
+                });
+
+                // Load all images concurrently
+                const loadPromises = testImages.map(async (imageUrl, index) => {
+                    try {
+                        await imageManager.loadImageForDisplay(
+                            `test-card-multi-${index}`,
+                            imageUrl,
+                            imageManager.normalModeSize,
+                            imageContainers[index]
+                        );
+                        console.log(`Loaded image ${index + 1}:`, imageUrl);
+                    } catch (error) {
+                        console.error(`Failed to load image ${index + 1}:`, error);
+                        imageContainers[index].innerHTML = `Failed ${index + 1}`;
+                    }
+                });
+
+                await Promise.allSettled(loadPromises);
+                
+                statusEl.textContent = 'Multiple images loading completed (check individual results)';
+                statusEl.className = 'status success';
+                
+                updateCacheStats();
+                
+            } catch (error) {
+                console.error('Failed to load multiple images:', error);
+                statusEl.textContent = 'Failed to load multiple images: ' + error.message;
+                statusEl.className = 'status error';
+            }
+        }
+
+        function clearMultipleImages() {
+            document.getElementById('multiple-images').innerHTML = '';
+            document.getElementById('status2').textContent = 'Ready to test multiple images';
+            document.getElementById('status2').className = 'status';
+        }
+
+        async function updateCacheStats() {
+            try {
+                const stats = imageManager.getCacheStats();
+                document.getElementById('cache-stats').textContent = JSON.stringify(stats, null, 2);
+            } catch (error) {
+                document.getElementById('cache-stats').textContent = 'Failed to get cache stats: ' + error.message;
+            }
+        }
+
+        async function clearCache() {
+            try {
+                imageManager.clearCache();
+                updateCacheStats();
+                console.log('Cache cleared');
+            } catch (error) {
+                console.error('Failed to clear cache:', error);
+            }
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', initializeTest);
+        
+        // Export for debugging
+        window.imageManager = () => imageManager;
+        window.testImages = testImages;
+    </script>
+</body>
+</html>

@@ -558,11 +558,14 @@ export class PriceChecker {
      * Get default image URL for a card (YGOPRODeck API format)
      */
     getDefaultImageUrl(cardNumber) {
-        // For now, we'll use a placeholder. In a real implementation, this would
-        // construct the YGOPRODeck API URL based on card number
-        // Example: https://images.ygoprodeck.com/images/cards/cardNumber.jpg
-        if (cardNumber && cardNumber.match(/^\d+$/)) {
-            return `https://images.ygoprodeck.com/images/cards/${cardNumber}.jpg`;
+        // Accept alphanumeric card numbers (common YGO format like RA04-EN106, LOB-001, etc.)
+        // YGOPRODeck images typically use numeric card IDs, but we'll attempt with the card number
+        // and let the ImageManager handle fallbacks if the image doesn't exist
+        if (cardNumber && cardNumber.match(/^[A-Z0-9\-]+$/i)) {
+            // For set-specific card numbers like RA04-EN106, we'll try using them directly
+            // The service worker and ImageManager will handle fallbacks if the image doesn't exist
+            const cleanCardNumber = cardNumber.replace(/\-/g, '');
+            return `https://images.ygoprodeck.com/images/cards/${cleanCardNumber}.jpg`;
         }
         return null;
     }
