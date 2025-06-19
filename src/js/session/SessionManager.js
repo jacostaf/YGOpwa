@@ -1809,7 +1809,7 @@ export class SessionManager {
         // Default fields if none selected
         const defaultFields = [
             'cardName', 'rarity', 'setCode', 'cardNumber', 'timestamp', 
-            'tcgLow', 'tcgMarket', 'condition', 'quantity'
+            'tcgLow', 'tcgMarket', 'sourceUrl', 'artVariant', 'condition', 'quantity'
         ];
         
         const fields = selectedFields || defaultFields;
@@ -1824,6 +1824,8 @@ export class SessionManager {
             price: 'Estimated Price',
             tcgLow: 'TCG Low Price',
             tcgMarket: 'TCG Market Price',
+            sourceUrl: 'Source URL',
+            artVariant: 'Art Variant',
             condition: 'Condition',
             quantity: 'Quantity',
             sessionId: 'Session ID',
@@ -1862,6 +1864,12 @@ export class SessionManager {
                         break;
                     case 'tcgMarket':
                         value = card.tcg_market_price || '0.00';
+                        break;
+                    case 'sourceUrl':
+                        value = card.source_url || '';
+                        break;
+                    case 'artVariant':
+                        value = card.art_variant || card.card_art_variant || 'N/A';
                         break;
                     case 'condition':
                         value = card.condition || 'Near Mint';

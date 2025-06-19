@@ -506,6 +506,14 @@ class YGORipperApp {
                                 <span>TCG Market Price</span>
                             </label>
                             <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="sourceUrl" checked>
+                                <span>Source URL</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" name="field" value="artVariant" checked>
+                                <span>Art Variant</span>
+                            </label>
+                            <label class="checkbox-option">
                                 <input type="checkbox" name="field" value="price">
                                 <span>Estimated Price</span>
                             </label>

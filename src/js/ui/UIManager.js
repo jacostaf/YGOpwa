@@ -1072,6 +1072,10 @@ export class UIManager {
                                 <span class="info-value">${cardNumber}</span>
                             </div>
                         ` : ''}
+                        <div class="info-row">
+                            <span class="info-label">Art Variant:</span>
+                            <span class="info-value">${card.art_variant || card.card_art_variant || 'N/A'}</span>
+                        </div>
                         ${setName ? `
                             <div class="info-row">
                                 <span class="info-label">Set Name:</span>
