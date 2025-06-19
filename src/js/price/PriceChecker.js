@@ -10,11 +10,18 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { ImageManager } from '../utils/ImageManager.js';
 
 export class PriceChecker {
-    constructor(storage = null, logger = null) {
+    constructor(storage = null, logger = null, config = {}) {
         this.storage = storage;
         this.logger = logger || new Logger('PriceChecker');
+        
+        // Initialize image manager for card images
+        this.imageManager = new ImageManager();
+        
+        // Backend API URL (matching SessionManager)
+        this.apiUrl = 'http://127.0.0.1:8081';
         
         // Price sources configuration
         this.priceSources = new Map([
@@ -58,12 +65,13 @@ export class PriceChecker {
         
         // Configuration
         this.config = {
-            timeout: 10000, // 10 seconds
+            timeout: 30000, // 30 seconds timeout for API calls
             retryAttempts: 3,
             retryDelay: 1000,
             enableCache: true,
             enableMultiSource: true,
-            defaultCondition: 'near-mint'
+            defaultCondition: 'near-mint',
+            ...config // Allow override of any config options
         };
         
         // Price history
@@ -98,7 +106,7 @@ export class PriceChecker {
     }
 
     /**
-     * Check price for a card
+     * Check price for a card with enhanced information including images
      */
     async checkPrice(cardData) {
         try {
@@ -119,11 +127,23 @@ export class PriceChecker {
                 }
             }
             
-            // Fetch prices from sources
+            // First try to get enhanced card information from backend API
+            let enhancedCardInfo = null;
+            try {
+                enhancedCardInfo = await this.fetchEnhancedCardInfo(cardData);
+                this.logger.info('Successfully fetched enhanced card info from backend API');
+            } catch (error) {
+                this.logger.error('Failed to fetch enhanced card info from backend API:', error.message);
+                
+                // Throw error to indicate API failure - don't silently fall back
+                throw new Error(`Backend API unavailable: ${error.message}. Please ensure the backend server is running on ${this.apiUrl}`);
+            }
+            
+            // Fetch prices from sources (this may be mock data for now)
             const results = await this.fetchPricesFromSources(cardData);
             
-            // Process and aggregate results
-            const aggregatedResult = this.aggregateResults(results, cardData);
+            // Process and aggregate results with enhanced card information
+            const aggregatedResult = this.aggregateResults(results, cardData, enhancedCardInfo);
             
             // Cache the result
             if (this.config.enableCache) {
@@ -139,6 +159,59 @@ export class PriceChecker {
         } catch (error) {
             this.logger.error('Price check failed:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Fetch enhanced card information from backend API (matching oldIteration.py format)
+     */
+    async fetchEnhancedCardInfo(cardData) {
+        try {
+            const requestPayload = {
+                card_number: cardData.cardNumber,
+                card_name: cardData.cardName || '',
+                card_rarity: cardData.rarity,
+                art_variant: cardData.artVariant || '',
+                force_refresh: cardData.forceRefresh || false
+            };
+            
+            this.logger.debug('Fetching enhanced card info from backend:', requestPayload);
+            this.logger.debug('Backend API URL:', `${this.apiUrl}/cards/price`);
+            
+            const response = await fetch(`${this.apiUrl}/cards/price`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestPayload),
+                signal: AbortSignal.timeout(this.config.timeout) // Use configurable timeout
+            });
+            
+            this.logger.debug('Backend response status:', response.status);
+            this.logger.debug('Backend response headers:', Object.fromEntries(response.headers.entries()));
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                this.logger.error(`Backend API error: ${response.status} ${response.statusText}`, errorText);
+                throw new Error(`Backend API error: ${response.status} ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            this.logger.debug('Backend response data:', data);
+            
+            if (!data.success) {
+                this.logger.error('Backend API returned failure:', data);
+                throw new Error(data.message || 'Backend API returned failure');
+            }
+            
+            this.logger.info('Successfully fetched enhanced card info from backend');
+            return data.data; // Return the card data portion
+            
+        } catch (error) {
+            this.logger.error('Backend API call failed:', error);
+            
+            // Don't automatically fall back to mock data - let the caller handle this
+            throw new Error(`Backend API call failed: ${error.message}`);
         }
     }
 
@@ -356,109 +429,75 @@ export class PriceChecker {
      * Fetch price from TCGPlayer
      */
     async fetchFromTCGPlayer(cardData) {
-        // Mock implementation - in a real app, this would call the actual API
-        // For demo purposes, return simulated data
-        
-        await this.simulateDelay(500, 2000); // Simulate API delay
-        
-        // Simulate different prices based on rarity
-        const basePrice = this.getBasePriceByRarity(cardData.rarity);
-        const variance = basePrice * 0.2; // 20% variance
-        
-        return {
-            marketPrice: basePrice + (Math.random() - 0.5) * variance,
-            lowPrice: basePrice * 0.8,
-            highPrice: basePrice * 1.3,
-            medianPrice: basePrice,
-            listings: Math.floor(Math.random() * 50) + 5,
-            lastUpdated: new Date().toISOString(),
-            url: `https://www.tcgplayer.com/search/yugioh/product?q=${encodeURIComponent(cardData.cardNumber)}`
-        };
+        // This would be the actual TCGPlayer API implementation
+        // For now, we only rely on the backend API for price data
+        throw new Error('TCGPlayer direct API not implemented - use backend API instead');
     }
 
     /**
      * Fetch price from Cardmarket
      */
     async fetchFromCardmarket(cardData) {
-        // Mock implementation
-        await this.simulateDelay(800, 2500);
-        
-        const basePrice = this.getBasePriceByRarity(cardData.rarity);
-        const variance = basePrice * 0.25;
-        
-        return {
-            averagePrice: basePrice + (Math.random() - 0.5) * variance,
-            lowPrice: basePrice * 0.75,
-            trendPrice: basePrice * 1.1,
-            germanProLow: basePrice * 0.9,
-            suggestedPrice: basePrice * 1.05,
-            listings: Math.floor(Math.random() * 30) + 3,
-            lastUpdated: new Date().toISOString(),
-            url: `https://www.cardmarket.com/en/YuGiOh/Products/Search?searchString=${encodeURIComponent(cardData.cardNumber)}`
-        };
+        // This would be the actual Cardmarket API implementation
+        // For now, we only rely on the backend API for price data
+        throw new Error('Cardmarket direct API not implemented - use backend API instead');
     }
 
     /**
      * Fetch price from PriceCharting
      */
     async fetchFromPriceCharting(cardData) {
-        // Mock implementation
-        await this.simulateDelay(300, 1500);
-        
-        const basePrice = this.getBasePriceByRarity(cardData.rarity);
-        const variance = basePrice * 0.15;
-        
-        return {
-            priceChartingPrice: basePrice + (Math.random() - 0.5) * variance,
-            ungraded: basePrice,
-            gradedPrices: {
-                psa9: basePrice * 2.5,
-                psa10: basePrice * 4.0,
-                bgs9: basePrice * 2.2,
-                bgs10: basePrice * 3.8
-            },
-            lastUpdated: new Date().toISOString(),
-            url: `https://www.pricecharting.com/search-products?q=${encodeURIComponent(cardData.cardNumber)}&type=yugioh`
-        };
+        // This would be the actual PriceCharting API implementation
+        // For now, we only rely on the backend API for price data
+        throw new Error('PriceCharting direct API not implemented - use backend API instead');
     }
 
     /**
-     * Get base price by rarity (for simulation)
+     * Aggregate results from multiple sources with enhanced card information
      */
-    getBasePriceByRarity(rarity) {
-        const rarityPrices = {
-            'common': 0.25,
-            'rare': 1.50,
-            'super': 5.00,
-            'ultra': 15.00,
-            'secret': 35.00,
-            'ghost': 75.00,
-            'prismatic': 100.00,
-            'starlight': 500.00
-        };
-        
-        return rarityPrices[rarity.toLowerCase()] || 1.00;
-    }
-
-    /**
-     * Simulate API delay
-     */
-    async simulateDelay(min = 500, max = 2000) {
-        const delay = Math.random() * (max - min) + min;
-        return new Promise(resolve => setTimeout(resolve, delay));
-    }
-
-    /**
-     * Aggregate results from multiple sources
-     */
-    aggregateResults(results, cardData) {
+    aggregateResults(results, cardData, enhancedCardInfo = null) {
         const successfulResults = results.filter(r => r.success);
         
-        if (successfulResults.length === 0) {
+        if (successfulResults.length === 0 && !enhancedCardInfo) {
             throw new Error('No price data available from any source');
         }
         
-        // Calculate aggregated statistics
+        // Use enhanced card info if available, otherwise use input data
+        const cardInfo = enhancedCardInfo ? {
+            // Enhanced card information from backend (matching oldIteration.py format)
+            card_name: enhancedCardInfo.card_name || cardData.cardName || 'N/A',
+            card_number: enhancedCardInfo.card_number || cardData.cardNumber,
+            card_rarity: enhancedCardInfo.card_rarity || cardData.rarity,
+            booster_set_name: enhancedCardInfo.booster_set_name || 'N/A',
+            card_art_variant: enhancedCardInfo.card_art_variant || cardData.artVariant || 'N/A',
+            set_code: enhancedCardInfo.set_code || 'N/A',
+            last_price_updt: enhancedCardInfo.last_price_updt || new Date().toISOString(),
+            scrape_success: enhancedCardInfo.scrape_success !== undefined ? enhancedCardInfo.scrape_success : true,
+            source_url: enhancedCardInfo.source_url || '',
+            // Pricing information
+            tcg_price: enhancedCardInfo.tcg_price || null,
+            tcg_market_price: enhancedCardInfo.tcg_market_price || null,
+            // Image information
+            image_url: enhancedCardInfo.image_url || this.getDefaultImageUrl(cardData.cardNumber),
+            image_url_small: enhancedCardInfo.image_url_small || null
+        } : {
+            // Fallback to basic card information
+            card_name: cardData.cardName || 'N/A',
+            card_number: cardData.cardNumber,
+            card_rarity: cardData.rarity,
+            booster_set_name: 'N/A',
+            card_art_variant: cardData.artVariant || 'N/A',
+            set_code: 'N/A',
+            last_price_updt: new Date().toISOString(),
+            scrape_success: false,
+            source_url: '',
+            tcg_price: null,
+            tcg_market_price: null,
+            image_url: this.getDefaultImageUrl(cardData.cardNumber),
+            image_url_small: null
+        };
+        
+        // Calculate aggregated statistics from source results
         const allPrices = [];
         const sourceData = {};
         
@@ -477,39 +516,55 @@ export class PriceChecker {
             if (data.medianPrice) allPrices.push(data.medianPrice);
         });
         
-        // Calculate aggregate statistics
-        const sortedPrices = allPrices.sort((a, b) => a - b);
-        const aggregated = {
-            averagePrice: allPrices.reduce((sum, price) => sum + price, 0) / allPrices.length,
-            medianPrice: sortedPrices[Math.floor(sortedPrices.length / 2)],
-            lowestPrice: Math.min(...allPrices),
-            highestPrice: Math.max(...allPrices),
-            priceRange: Math.max(...allPrices) - Math.min(...allPrices),
-            confidence: this.calculateConfidence(allPrices)
-        };
+        // Add backend prices to aggregation if available
+        if (cardInfo.tcg_price) allPrices.push(parseFloat(cardInfo.tcg_price));
+        if (cardInfo.tcg_market_price) allPrices.push(parseFloat(cardInfo.tcg_market_price));
         
-        // Create final result
+        // Calculate aggregate statistics
+        let aggregated = null;
+        if (allPrices.length > 0) {
+            const sortedPrices = allPrices.sort((a, b) => a - b);
+            aggregated = {
+                averagePrice: allPrices.reduce((sum, price) => sum + price, 0) / allPrices.length,
+                medianPrice: sortedPrices[Math.floor(sortedPrices.length / 2)],
+                lowestPrice: Math.min(...allPrices),
+                highestPrice: Math.max(...allPrices),
+                priceRange: Math.max(...allPrices) - Math.min(...allPrices),
+                confidence: this.calculateConfidence(allPrices)
+            };
+        }
+        
+        // Create final result (matching oldIteration.py format)
         const result = {
             success: true,
-            cardInfo: {
-                number: cardData.cardNumber,
-                name: cardData.cardName,
-                rarity: cardData.rarity,
-                condition: cardData.condition,
-                artVariant: cardData.artVariant
-            },
-            aggregated,
+            data: cardInfo, // Enhanced card information
+            aggregated, // Aggregated price statistics (may be null if no price data)
             sources: sourceData,
             metadata: {
                 timestamp: new Date().toISOString(),
                 sourcesUsed: successfulResults.length,
                 totalSources: results.length,
-                fromCache: false
+                fromCache: false,
+                hasEnhancedInfo: !!enhancedCardInfo,
+                queryTime: new Date().toLocaleString()
             }
         };
         
         this.logger.debug('Aggregated price result:', result);
         return result;
+    }
+
+    /**
+     * Get default image URL for a card (YGOPRODeck API format)
+     */
+    getDefaultImageUrl(cardNumber) {
+        // For now, we'll use a placeholder. In a real implementation, this would
+        // construct the YGOPRODeck API URL based on card number
+        // Example: https://images.ygoprodeck.com/images/cards/cardNumber.jpg
+        if (cardNumber && cardNumber.match(/^\d+$/)) {
+            return `https://images.ygoprodeck.com/images/cards/${cardNumber}.jpg`;
+        }
+        return null;
     }
 
     /**

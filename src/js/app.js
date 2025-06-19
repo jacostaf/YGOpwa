@@ -349,7 +349,16 @@ class YGORipperApp {
             
         } catch (error) {
             this.logger.error('Price check failed:', error);
-            this.uiManager.showToast('Failed to check price: ' + error.message, 'error');
+            
+            // Display error result instead of just showing toast
+            const errorResult = {
+                success: false,
+                error: error.message,
+                timestamp: new Date().toISOString()
+            };
+            
+            this.uiManager.displayPriceResults(errorResult);
+            this.uiManager.showToast('Backend API unavailable: ' + error.message, 'error');
         } finally {
             this.uiManager.setLoading(false);
         }

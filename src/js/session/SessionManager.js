@@ -396,6 +396,51 @@ export class SessionManager {
     }
 
     /**
+     * Fetch enhanced card information for session cards (reusing PriceChecker logic)
+     */
+    async fetchEnhancedCardInfo(cardData) {
+        try {
+            // Convert card data to the format expected by the backend
+            const requestPayload = {
+                card_number: cardData.setInfo?.setCode || cardData.card_number || '',
+                card_name: cardData.name || cardData.card_name || '',
+                card_rarity: cardData.displayRarity || cardData.rarity || cardData.card_rarity || '',
+                art_variant: cardData.artVariant || cardData.card_art_variant || '',
+                force_refresh: false
+            };
+            
+            this.logger.debug('Fetching enhanced card info for session card:', requestPayload);
+            
+            const response = await fetch(`${this.apiUrl}/cards/price`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestPayload),
+                signal: AbortSignal.timeout(this.config.apiTimeout)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Backend API error: ${response.status} ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.message || 'Backend API returned failure');
+            }
+            
+            return data.data; // Return the card data portion
+            
+        } catch (error) {
+            this.logger.error('Backend API not available for session card enhancement:', error.message);
+            
+            // Throw error instead of using mock data - the app requires the backend API
+            throw new Error(`Backend API unavailable for card enhancement: ${error.message}. Please ensure the backend server is running on ${this.apiUrl}`);
+        }
+    }
+
+    /**
      * Load cards for a specific set (matching ygo_ripper.py functionality)
      * Backend endpoint: /card-sets/{set_name}/cards
      */
@@ -628,7 +673,7 @@ export class SessionManager {
     }
 
     /**
-     * Add a card to the current session
+     * Add a card to the current session with enhanced price and image data
      */
     async addCard(cardData) {
         if (!this.sessionActive || !this.currentSession) {
@@ -636,13 +681,55 @@ export class SessionManager {
         }
         
         try {
-            // Enhance card data
+            this.logger.debug('Adding card to session with data:', cardData);
+            
+            // First create the basic enhanced card
             const enhancedCard = {
                 id: this.generateCardId(),
                 timestamp: new Date().toISOString(),
                 sessionId: this.currentSession.id,
                 ...cardData
             };
+            
+            // Try to fetch enhanced pricing information for the card
+            try {
+                const enhancedInfo = await this.fetchEnhancedCardInfo(cardData);
+                if (enhancedInfo) {
+                    // Merge the enhanced information
+                    Object.assign(enhancedCard, {
+                        // Price information
+                        tcg_price: enhancedInfo.tcg_price,
+                        tcg_market_price: enhancedInfo.tcg_market_price,
+                        price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
+                        
+                        // Enhanced card details
+                        card_name: enhancedInfo.card_name || cardData.name,
+                        card_number: enhancedInfo.card_number || cardData.setInfo?.setCode,
+                        card_rarity: enhancedInfo.card_rarity || cardData.displayRarity || cardData.rarity,
+                        booster_set_name: enhancedInfo.booster_set_name,
+                        card_art_variant: enhancedInfo.card_art_variant,
+                        set_code: enhancedInfo.set_code,
+                        last_price_updt: enhancedInfo.last_price_updt,
+                        
+                        // Image information
+                        image_url: enhancedInfo.image_url,
+                        image_url_small: enhancedInfo.image_url_small,
+                        
+                        // Source information
+                        scrape_success: enhancedInfo.scrape_success,
+                        source_url: enhancedInfo.source_url,
+                        
+                        // Indicate this card has enhanced information
+                        hasEnhancedInfo: true
+                    });
+                    
+                    this.logger.info(`Enhanced card info fetched for: ${cardData.name} - Price: $${enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || 'N/A'}`);
+                }
+            } catch (enhanceError) {
+                this.logger.warn('Failed to fetch enhanced card info, using basic data:', enhanceError.message);
+                // Continue with basic card data
+                enhancedCard.hasEnhancedInfo = false;
+            }
             
             // Add to session
             this.currentSession.cards.push(enhancedCard);
@@ -654,7 +741,7 @@ export class SessionManager {
             this.emitCardAdded(enhancedCard);
             this.emitSessionUpdate(this.currentSession);
             
-            this.logger.info('Card added to session:', enhancedCard.name || enhancedCard.id);
+            this.logger.info('Card added to session:', enhancedCard.name || enhancedCard.card_name || enhancedCard.id);
             return enhancedCard;
             
         } catch (error) {

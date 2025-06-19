@@ -429,105 +429,253 @@ export class UIManager {
     }
 
     /**
-     * Display price results
+     * Display price results with image loading and enhanced loading states
      */
     displayPriceResults(results) {
         if (!results || !this.elements.priceContent) {
             return;
         }
         
-        const html = this.generatePriceResultsHTML(results);
-        this.elements.priceContent.innerHTML = html;
+        // Show loading state first
+        this.elements.priceContent.innerHTML = `
+            <div class="price-loading">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Processing price information...</div>
+            </div>
+        `;
         
-        // Show results container
+        // Show results container immediately
         if (this.elements.priceResults) {
             this.elements.priceResults.classList.remove('hidden');
         }
         
-        // Scroll to results
-        this.elements.priceResults?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'nearest' 
-        });
+        // Use setTimeout to allow loading state to be visible
+        setTimeout(() => {
+            const html = this.generatePriceResultsHTML(results);
+            this.elements.priceContent.innerHTML = html;
+            
+            // Load card image if available
+            if (results.success && results.data && results.data.image_url) {
+                this.loadCardImage(results.data);
+            }
+            
+            // Scroll to results
+            this.elements.priceResults?.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'nearest' 
+            });
+        }, 200); // Small delay to show loading state
     }
 
     /**
-     * Generate HTML for price results
+     * Load and display card image with enhanced error handling
+     */
+    async loadCardImage(cardData) {
+        const imageContainer = document.getElementById('card-image-container');
+        if (!imageContainer || !cardData.image_url) return;
+        
+        try {
+            // Import ImageManager dynamically to avoid circular dependencies
+            const { ImageManager } = await import('../utils/ImageManager.js');
+            const imageManager = new ImageManager();
+            
+            // Show loading state
+            imageManager.displayLoading(imageContainer);
+            
+            // Load the image with timeout
+            const loadPromise = imageManager.loadImageForDisplay(
+                cardData.card_number,
+                cardData.image_url,
+                imageManager.detailModeSize, // Use detail mode size for price results
+                imageContainer
+            );
+            
+            // Add timeout to image loading
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Image loading timeout')), 15000); // 15 second timeout
+            });
+            
+            await Promise.race([loadPromise, timeoutPromise]);
+            
+            console.log(`✅ Successfully loaded image for card ${cardData.card_number}`);
+            
+        } catch (error) {
+            console.warn('Failed to load card image:', error.message);
+            
+            // Display placeholder on error
+            if (imageContainer) {
+                imageContainer.innerHTML = `
+                    <div class="card-image-placeholder">
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">🃏</div>
+                            <div class="placeholder-text">Image unavailable</div>
+                            <div class="placeholder-error">${error.message}</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    /**
+     * Generate HTML for price results (matching oldIteration.py format)
      */
     generatePriceResultsHTML(results) {
         if (!results.success) {
             return `
                 <div class="price-error">
-                    <h4>❌ Price Check Failed</h4>
-                    <p>${results.error || 'Unknown error occurred'}</p>
+                    <h4>❌ Backend API Not Available</h4>
+                    <p><strong>Error:</strong> ${results.error || 'Unknown error occurred'}</p>
+                    <div class="error-details">
+                        <h5>💡 To fix this:</h5>
+                        <ol>
+                            <li>Start the backend server: <code>python realBackendAPI.py</code></li>
+                            <li>Ensure the server is running on <code>http://127.0.0.1:8081</code></li>
+                            <li>Check that your firewall allows connections to port 8081</li>
+                        </ol>
+                        <p><em>Mock data has been disabled to ensure you use the real API.</em></p>
+                    </div>
                 </div>
             `;
         }
         
-        const { cardInfo, aggregated, sources, metadata } = results;
+        const { data: cardData, aggregated, sources, metadata } = results;
+        
+        // Generate card image section
+        const imageSection = cardData.image_url ? `
+            <div class="card-image-section">
+                <div class="card-image-container" id="card-image-container">
+                    <div class="card-image-loading">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">Loading image...</div>
+                    </div>
+                </div>
+            </div>
+        ` : '';
+        
+        // Generate pricing information section
+        const pricingSection = this.generatePricingSection(cardData, aggregated);
         
         return `
-            <div class="price-summary">
-                <div class="card-info">
-                    <h4>${cardInfo.name || cardInfo.number}</h4>
-                    <div class="card-details">
-                        <span class="detail">Number: ${cardInfo.number}</span>
-                        <span class="detail">Rarity: ${cardInfo.rarity}</span>
-                        <span class="detail">Condition: ${cardInfo.condition}</span>
-                        ${cardInfo.artVariant ? `<span class="detail">Variant: ${cardInfo.artVariant}</span>` : ''}
-                    </div>
+            <div class="price-results-enhanced">
+                <div class="results-header">
+                    <div class="header-icon">🃏</div>
+                    <h3>YGORIPPERUI - CARD PRICE INFORMATION</h3>
+                    <div class="header-line"></div>
                 </div>
                 
-                <div class="price-aggregate">
-                    <div class="main-price">
-                        <span class="price-label">Average Price</span>
-                        <span class="price-value">$${aggregated.averagePrice.toFixed(2)}</span>
+                <div class="results-content">
+                    ${imageSection}
+                    
+                    <div class="card-details-section">
+                        <h4>📋 CARD DETAILS:</h4>
+                        <div class="details-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Name:</span>
+                                <span class="detail-value">${cardData.card_name}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Number:</span>
+                                <span class="detail-value">${cardData.card_number}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Rarity:</span>
+                                <span class="detail-value">${cardData.card_rarity}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Set:</span>
+                                <span class="detail-value">${cardData.booster_set_name}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Art Variant:</span>
+                                <span class="detail-value">${cardData.card_art_variant}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Set Code:</span>
+                                <span class="detail-value">${cardData.set_code}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Last Updated:</span>
+                                <span class="detail-value">${cardData.last_price_updt}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="price-stats">
-                        <div class="stat">
-                            <span class="stat-label">Range</span>
-                            <span class="stat-value">$${aggregated.lowestPrice.toFixed(2)} - $${aggregated.highestPrice.toFixed(2)}</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Median</span>
-                            <span class="stat-value">$${aggregated.medianPrice.toFixed(2)}</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Confidence</span>
-                            <span class="stat-value">${(aggregated.confidence * 100).toFixed(0)}%</span>
+                    
+                    ${pricingSection}
+                    
+                    <div class="additional-info-section">
+                        <h4>ℹ️ ADDITIONAL INFORMATION:</h4>
+                        <div class="additional-grid">
+                            <div class="info-item">
+                                <span class="info-label">Scrape Success:</span>
+                                <span class="info-value">${cardData.scrape_success ? '✅ Yes' : '❌ No'}</span>
+                            </div>
+                            ${cardData.source_url ? `
+                                <div class="info-item">
+                                    <span class="info-label">Source URL:</span>
+                                    <span class="info-value">
+                                        <a href="${cardData.source_url}" target="_blank" rel="noopener">View Source</a>
+                                    </span>
+                                </div>
+                            ` : ''}
+                            ${metadata.hasEnhancedInfo ? `
+                                <div class="info-item">
+                                    <span class="info-label">Data Source:</span>
+                                    <span class="info-value">Backend API</span>
+                                </div>
+                            ` : `
+                                <div class="info-item">
+                                    <span class="info-label">Data Source:</span>
+                                    <span class="info-value">Mock Data</span>
+                                </div>
+                            `}
+                            <div class="info-item">
+                                <span class="info-label">Query Time:</span>
+                                <span class="info-value">${metadata.queryTime}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <div class="price-sources">
-                <h5>Price Sources</h5>
-                ${Object.entries(sources).map(([sourceId, source]) => `
-                    <div class="source-result">
-                        <div class="source-header">
-                            <span class="source-name">${source.source}</span>
-                            <span class="response-time">${source.responseTime}ms</span>
-                        </div>
-                        <div class="source-data">
-                            ${this.generateSourceDataHTML(sourceId, source.data)}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-            
-            <div class="price-metadata">
-                <div class="meta-item">
-                    <span class="meta-label">Updated:</span>
-                    <span class="meta-value">${new Date(metadata.timestamp).toLocaleString()}</span>
+        `;
+    }
+
+    /**
+     * Generate pricing information section
+     */
+    generatePricingSection(cardData, aggregated) {
+        const prices = [];
+        
+        // TCGPlayer prices (matching oldIteration.py format)
+        if (cardData.tcg_price) {
+            prices.push(`🎯 TCGPlayer Low: $${cardData.tcg_price}`);
+        }
+        if (cardData.tcg_market_price) {
+            prices.push(`📈 TCGPlayer Market: $${cardData.tcg_market_price}`);
+        }
+        
+        // Add aggregated prices if available
+        if (aggregated && aggregated.averagePrice) {
+            prices.push(`📊 Average Price: $${aggregated.averagePrice.toFixed(2)}`);
+            prices.push(`📉 Lowest Price: $${aggregated.lowestPrice.toFixed(2)}`);
+            prices.push(`📈 Highest Price: $${aggregated.highestPrice.toFixed(2)}`);
+            prices.push(`📍 Median Price: $${aggregated.medianPrice.toFixed(2)}`);
+        }
+        
+        const pricesHTML = prices.length > 0 ? 
+            prices.map(price => `<div class="price-item">${price}</div>`).join('') :
+            '<div class="price-item">❌ No pricing data available</div>';
+        
+        return `
+            <div class="pricing-section">
+                <h4>💰 PRICING INFORMATION:</h4>
+                <div class="pricing-grid">
+                    ${pricesHTML}
                 </div>
-                <div class="meta-item">
-                    <span class="meta-label">Sources:</span>
-                    <span class="meta-value">${metadata.sourcesUsed}/${metadata.totalSources}</span>
-                </div>
-                ${metadata.fromCache ? `
-                    <div class="meta-item">
-                        <span class="meta-label">From Cache:</span>
-                        <span class="meta-value">Yes (${Math.round(metadata.cacheAge / 1000)}s ago)</span>
+                ${aggregated ? `
+                    <div class="price-confidence">
+                        <span class="confidence-label">Confidence Level:</span>
+                        <span class="confidence-value">${(aggregated.confidence * 100).toFixed(0)}%</span>
                     </div>
                 ` : ''}
             </div>
@@ -826,29 +974,101 @@ export class UIManager {
     }
 
     /**
-     * Create a session card element with quantity adjustment
+     * Create a session card element with enhanced display including images and detailed pricing
      */
     createSessionCardElement(card) {
         const cardDiv = document.createElement('div');
-        cardDiv.className = 'session-card';
+        cardDiv.className = 'session-card enhanced';
         cardDiv.dataset.cardId = card.id;
         
+        // Determine display values with enhanced info priority
+        const cardName = card.card_name || card.name || 'Unknown Card';
+        const rarity = card.card_rarity || card.displayRarity || card.rarity || 'Unknown';
+        const setCode = card.set_code || card.setInfo?.setCode || '';
+        const setName = card.booster_set_name || card.setInfo?.setName || '';
+        const price = card.price || parseFloat(card.tcg_market_price || card.tcg_price || '0');
+        const hasEnhancedInfo = card.hasEnhancedInfo || false;
+        
+        // Create the enhanced card HTML
         cardDiv.innerHTML = `
-            <div class="card-info">
-                <div class="card-name">${card.name || 'Unknown Card'}</div>
-                <div class="card-details">
-                    <span class="card-rarity">${card.displayRarity || card.rarity}</span>
-                    ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
-                    ${card.price ? `<span class="card-price">$${card.price.toFixed(2)}</span>` : ''}
+            <div class="session-card-content">
+                <div class="card-image-section">
+                    <div class="card-image-container" data-card-id="${card.id}">
+                        ${card.image_url ? `
+                            <div class="card-image-loading">
+                                <div class="loading-spinner-small"></div>
+                                <div class="loading-text-small">Loading...</div>
+                            </div>
+                        ` : `
+                            <div class="card-image-placeholder">
+                                <div class="placeholder-icon">🃏</div>
+                            </div>
+                        `}
+                    </div>
                 </div>
-            </div>
-            <div class="card-controls">
-                <div class="quantity-controls">
-                    <button class="btn btn-sm quantity-btn decrease-qty" data-card-id="${card.id}" title="Decrease Quantity">-</button>
-                    <span class="quantity-display">${card.quantity || 1}</span>
-                    <button class="btn btn-sm quantity-btn increase-qty" data-card-id="${card.id}" title="Increase Quantity">+</button>
+                
+                <div class="card-details-section">
+                    <div class="card-header">
+                        <div class="card-name">${cardName}</div>
+                        <div class="card-enhancement-indicator">
+                            ${hasEnhancedInfo ? '✨' : '📦'}
+                        </div>
+                    </div>
+                    
+                    <div class="card-info-grid">
+                        <div class="info-row">
+                            <span class="info-label">Rarity:</span>
+                            <span class="info-value rarity-${rarity.toLowerCase().replace(/\s+/g, '-')}">${rarity}</span>
+                        </div>
+                        ${setCode ? `
+                            <div class="info-row">
+                                <span class="info-label">Set:</span>
+                                <span class="info-value">${setCode}</span>
+                            </div>
+                        ` : ''}
+                        ${setName ? `
+                            <div class="info-row">
+                                <span class="info-label">Set Name:</span>
+                                <span class="info-value set-name">${setName}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="card-pricing">
+                        ${price > 0 ? `
+                            <div class="pricing-info">
+                                ${card.tcg_price ? `
+                                    <div class="price-item">
+                                        <span class="price-label">TCG Low:</span>
+                                        <span class="price-value">$${card.tcg_price}</span>
+                                    </div>
+                                ` : ''}
+                                ${card.tcg_market_price ? `
+                                    <div class="price-item primary">
+                                        <span class="price-label">TCG Market:</span>
+                                        <span class="price-value">$${card.tcg_market_price}</span>
+                                    </div>
+                                ` : `
+                                    <div class="price-item primary">
+                                        <span class="price-label">Est. Value:</span>
+                                        <span class="price-value">$${price.toFixed(2)}</span>
+                                    </div>
+                                `}
+                            </div>
+                        ` : `
+                            <div class="price-unavailable">Price data unavailable</div>
+                        `}
+                    </div>
                 </div>
-                <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+                
+                <div class="card-controls">
+                    <div class="quantity-controls">
+                        <button class="btn btn-sm quantity-btn decrease-qty" data-card-id="${card.id}" title="Decrease Quantity">-</button>
+                        <span class="quantity-display">${card.quantity || 1}</span>
+                        <button class="btn btn-sm quantity-btn increase-qty" data-card-id="${card.id}" title="Increase Quantity">+</button>
+                    </div>
+                    <button class="btn btn-sm btn-danger remove-card" data-card-id="${card.id}" title="Remove Card">🗑️</button>
+                </div>
             </div>
         `;
         
@@ -872,7 +1092,56 @@ export class UIManager {
             this.emitCardRemove(card.id);
         });
         
+        // Load card image if available
+        if (card.image_url) {
+            this.loadSessionCardImage(card, cardDiv);
+        }
+        
         return cardDiv;
+    }
+
+    /**
+     * Load and display image for session card
+     */
+    async loadSessionCardImage(card, cardElement) {
+        const imageContainer = cardElement.querySelector('.card-image-container');
+        if (!imageContainer) return;
+        
+        try {
+            // Import ImageManager dynamically to avoid circular dependencies
+            const { ImageManager } = await import('../utils/ImageManager.js');
+            const imageManager = new ImageManager();
+            
+            // Use normal mode size for session cards (not as large as detail mode)
+            const cardImagePromise = imageManager.loadImageForDisplay(
+                card.card_number || card.id,
+                card.image_url,
+                imageManager.normalModeSize,
+                imageContainer
+            );
+            
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Session card image loading timeout')), 10000); // 10 second timeout
+            });
+            
+            await Promise.race([cardImagePromise, timeoutPromise]);
+            
+            console.log(`✅ Successfully loaded session card image for ${card.card_name || card.name}`);
+            
+        } catch (error) {
+            console.warn('Failed to load session card image:', error.message);
+            
+            // Display placeholder on error
+            if (imageContainer) {
+                imageContainer.innerHTML = `
+                    <div class="card-image-placeholder error">
+                        <div class="placeholder-icon">🃏</div>
+                        <div class="placeholder-text">Image unavailable</div>
+                    </div>
+                `;
+            }
+        }
     }
 
     /**
