@@ -44,6 +44,9 @@ export class UIManager {
         this.isLoading = false;
         this.toasts = [];
         this.modals = [];
+        this.isConsolidatedView = false;
+        this.cardSize = 120;
+        this.currentPopup = null;
         
         // Configuration
         this.config = {
@@ -141,6 +144,12 @@ export class UIManager {
         this.elements.exportSessionBtn = document.getElementById('export-session-btn');
         this.elements.importSessionBtn = document.getElementById('import-session-btn');
         this.elements.clearSessionBtn = document.getElementById('clear-session-btn');
+        
+        // View control elements
+        this.elements.consolidatedViewToggle = document.getElementById('consolidated-view-toggle');
+        this.elements.cardSizeSlider = document.getElementById('card-size-slider');
+        this.elements.cardSizeValue = document.getElementById('card-size-value');
+        this.elements.cardSizeSection = document.getElementById('card-size-section');
         
         // Status and utility elements
         this.elements.appStatus = document.getElementById('app-status');
@@ -259,6 +268,19 @@ export class UIManager {
         if (this.elements.clearSessionBtn) {
             this.elements.clearSessionBtn.addEventListener('click', () => {
                 this.emitSessionClear();
+            });
+        }
+
+        // View control event listeners
+        if (this.elements.consolidatedViewToggle) {
+            this.elements.consolidatedViewToggle.addEventListener('change', (e) => {
+                this.handleViewToggle(e.target.checked);
+            });
+        }
+
+        if (this.elements.cardSizeSlider) {
+            this.elements.cardSizeSlider.addEventListener('input', (e) => {
+                this.handleCardSizeChange(parseInt(e.target.value));
             });
         }
 
@@ -1005,9 +1027,14 @@ export class UIManager {
             this.elements.emptySession.classList.add('hidden');
         }
         
-        // Display cards
+        // Apply view mode classes
+        this.updateSessionViewMode();
+        
+        // Display cards based on current view mode
         cards.forEach(card => {
-            const cardElement = this.createSessionCardElement(card);
+            const cardElement = this.isConsolidatedView ? 
+                this.createConsolidatedCardElement(card) : 
+                this.createSessionCardElement(card);
             this.elements.sessionCards.appendChild(cardElement);
         });
     }
@@ -1162,6 +1189,194 @@ export class UIManager {
         }
         
         return cardDiv;
+    }
+
+    /**
+     * Handle view toggle between normal and consolidated
+     */
+    handleViewToggle(isConsolidated) {
+        this.isConsolidatedView = isConsolidated;
+        
+        // Show/hide card size controls
+        if (this.elements.cardSizeSection) {
+            this.elements.cardSizeSection.style.display = isConsolidated ? 'flex' : 'none';
+        }
+        
+        // Update view mode
+        this.updateSessionViewMode();
+        
+        // Refresh session cards display if we have cards
+        if (this.app && this.app.sessionManager && this.app.sessionManager.currentSession) {
+            this.displaySessionCards(this.app.sessionManager.currentSession.cards || []);
+        }
+    }
+
+    /**
+     * Handle card size slider change
+     */
+    handleCardSizeChange(size) {
+        this.cardSize = size;
+        
+        // Update size display
+        if (this.elements.cardSizeValue) {
+            this.elements.cardSizeValue.textContent = `${size}px`;
+        }
+        
+        // Update CSS custom property
+        if (this.elements.sessionCards) {
+            this.elements.sessionCards.style.setProperty('--card-size', `${size}px`);
+        }
+    }
+
+    /**
+     * Update session view mode classes
+     */
+    updateSessionViewMode() {
+        if (!this.elements.sessionCards) return;
+        
+        if (this.isConsolidatedView) {
+            this.elements.sessionCards.classList.add('consolidated');
+            this.elements.sessionCards.style.setProperty('--card-size', `${this.cardSize}px`);
+        } else {
+            this.elements.sessionCards.classList.remove('consolidated');
+            this.elements.sessionCards.style.removeProperty('--card-size');
+        }
+    }
+
+    /**
+     * Create a consolidated card element for grid view
+     */
+    createConsolidatedCardElement(card) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'session-card consolidated';
+        cardDiv.dataset.cardId = card.id;
+        
+        // Determine display values
+        const cardName = card.card_name || card.name || 'Unknown Card';
+        const rarity = card.card_rarity || card.displayRarity || card.rarity || 'Unknown';
+        const tcgLow = card.tcg_price ? parseFloat(card.tcg_price) : 0;
+        const tcgMarket = card.tcg_market_price ? parseFloat(card.tcg_market_price) : 0;
+        const quantity = card.quantity || 1;
+        
+        // Create the consolidated card HTML
+        cardDiv.innerHTML = `
+            <div class="card-image-container" data-card-id="${card.id}">
+                ${card.image_url ? `
+                    <div class="card-image-loading">
+                        <div class="loading-spinner-small"></div>
+                    </div>
+                ` : `
+                    <div class="card-image-placeholder">
+                        <div class="placeholder-icon">🃏</div>
+                    </div>
+                `}
+            </div>
+            <div class="card-info">
+                <div class="card-name">${cardName}</div>
+                <div class="card-rarity">${rarity}</div>
+                <div class="card-prices">
+                    ${tcgLow > 0 ? `<div class="price tcg-low">Low: $${tcgLow.toFixed(2)}</div>` : ''}
+                    ${tcgMarket > 0 ? `<div class="price tcg-market">Market: $${tcgMarket.toFixed(2)}</div>` : ''}
+                </div>
+            </div>
+            ${quantity > 1 ? `<div class="quantity-badge">${quantity}</div>` : ''}
+        `;
+        
+        // Add hover event listeners for popup
+        cardDiv.addEventListener('mouseenter', (e) => {
+            this.showCardPopup(e, card);
+        });
+        
+        cardDiv.addEventListener('mouseleave', () => {
+            this.hideCardPopup();
+        });
+        
+        // Load card image if available
+        if (card.image_url) {
+            this.loadSessionCardImage(card, cardDiv);
+        }
+        
+        return cardDiv;
+    }
+
+    /**
+     * Show card popup on hover
+     */
+    showCardPopup(event, card) {
+        // Remove existing popup
+        this.hideCardPopup();
+        
+        const popup = document.createElement('div');
+        popup.className = 'card-popup';
+        popup.id = 'card-popup';
+        
+        // Create popup content
+        const setCode = card.set_code || card.setInfo?.setCode || 'N/A';
+        const setName = card.booster_set_name || card.setInfo?.setName || 'N/A';
+        const cardNumber = card.card_number || 'N/A';
+        const lastUpdate = card.last_price_updt || 'N/A';
+        const sourceUrl = card.source_url || 'N/A';
+        const artVariant = card.art_variant || card.card_art_variant || 'N/A';
+        
+        popup.innerHTML = `
+            <div class="popup-header">${card.card_name || card.name || 'Unknown Card'}</div>
+            <div class="popup-content">
+                <span class="popup-label">Set Code:</span>
+                <span class="popup-value">${setCode}</span>
+                <span class="popup-label">Set Name:</span>
+                <span class="popup-value">${setName}</span>
+                <span class="popup-label">Card Number:</span>
+                <span class="popup-value">${cardNumber}</span>
+                <span class="popup-label">Art Variant:</span>
+                <span class="popup-value">${artVariant}</span>
+                <span class="popup-label">Last Update:</span>
+                <span class="popup-value">${lastUpdate}</span>
+                ${sourceUrl !== 'N/A' ? `
+                    <span class="popup-label">Source URL:</span>
+                    <span class="popup-value url" onclick="window.open('${sourceUrl}', '_blank')">${sourceUrl}</span>
+                ` : ''}
+            </div>
+        `;
+        
+        // Position popup
+        document.body.appendChild(popup);
+        
+        const rect = event.currentTarget.getBoundingClientRect();
+        const popupRect = popup.getBoundingClientRect();
+        
+        // Position popup above the card if there's space, otherwise below
+        let top = rect.top - popupRect.height - 10;
+        if (top < 10) {
+            top = rect.bottom + 10;
+        }
+        
+        // Keep popup within viewport horizontally
+        let left = rect.left + (rect.width / 2) - (popupRect.width / 2);
+        if (left < 10) {
+            left = 10;
+        } else if (left + popupRect.width > window.innerWidth - 10) {
+            left = window.innerWidth - popupRect.width - 10;
+        }
+        
+        popup.style.left = `${left}px`;
+        popup.style.top = `${top}px`;
+        
+        // Trigger animation
+        requestAnimationFrame(() => {
+            popup.classList.add('show');
+        });
+        
+        this.currentPopup = popup;
+    }
+
+    /**
+     * Hide card popup
+     */
+    hideCardPopup() {
+        if (this.currentPopup) {
+            this.currentPopup.remove();
+            this.currentPopup = null;
+        }
     }
 
     /**

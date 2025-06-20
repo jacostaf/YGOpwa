@@ -71,3 +71,7 @@ package-lock.json
 # Test outputs
 test-results/
 screenshots/
+
+# Testing and temporary files
+test_*.html
+test_*.js

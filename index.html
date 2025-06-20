@@ -304,6 +304,22 @@
                             </div>
                         </div>
                         
+                        <!-- View Controls -->
+                        <div class="view-controls">
+                            <div class="view-toggle-section">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="consolidated-view-toggle">
+                                    <span class="toggle-slider"></span>
+                                    <span class="toggle-label">Consolidated View</span>
+                                </label>
+                            </div>
+                            <div class="card-size-section" id="card-size-section" style="display: none;">
+                                <label for="card-size-slider">Card Size:</label>
+                                <input type="range" id="card-size-slider" min="80" max="200" value="120" step="10">
+                                <span class="size-value" id="card-size-value">120px</span>
+                            </div>
+                        </div>
+                        
                         <!-- Session Cards List -->
                         <div class="session-cards" id="session-cards">
                             <div class="empty-state" id="empty-session">
