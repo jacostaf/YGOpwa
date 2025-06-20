@@ -13,6 +13,7 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { FuzzyMatch } from '../utils/FuzzyMatch.js';
 
 export class VoiceEngine {
     constructor(permissionManager, logger = null) {
@@ -41,7 +42,7 @@ export class VoiceEngine {
             retryDelay: 1000,
             // Yu-Gi-Oh specific settings
             cardNameOptimization: true,
-            confidenceThreshold: 0.7
+            confidenceThreshold: 0.5  // Lowered from 0.7 to show more potential matches
         };
         
         // Event listeners
@@ -590,57 +591,510 @@ export class VoiceEngine {
             return;
         }
         
-        this.logger.info('Loading Yu-Gi-Oh card name optimizations...');
+        this.logger.info('Loading comprehensive Yu-Gi-Oh card name optimizations...');
         
-        // Common Yu-Gi-Oh terms and their phonetic variations
-        this.commonCardTerms = [
-            // Card types
-            { pattern: /dragun/gi, replacement: 'Dragon' },
-            { pattern: /majician/gi, replacement: 'Magician' },
-            { pattern: /warriar/gi, replacement: 'Warrior' },
-            { pattern: /elemental/gi, replacement: 'Elemental' },
-            
-            // Common card names
-            { pattern: /blue.*i.*white.*dragun/gi, replacement: 'Blue-Eyes White Dragon' },
-            { pattern: /dark.*majician/gi, replacement: 'Dark Magician' },
-            { pattern: /red.*i.*black.*dragun/gi, replacement: 'Red-Eyes Black Dragon' },
-            { pattern: /time.*wiserd/gi, replacement: 'Time Wizard' },
-            
-            // Common misrecognitions
-            { pattern: /pott?.*of.*greed/gi, replacement: 'Pot of Greed' },
-            { pattern: /mirror.*four.*ce/gi, replacement: 'Mirror Force' },
-            { pattern: /ryu.*gin.*jin/gi, replacement: 'Raigeki' },
-        ];
+        // Initialize phonetic and linguistic mapping systems
+        this.initializePhoneticMappings();
+        this.initializeLanguageSpecificMappings();
         
-        this.logger.info(`Loaded ${this.commonCardTerms.length} card name optimizations`);
+        this.logger.info('Loaded comprehensive dynamic card name optimization system');
     }
 
     /**
-     * Optimize card name recognition
+     * Initialize comprehensive phonetic mappings for voice recognition
+     */
+    initializePhoneticMappings() {
+        // Base phonetic substitutions for voice recognition errors
+        this.phoneticMappings = {
+            // Common voice recognition confusions
+            'yu': ['you', 'u', 'yuu'],
+            'gi': ['gee', 'ji', 'jee'],
+            'oh': ['o', 'oo', 'ow'],
+            'dragun': ['dragon', 'dragoon'],
+            'majician': ['magician', 'magishun'],
+            'warriar': ['warrior', 'worrier'],
+            'elemental': ['elemental', 'element'],
+            'spellcaster': ['spell', 'caster'],
+            'fiend': ['fend', 'friend'],
+            
+            // Japanese romanization variations
+            'ou': ['oo', 'o', 'ow'],
+            'ei': ['ay', 'ai', 'e'],
+            'uu': ['u', 'oo'],
+            'ii': ['i', 'ee'],
+            'aa': ['a', 'ah'],
+            'nn': ['n', 'mm'],
+            'tsu': ['su', 'tsu', 'zu'],
+            'chi': ['chi', 'ti'],
+            'shi': ['shi', 'si'],
+            'ji': ['ji', 'zi'],
+            'zu': ['zu', 'su'],
+            'fu': ['fu', 'hu'],
+            
+            // Common card type variations
+            'dragon': ['dragun', 'dragoon', 'drago'],
+            'magician': ['majician', 'magishun', 'mage'],
+            'warrior': ['warriar', 'worrier', 'war'],
+            'machine': ['mach', 'machin'],
+            'beast': ['best', 'beast'],
+            'aqua': ['agua', 'aqua'],
+            'winged': ['wing', 'winged'],
+            'thunder': ['under', 'thunder'],
+            'zombie': ['zomb', 'zombie'],
+            'plant': ['plan', 'plant'],
+            'insect': ['insec', 'insect'],
+            'rock': ['rok', 'rock'],
+            'pyro': ['fire', 'pyro'],
+            'sea': ['see', 'sea'],
+            'divine': ['divin', 'divine'],
+            
+            // Archetype-specific mappings
+            'hero': ['hiro', 'heero', 'hero'],
+            'neo': ['new', 'neo'],
+            'cyber': ['siber', 'cyber'],
+            'crystal': ['cristal', 'crystal'],
+            'ancient': ['ansient', 'ancient'],
+            'gladiator': ['gladiater', 'gladiator'],
+            'blackwing': ['black wing', 'blackwing'],
+            'lightsworn': ['light sworn', 'lightsworn'],
+            'six samurai': ['six samurai', 'samurai'],
+            
+            // Japanese particle handling
+            'no': ['of', 'the', 'no'], // の particle
+            'ni': ['to', 'in', 'ni'], // に particle
+            'wa': ['wa', 'ha'], // は particle
+            'ga': ['ga', 'ka'], // が particle
+            'wo': ['wo', 'o'], // を particle
+            'de': ['de', 'at'], // で particle
+            
+            // Common Japanese words in card names (enhanced with user-reported issues)
+            'mitsurugi': ['mitsurugi', 'mitsurgi', 'mitsu rugi', 'mitsu-rugi', 'mit surugi', 'mitsuru gi', 'misurugi', 'mizurugi', 'mitzurugi'],
+            'mitama': ['mitama', 'mi tama', 'mi-tama', 'meta ma', 'mit ama'],
+            'futsu': ['futsu', 'fu tsu', 'fu-tsu', 'futs u', 'foot su', 'fusu', 'fuzu', 'futzu', 'hutsu', 'putsu'],
+            'infinity': ['infinity', 'infiniti', 'infin ity', 'infin-ity', 'in finity', 'nfinity'],
+            'ten': ['ten', '10', 'tin', 'tan'],
+            'kage': ['kage', 'ka ge', 'cage'],
+            'yami': ['yami', 'ya mi', 'dark'],
+            'hikari': ['hikari', 'hi kari', 'light'],
+            'oni': ['oni', 'o ni', 'demon'],
+            'kami': ['kami', 'ka mi', 'god'],
+            'ryu': ['ryu', 'ru', 'dragon'],
+            'kitsune': ['kitsune', 'kit sune', 'fox'],
+            'tengu': ['tengu', 'ten gu'],
+            'yokai': ['yokai', 'yo kai'],
+            'bushido': ['bushido', 'bu shi do'],
+            'samurai': ['samurai', 'sa mu rai'],
+            'ninja': ['ninja', 'nin ja'],
+            'shogun': ['shogun', 'sho gun'],
+            'senshi': ['senshi', 'sen shi', 'warrior'],
+            'maho': ['maho', 'ma ho', 'magic'],
+            'densetsu': ['densetsu', 'den setsu', 'legend'],
+            'kokoro': ['kokoro', 'ko ko ro', 'heart'],
+            'tamashii': ['tamashii', 'ta ma shii', 'soul'],
+            'ikari': ['ikari', 'i ka ri', 'anger'],
+            'chikara': ['chikara', 'chi ka ra', 'power']
+        };
+    }
+
+    /**
+     * Initialize language-specific mappings
+     */
+    initializeLanguageSpecificMappings() {
+        // Common compound word patterns in Yu-Gi-Oh
+        this.compoundWordPatterns = [
+            // Spacing variations
+            { pattern: /(\w+)\s+(\w+)/g, variations: ['$1$2', '$1-$2', '$1 $2'] },
+            
+            // Particle removal for Japanese names
+            { pattern: /(\w+)\s+no\s+(\w+)/gi, variations: ['$1 $2', '$1$2', '$1-$2'] },
+            { pattern: /(\w+)\s+ni\s+(\w+)/gi, variations: ['$1 $2', '$1$2', '$1-$2'] },
+            { pattern: /(\w+)\s+wa\s+(\w+)/gi, variations: ['$1 $2', '$1$2', '$1-$2'] },
+            { pattern: /(\w+)\s+ga\s+(\w+)/gi, variations: ['$1 $2', '$1$2', '$1-$2'] },
+            { pattern: /(\w+)\s+wo\s+(\w+)/gi, variations: ['$1 $2', '$1$2', '$1-$2'] },
+            { pattern: /(\w+)\s+de\s+(\w+)/gi, variations: ['$1 $2', '$1$2', '$1-$2'] },
+            
+            // Common archetype patterns
+            { pattern: /elemental\s+hero/gi, variations: ['Elemental HERO', 'ElementalHERO', 'Elemental-HERO'] },
+            { pattern: /destiny\s+hero/gi, variations: ['Destiny HERO', 'DestinyHERO', 'Destiny-HERO'] },
+            { pattern: /evil\s+hero/gi, variations: ['Evil HERO', 'EvilHERO', 'Evil-HERO'] },
+            { pattern: /masked\s+hero/gi, variations: ['Masked HERO', 'MaskedHERO', 'Masked-HERO'] },
+            { pattern: /vision\s+hero/gi, variations: ['Vision HERO', 'VisionHERO', 'Vision-HERO'] },
+            { pattern: /six\s+samurai/gi, variations: ['Six Samurai', 'SixSamurai', 'Six-Samurai'] },
+            { pattern: /cyber\s+dragon/gi, variations: ['Cyber Dragon', 'CyberDragon', 'Cyber-Dragon'] },
+            { pattern: /blue\s+eyes/gi, variations: ['Blue-Eyes', 'BlueEyes', 'Blue Eyes'] },
+            { pattern: /red\s+eyes/gi, variations: ['Red-Eyes', 'RedEyes', 'Red Eyes'] },
+            { pattern: /time\s+wizard/gi, variations: ['Time Wizard', 'TimeWizard', 'Time-Wizard'] }
+        ];
+        
+        // Number word to digit mappings
+        this.numberMappings = {
+            'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+            'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9',
+            'ten': '10', 'eleven': '11', 'twelve': '12', 'thirteen': '13',
+            'fourteen': '14', 'fifteen': '15', 'sixteen': '16', 'seventeen': '17',
+            'eighteen': '18', 'nineteen': '19', 'twenty': '20'
+        };
+    }
+
+    /**
+     * Optimize card name recognition using comprehensive dynamic variant generation
      */
     optimizeCardNameRecognition(result) {
         if (!this.config.cardNameOptimization) {
             return result;
         }
         
-        let optimizedTranscript = result.transcript;
+        const originalTranscript = result.transcript;
         
-        // Apply pattern replacements
-        for (const term of this.commonCardTerms) {
-            optimizedTranscript = optimizedTranscript.replace(term.pattern, term.replacement);
-        }
+        // Generate comprehensive variants for the input
+        const variants = this.generateCardNameVariants(originalTranscript);
         
-        // Clean up common issues
-        optimizedTranscript = optimizedTranscript
-            .replace(/\s+/g, ' ') // Multiple spaces
-            .replace(/[^\w\s-]/g, '') // Special characters except hyphens
-            .trim();
+        // Select the best variant (for now, return the first one as it includes the original)
+        // In a real implementation, this would be used for fuzzy matching against a card database
+        const optimizedTranscript = variants[0];
         
         return {
             transcript: optimizedTranscript,
             confidence: result.confidence,
-            originalTranscript: result.transcript
+            originalTranscript: originalTranscript,
+            variants: variants // Include all variants for debugging/matching
         };
+    }
+
+    /**
+     * Generate comprehensive card name variants for better voice recognition matching
+     * Inspired by oldIteration.py's sophisticated approach
+     */
+    generateCardNameVariants(inputName) {
+        if (!inputName || typeof inputName !== 'string') {
+            return [inputName || ''];
+        }
+        
+        const variants = new Set([inputName]); // Use Set to avoid duplicates
+        const lowerInput = inputName.toLowerCase().trim();
+        
+        // Step 1: Apply phonetic substitutions
+        const phoneticVariants = this.generatePhoneticVariants(lowerInput);
+        phoneticVariants.forEach(variant => variants.add(variant));
+        
+        // Step 2: Handle compound words and spacing variations
+        const compoundVariants = this.generateCompoundWordVariants(lowerInput);
+        compoundVariants.forEach(variant => variants.add(variant));
+        
+        // Step 3: Handle Japanese particles and linguistic patterns
+        const linguisticVariants = this.generateLinguisticVariants(lowerInput);
+        linguisticVariants.forEach(variant => variants.add(variant));
+        
+        // Step 4: Number word to digit conversion
+        const numberVariants = this.convertNumberWordsToDigits(lowerInput);
+        numberVariants.forEach(variant => variants.add(variant));
+        
+        // Step 5: Apply all phonetic mappings to all existing variants
+        const enhancedVariants = new Set();
+        for (const variant of variants) {
+            enhancedVariants.add(variant);
+            const enhanced = this.applyAllPhoneticMappings(variant);
+            enhanced.forEach(v => enhancedVariants.add(v));
+        }
+        
+        // Step 6: Clean up variants
+        const cleanedVariants = Array.from(enhancedVariants)
+            .map(variant => this.cleanUpVariant(variant))
+            .filter(variant => variant && variant.length > 0)
+            .filter((variant, index, array) => array.indexOf(variant) === index); // Remove duplicates
+        
+        this.logger.debug(`Generated ${cleanedVariants.length} variants for "${inputName}":`, cleanedVariants.slice(0, 10));
+        
+        return cleanedVariants;
+    }
+
+    /**
+     * Generate phonetic variants for better voice recognition
+     */
+    generatePhoneticVariants(input) {
+        const variants = new Set([input]);
+        
+        // Apply all phonetic mappings
+        for (const [original, alternatives] of Object.entries(this.phoneticMappings)) {
+            const regex = new RegExp(`\\b${original}\\b`, 'gi');
+            if (regex.test(input)) {
+                for (const alt of alternatives) {
+                    const variant = input.replace(regex, alt);
+                    variants.add(variant);
+                }
+            }
+        }
+        
+        return Array.from(variants);
+    }
+
+    /**
+     * Generate compound word variants (enhanced for better voice recognition)
+     */
+    generateCompoundWordVariants(input) {
+        const variants = new Set([input]);
+        const words = input.split(/\s+/);
+        
+        if (words.length >= 2) {
+            // Complete compound (no spaces)
+            variants.add(words.join(''));
+            
+            // Hyphenated
+            variants.add(words.join('-'));
+            
+            // Underscored (sometimes used in databases)
+            variants.add(words.join('_'));
+            
+            // Various partial combinations for multi-word terms
+            for (let i = 1; i < words.length; i++) {
+                // Split at position i
+                const leftPart = words.slice(0, i).join('');
+                const rightPart = words.slice(i).join(' ');
+                variants.add(`${leftPart} ${rightPart}`);
+                
+                const leftPartSpaced = words.slice(0, i).join(' ');
+                const rightPartCompound = words.slice(i).join('');
+                variants.add(`${leftPartSpaced} ${rightPartCompound}`);
+                
+                // Mixed with hyphens
+                const leftPartHyphen = words.slice(0, i).join('-');
+                const rightPartHyphen = words.slice(i).join('-');
+                variants.add(`${leftPartHyphen} ${rightPartHyphen}`);
+            }
+            
+            // Enhanced partial word combinations (for partial matching)
+            for (let len = 1; len <= words.length; len++) {
+                for (let start = 0; start <= words.length - len; start++) {
+                    const partial = words.slice(start, start + len).join(' ');
+                    if (partial !== input && partial.length > 2) { // Avoid very short partials
+                        variants.add(partial);
+                        variants.add(words.slice(start, start + len).join(''));
+                        variants.add(words.slice(start, start + len).join('-'));
+                    }
+                }
+            }
+        }
+        
+        return Array.from(variants);
+    }
+
+    /**
+     * Generate linguistic variants (Japanese particles, etc.)
+     */
+    generateLinguisticVariants(input) {
+        const variants = new Set([input]);
+        
+        // Apply compound word patterns
+        for (const pattern of this.compoundWordPatterns) {
+            if (pattern.pattern.test(input)) {
+                for (const variation of pattern.variations) {
+                    const variant = input.replace(pattern.pattern, variation);
+                    variants.add(variant);
+                }
+            }
+        }
+        
+        // Enhanced handling for Japanese particles - more comprehensive removal
+        const particles = [
+            { particle: 'no', replacements: [' ', '-', ''] },  // の particle
+            { particle: 'ni', replacements: [' ', '-', ''] },  // に particle  
+            { particle: 'wa', replacements: [' ', '-', ''] },  // は particle
+            { particle: 'ga', replacements: [' ', '-', ''] },  // が particle
+            { particle: 'wo', replacements: [' ', '-', ''] },  // を particle
+            { particle: 'de', replacements: [' ', '-', ''] }   // で particle
+        ];
+        
+        // Create a working set of variants for particle processing
+        let particleVariants = new Set([input]);
+        
+        for (const {particle, replacements} of particles) {
+            const currentVariants = Array.from(particleVariants);
+            for (const variant of currentVariants) {
+                // Remove particle with surrounding spaces
+                const spacedRegex = new RegExp(`\\s+${particle}\\s+`, 'gi');
+                const directRegex = new RegExp(`\\b${particle}\\b`, 'gi');
+                
+                for (const replacement of replacements) {
+                    let modified = variant.replace(spacedRegex, replacement);
+                    modified = modified.replace(directRegex, replacement);
+                    if (modified !== variant) {
+                        // Clean up extra spaces
+                        modified = modified.replace(/\s+/g, ' ').trim();
+                        if (modified) {
+                            particleVariants.add(modified);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Add all particle variants to main set
+        particleVariants.forEach(v => variants.add(v));
+        
+        return Array.from(variants);
+    }
+
+    /**
+     * Convert number words to digits
+     */
+    convertNumberWordsToDigits(input) {
+        const variants = new Set([input]);
+        let converted = input;
+        
+        for (const [word, digit] of Object.entries(this.numberMappings)) {
+            const regex = new RegExp(`\\b${word}\\b`, 'gi');
+            converted = converted.replace(regex, digit);
+        }
+        
+        if (converted !== input) {
+            variants.add(converted);
+        }
+        
+        return Array.from(variants);
+    }
+
+    /**
+     * Apply all phonetic mappings to a variant
+     */
+    applyAllPhoneticMappings(input) {
+        const variants = new Set([input]);
+        
+        // Multiple passes to catch cascading substitutions
+        for (let pass = 0; pass < 3; pass++) {
+            const currentVariants = Array.from(variants);
+            for (const variant of currentVariants) {
+                for (const [original, alternatives] of Object.entries(this.phoneticMappings)) {
+                    for (const alt of alternatives) {
+                        // Word boundary replacements
+                        const wordRegex = new RegExp(`\\b${original}\\b`, 'gi');
+                        if (wordRegex.test(variant)) {
+                            variants.add(variant.replace(wordRegex, alt));
+                        }
+                        
+                        // Substring replacements for compound words
+                        if (variant.includes(original.toLowerCase())) {
+                            const substringVariant = variant.replace(
+                                new RegExp(original, 'gi'), 
+                                alt
+                            );
+                            variants.add(substringVariant);
+                        }
+                    }
+                }
+            }
+        }
+        
+        return Array.from(variants);
+    }
+
+    /**
+     * Clean up a variant by removing extra spaces and special characters
+     */
+    cleanUpVariant(variant) {
+        if (!variant || typeof variant !== 'string') {
+            return '';
+        }
+        
+        return variant
+            .replace(/\s+/g, ' ') // Multiple spaces to single space
+            .replace(/[^\w\s'-]/g, '') // Remove special chars except hyphens and apostrophes
+            .trim();
+    }
+
+    /**
+     * Calculate similarity between two strings using multiple methods
+     * This provides fuzzy matching capabilities for card name recognition
+     */
+    calculateSimilarity(str1, str2) {
+        if (!str1 || !str2) {
+            return 0;
+        }
+        
+        const s1 = str1.toLowerCase().trim();
+        const s2 = str2.toLowerCase().trim();
+        
+        if (s1 === s2) {
+            return 1.0;
+        }
+        
+        // Method 1: Levenshtein distance based similarity
+        const levenshteinSimilarity = this.calculateLevenshteinSimilarity(s1, s2);
+        
+        // Method 2: Token-based similarity (good for word order differences)
+        const tokenSimilarity = this.calculateTokenSimilarity(s1, s2);
+        
+        // Method 3: Substring similarity (good for partial matches)
+        const substringSimilarity = this.calculateSubstringSimilarity(s1, s2);
+        
+        // Return the best similarity score
+        return Math.max(levenshteinSimilarity, tokenSimilarity, substringSimilarity);
+    }
+
+    /**
+     * Calculate Levenshtein distance based similarity
+     */
+    calculateLevenshteinSimilarity(str1, str2) {
+        const len1 = str1.length;
+        const len2 = str2.length;
+        
+        if (len1 === 0) return len2 === 0 ? 1 : 0;
+        if (len2 === 0) return 0;
+        
+        const matrix = Array(len2 + 1).fill(null).map(() => Array(len1 + 1).fill(null));
+        
+        for (let i = 0; i <= len1; i++) matrix[0][i] = i;
+        for (let j = 0; j <= len2; j++) matrix[j][0] = j;
+        
+        for (let j = 1; j <= len2; j++) {
+            for (let i = 1; i <= len1; i++) {
+                const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                matrix[j][i] = Math.min(
+                    matrix[j][i - 1] + 1, // deletion
+                    matrix[j - 1][i] + 1, // insertion
+                    matrix[j - 1][i - 1] + cost // substitution
+                );
+            }
+        }
+        
+        const distance = matrix[len2][len1];
+        const maxLen = Math.max(len1, len2);
+        return (maxLen - distance) / maxLen;
+    }
+
+    /**
+     * Calculate token-based similarity (good for word order differences)
+     */
+    calculateTokenSimilarity(str1, str2) {
+        const tokens1 = new Set(str1.split(/\s+/));
+        const tokens2 = new Set(str2.split(/\s+/));
+        
+        const intersection = new Set([...tokens1].filter(x => tokens2.has(x)));
+        const union = new Set([...tokens1, ...tokens2]);
+        
+        return union.size === 0 ? 0 : intersection.size / union.size;
+    }
+
+    /**
+     * Calculate substring similarity (good for partial matches)
+     */
+    calculateSubstringSimilarity(str1, str2) {
+        const longer = str1.length > str2.length ? str1 : str2;
+        const shorter = str1.length > str2.length ? str2 : str1;
+        
+        if (longer.length === 0) return 1.0;
+        
+        // Find longest common substring
+        let maxLength = 0;
+        for (let i = 0; i < shorter.length; i++) {
+            for (let j = i + 1; j <= shorter.length; j++) {
+                const substring = shorter.substring(i, j);
+                if (longer.includes(substring) && substring.length > maxLength) {
+                    maxLength = substring.length;
+                }
+            }
+        }
+        
+        return maxLength / longer.length;
     }
 
     /**
@@ -791,5 +1245,254 @@ export class VoiceEngine {
     restoreListeners(originalListeners) {
         this.listeners.result = originalListeners.result;
         this.listeners.error = originalListeners.error;
+    }
+
+    /**
+     * Find and present card options using comprehensive fuzzy matching
+     * Based on oldIteration.py's sophisticated approach
+     * 
+     * @param {string} voiceInput - The voice input text
+     * @param {Array} cardDatabase - Array of card objects to search through
+     * @param {string} rarity - Optional rarity filter
+     * @param {number} minConfidence - Minimum confidence threshold (default: 40)
+     * @param {number} maxResults - Maximum number of results to return (default: 10)
+     * @returns {Array} Array of matching cards with confidence scores
+     */
+    findCardMatches(voiceInput, cardDatabase, rarity = null, minConfidence = 40, maxResults = 10) {
+        if (!voiceInput || !Array.isArray(cardDatabase) || cardDatabase.length === 0) {
+            this.logger.warn('Invalid input for card matching:', { voiceInput, cardCount: cardDatabase?.length });
+            return [];
+        }
+
+        this.logger.info(`[VOICE SEARCH] Starting card search for: "${voiceInput}"${rarity ? ` (rarity: ${rarity})` : ''}`);
+
+        // Generate comprehensive variants for the input (like oldIteration.py)
+        const searchVariants = this.generateCardNameVariants(voiceInput);
+        this.logger.debug(`[VOICE SEARCH] Generated ${searchVariants.length} search variants:`, searchVariants.slice(0, 10));
+
+        const cardMatches = [];
+
+        // Search through each card in the database
+        for (const card of cardDatabase) {
+            try {
+                const cardName = card.name || card.card_name || '';
+                if (!cardName) continue;
+
+                // Calculate name confidence using multiple methods (like oldIteration.py)
+                const nameConfidence = this.calculateNameConfidence(voiceInput, cardName, searchVariants);
+
+                // Calculate rarity confidence if rarity was specified
+                let rarityConfidence = 0;
+                if (rarity) {
+                    rarityConfidence = this.calculateRarityConfidence(rarity, card);
+                }
+
+                // Weight name more heavily than rarity (75% name + 25% rarity)
+                // Getting the correct card is more important than identifying the correct rarity
+                let totalConfidence;
+                if (rarity) {
+                    totalConfidence = (nameConfidence * 0.75) + (rarityConfidence * 0.25);
+                    
+                    // Require minimum name score to prevent poor card matches being boosted by perfect rarity matches
+                    if (nameConfidence < 30) {
+                        totalConfidence = totalConfidence * 0.5; // Heavily penalize poor name matches
+                    }
+                } else {
+                    totalConfidence = nameConfidence;
+                }
+
+                // Apply confidence caps to prevent over-confidence
+                if (rarity && rarityConfidence === 100) { // Exact rarity match
+                    totalConfidence = Math.min(95, totalConfidence);
+                } else {
+                    totalConfidence = Math.min(85, totalConfidence);
+                }
+
+                // Only include matches above minimum confidence
+                if (totalConfidence >= minConfidence) {
+                    cardMatches.push({
+                        card: card,
+                        confidence: Math.round(totalConfidence),
+                        nameScore: Math.round(nameConfidence),
+                        rarityScore: Math.round(rarityConfidence),
+                        name: cardName,
+                        rarity: this.getCardRarityDisplay(card, rarity)
+                    });
+                }
+
+            } catch (error) {
+                this.logger.warn(`[VOICE SEARCH] Error processing card "${card.name || 'Unknown'}":`, error);
+                continue;
+            }
+        }
+
+        // Sort by confidence and limit results
+        const sortedMatches = cardMatches
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, maxResults);
+
+        // Adjust confidence scores for uniqueness (avoid identical scores)
+        this.adjustConfidenceForUniqueness(sortedMatches);
+
+        this.logger.info(`[VOICE SEARCH] Found ${sortedMatches.length} matches above ${minConfidence}% confidence`);
+        
+        if (sortedMatches.length > 0) {
+            this.logger.debug('[VOICE SEARCH] Top matches:', sortedMatches.slice(0, 3).map(m => 
+                `${m.name} (${m.confidence}%)`
+            ));
+        }
+
+        return sortedMatches;
+    }
+
+    /**
+     * Calculate name confidence using multiple methods (inspired by oldIteration.py)
+     */
+    calculateNameConfidence(inputName, cardName, searchVariants) {
+        const scores = [];
+
+        // Method 1: Best fuzzy match across all variants (using our FuzzyMatch utility)
+        let bestFuzzyScore = 0;
+        for (const variant of searchVariants) {
+            const score = FuzzyMatch.tokenSetRatio(variant, cardName);
+            bestFuzzyScore = Math.max(bestFuzzyScore, score);
+        }
+        scores.push(bestFuzzyScore);
+
+        // Method 2: Enhanced substring/word matching for fantasy names
+        const cleanInput = inputName.replace(/[^\w\s]/g, '').toLowerCase();
+        const cleanCard = cardName.replace(/[^\w\s]/g, '').toLowerCase();
+        
+        const inputWords = cleanInput.split(/\s+/).filter(w => w.length >= 2);
+        const cardWords = cleanCard.split(/\s+/);
+        
+        // Calculate percentage of input words that have good matches in card name
+        let wordMatchScore = 0;
+        if (inputWords.length > 0) {
+            let matchedWords = 0;
+            for (const inputWord of inputWords) {
+                let bestWordMatch = 0;
+                for (const cardWord of cardWords) {
+                    // Check for exact substring match first (for meaningful words)
+                    if (cardWord.length >= 3 && inputWord.length >= 3) {
+                        if (inputWord.includes(cardWord) || cardWord.includes(inputWord)) {
+                            bestWordMatch = 100;
+                            break;
+                        }
+                    }
+                    // Check fuzzy similarity for all words
+                    const wordSimilarity = FuzzyMatch.ratio(inputWord, cardWord);
+                    bestWordMatch = Math.max(bestWordMatch, wordSimilarity);
+                }
+                
+                // Consider it a match if similarity is high enough
+                if (bestWordMatch >= 80) {
+                    matchedWords++;
+                }
+            }
+            wordMatchScore = (matchedWords / inputWords.length) * 100;
+        }
+        scores.push(wordMatchScore);
+
+        // Method 3: Special handling for compound words (like "Metal flame" -> "Metalflame")
+        const noSpaceInput = cleanInput.replace(/\s+/g, '');
+        const noSpaceCard = cleanCard.replace(/\s+/g, '');
+        const compoundScore = FuzzyMatch.ratio(noSpaceInput, noSpaceCard);
+        scores.push(compoundScore);
+
+        // Return the best score from all methods
+        return Math.max(...scores);
+    }
+
+    /**
+     * Calculate rarity confidence (direct from oldIteration.py logic)
+     */
+    calculateRarityConfidence(inputRarity, card) {
+        if (!inputRarity) return 0;
+
+        const inputRarityLower = inputRarity.toLowerCase().trim();
+        
+        // Check card_sets array for rarity information
+        const cardSets = card.card_sets || [];
+        let bestRarityMatch = 0;
+
+        for (const cardSet of cardSets) {
+            const setRarity = (cardSet.set_rarity || '').toLowerCase().trim();
+            
+            if (setRarity === inputRarityLower) {
+                bestRarityMatch = 100; // Perfect match
+                break;
+            } else if (inputRarityLower.includes(setRarity) || setRarity.includes(inputRarityLower)) {
+                bestRarityMatch = Math.max(bestRarityMatch, 80); // Good partial match
+            } else {
+                const fuzzyMatch = FuzzyMatch.ratio(inputRarityLower, setRarity) * 0.7; // Fuzzy match scaled down
+                bestRarityMatch = Math.max(bestRarityMatch, fuzzyMatch);
+            }
+        }
+
+        // Also check direct rarity field
+        const directRarity = (card.rarity || card.card_rarity || '').toLowerCase().trim();
+        if (directRarity) {
+            if (directRarity === inputRarityLower) {
+                bestRarityMatch = Math.max(bestRarityMatch, 100);
+            } else if (inputRarityLower.includes(directRarity) || directRarity.includes(inputRarityLower)) {
+                bestRarityMatch = Math.max(bestRarityMatch, 80);
+            } else {
+                const fuzzyMatch = FuzzyMatch.ratio(inputRarityLower, directRarity) * 0.7;
+                bestRarityMatch = Math.max(bestRarityMatch, fuzzyMatch);
+            }
+        }
+
+        return bestRarityMatch;
+    }
+
+    /**
+     * Get display rarity for a card
+     */
+    getCardRarityDisplay(card, requestedRarity = null) {
+        // If a specific rarity was requested, try to find it in card_sets
+        if (requestedRarity) {
+            const cardSets = card.card_sets || [];
+            for (const cardSet of cardSets) {
+                const setRarity = cardSet.set_rarity || '';
+                if (setRarity.toLowerCase().includes(requestedRarity.toLowerCase())) {
+                    return setRarity;
+                }
+            }
+        }
+
+        // Fallback to any available rarity
+        const cardSets = card.card_sets || [];
+        if (cardSets.length > 0 && cardSets[0].set_rarity) {
+            return cardSets[0].set_rarity;
+        }
+
+        return card.rarity || card.card_rarity || 'Unknown';
+    }
+
+    /**
+     * Adjust confidence scores to ensure uniqueness
+     */
+    adjustConfidenceForUniqueness(matches) {
+        const usedScores = new Set();
+        
+        for (const match of matches) {
+            let confidence = match.confidence;
+            const originalConfidence = confidence;
+            
+            // If this confidence is already used, find a unique one
+            while (usedScores.has(confidence) && confidence > 0) {
+                confidence -= 0.1;
+            }
+            
+            // Round to one decimal place and update
+            confidence = Math.round(confidence * 10) / 10;
+            match.confidence = confidence;
+            usedScores.add(confidence);
+            
+            if (confidence !== originalConfidence) {
+                this.logger.debug(`[VOICE SEARCH] Adjusted confidence for uniqueness: ${match.name} ${originalConfidence}% -> ${confidence}%`);
+            }
+        }
     }
 }

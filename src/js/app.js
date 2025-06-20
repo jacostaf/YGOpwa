@@ -94,14 +94,24 @@ class YGORipperApp {
             
             this.updateLoadingProgress(50, 'Initializing voice engine...');
             
-            // Initialize voice engine with permission manager
-            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
-            await this.voiceEngine.initialize();
+            // Initialize voice engine with permission manager (with graceful error handling)
+            try {
+                this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
+                await this.voiceEngine.initialize();
+                this.logger.info('Voice engine initialized successfully');
+            } catch (error) {
+                this.logger.warn('Voice engine initialization failed:', error);
+                this.voiceEngine = null; // Clear failed instance
+                // Don't throw - continue initialization without voice features
+            }
             
             this.updateLoadingProgress(70, 'Loading session data...');
             
             // Initialize session manager
             await this.sessionManager.initialize(this.storage);
+            
+            // Connect voice engine to session manager for superior card matching
+            this.sessionManager.setVoiceEngine(this.voiceEngine);
             
             this.updateLoadingProgress(80, 'Setting up price checker...');
             
@@ -152,7 +162,7 @@ class YGORipperApp {
                 debugMode: false,
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
-                autoConfirmThreshold: 85,
+                autoConfirmThreshold: 75,  // Lowered from 85 to 75 for easier auto-confirmation
                 // Auto-extraction settings (matching oldIteration.py)
                 autoExtractRarity: false,
                 autoExtractArtVariant: false,
@@ -177,7 +187,7 @@ class YGORipperApp {
                 debugMode: false,
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
-                autoConfirmThreshold: 85,
+                autoConfirmThreshold: 75,  // Lowered from 85 to 75 for easier auto-confirmation
                 // Auto-extraction settings (matching oldIteration.py)
                 autoExtractRarity: false,
                 autoExtractArtVariant: false
@@ -312,7 +322,23 @@ class YGORipperApp {
             this.handleSetsFiltered(data);
         });
 
-        // Voice engine events
+        this.sessionManager.addEventListener('sessionUpdate', (session) => {
+            this.handleSessionUpdate(session);
+        });
+
+        this.sessionManager.addEventListener('cardAdded', (card) => {
+            this.handleCardAdded(card);
+        });
+
+        this.sessionManager.addEventListener('sessionStart', (session) => {
+            this.handleSessionStart(session);
+        });
+
+        this.sessionManager.addEventListener('sessionStop', (session) => {
+            this.handleSessionStop(session);
+        });
+
+        // Voice engine events (if available)
         if (this.voiceEngine) {
             this.voiceEngine.onResult((result) => {
                 this.handleVoiceResult(result);
@@ -325,6 +351,10 @@ class YGORipperApp {
             this.voiceEngine.onError((error) => {
                 this.handleVoiceError(error);
             });
+        } else {
+            // Voice engine not available - update UI accordingly
+            this.logger.warn('Voice engine not available - disabling voice features');
+            this.uiManager.updateVoiceStatus('not-available');
         }
 
         // Window events
@@ -1088,6 +1118,72 @@ class YGORipperApp {
                 // Show info for refined searches
                 this.logger.debug(`Search "${searchTerm}" returned ${sets.length} results from ${totalSets} total sets`);
             }
+        }
+    }
+
+    /**
+     * Handle session update event from SessionManager
+     * This is crucial for updating the UI when pricing data is fetched asynchronously
+     */
+    handleSessionUpdate(session) {
+        this.logger.debug('Session updated:', session);
+        
+        // Update the UI with the new session data
+        // This will refresh card displays with updated pricing information
+        this.uiManager.updateCurrentSession(session);
+        
+        // Update session statistics if we have a session tracker
+        if (session && session.cards) {
+            this.uiManager.updateSessionStatistics(session.statistics);
+        }
+    }
+
+    /**
+     * Handle card added event from SessionManager
+     */
+    handleCardAdded(card) {
+        this.logger.info(`Card added to session: ${card.name || card.card_name}`);
+        
+        // Show success toast
+        this.uiManager.showToast(`Added: ${card.name || card.card_name}`, 'success');
+        
+        // Update the session display to show the new card
+        if (this.sessionManager.currentSession) {
+            this.uiManager.updateCurrentSession(this.sessionManager.currentSession);
+        }
+    }
+
+    /**
+     * Handle session start event from SessionManager
+     */
+    handleSessionStart(session) {
+        this.logger.info(`Session started for set: ${session.setName}`);
+        
+        // Update UI to show active session
+        this.uiManager.showSessionActive(session);
+        
+        // Show success toast
+        this.uiManager.showToast(`Pack session started: ${session.setName}`, 'success');
+    }
+
+    /**
+     * Handle session stop event from SessionManager
+     */
+    handleSessionStop(session) {
+        this.logger.info(`Session stopped: ${session.setName}`);
+        
+        // Update UI to show session ended
+        this.uiManager.showSessionInactive();
+        
+        // Show session summary
+        if (session.statistics) {
+            const { totalCards, tcgMarketTotal } = session.statistics;
+            this.uiManager.showToast(
+                `Session ended: ${totalCards} cards, $${tcgMarketTotal?.toFixed(2) || '0.00'} total value`, 
+                'info'
+            );
+        } else {
+            this.uiManager.showToast('Pack session ended', 'info');
         }
     }
 

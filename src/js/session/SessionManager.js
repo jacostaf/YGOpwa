@@ -103,6 +103,9 @@ export class SessionManager {
             this.storage = storage;
         }
         
+        // Initialize voice engine reference (will be set by app)
+        this.voiceEngine = null;
+        
         try {
             // Load card sets
             await this.loadCardSets();
@@ -117,6 +120,14 @@ export class SessionManager {
             this.logger.error('Failed to initialize session manager:', error);
             throw error;
         }
+    }
+
+    /**
+     * Set the voice engine instance for improved card matching
+     */
+    setVoiceEngine(voiceEngine) {
+        this.voiceEngine = voiceEngine;
+        this.logger.info('Voice engine connected to session manager');
     }
 
     /**
@@ -563,7 +574,7 @@ export class SessionManager {
             }
             
             // Stop any existing session
-            if (this.isSessionActive) {
+            if (this.sessionActive) {
                 await this.stopSession();
             }
             
@@ -678,6 +689,7 @@ export class SessionManager {
 
     /**
      * Add a card to the current session with enhanced price and image data
+     * Cards are added immediately with placeholder pricing, then updated asynchronously
      * @param {Object} cardData - Card data to add
      * @param {boolean} forceRefreshPricing - Whether to force refresh pricing data even for imported cards
      */
@@ -698,16 +710,21 @@ export class SessionManager {
                 this.logger.debug(`Extracted image URLs from card_images for card ${cardData.name || cardData.id}: ${firstImage.image_url}`);
             }
             
-            // First create the basic enhanced card
+            // Create the basic enhanced card with immediate placeholder data
             const enhancedCard = {
                 id: this.generateCardId(),
                 timestamp: new Date().toISOString(),
                 sessionId: this.currentSession.id,
-                ...cardData
+                ...cardData,
+                // Add pricing placeholders
+                price_status: 'loading',
+                tcg_price: null,
+                tcg_market_price: null,
+                price: 0,
+                hasEnhancedInfo: false
             };
             
             // Check if this card has valid imported pricing data that should be preserved
-            // Only skip API calls if forceRefreshPricing is false
             const hasValidImportedPricing = !forceRefreshPricing && (
                 cardData.importedPricing === true || 
                 (cardData.price_status === 'imported') ||
@@ -715,67 +732,11 @@ export class SessionManager {
                  (cardData.tcg_price || cardData.tcg_market_price))
             );
             
-            this.logger.info(`[ADD CARD DEBUG] Checking pricing for card: ${cardData.name}`);
-            this.logger.info(`[ADD CARD DEBUG] forceRefreshPricing: ${forceRefreshPricing}, importedPricing: ${cardData.importedPricing}, price_status: ${cardData.price_status}, tcg_price: ${cardData.tcg_price}, tcg_market_price: ${cardData.tcg_market_price}`);
-            this.logger.info(`[ADD CARD DEBUG] hasValidImportedPricing: ${hasValidImportedPricing}`);
-            
-            // Track this card for pricing data loading only if we need to fetch pricing
-            if (!hasValidImportedPricing) {
-                this.loadingPriceData.add(enhancedCard.id);
-                this.logger.info(`[ADD CARD DEBUG] Will fetch pricing for card: ${cardData.name} (forceRefresh: ${forceRefreshPricing})`);
-            } else {
-                this.logger.info(`[ADD CARD DEBUG] Will preserve existing pricing for card: ${cardData.name}`);
-            }
-            
-            // Try to fetch enhanced pricing information only if we don't have valid imported pricing
-            if (!hasValidImportedPricing) {
-                try {
-                    const enhancedInfo = await this.fetchEnhancedCardInfo(cardData);
-                    if (enhancedInfo) {
-                        // Merge the enhanced information
-                        Object.assign(enhancedCard, {
-                            // Price information
-                            tcg_price: enhancedInfo.tcg_price,
-                            tcg_market_price: enhancedInfo.tcg_market_price,
-                            price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
-                            
-                            // Enhanced card details
-                            card_name: enhancedInfo.card_name || cardData.name,
-                            card_number: enhancedInfo.card_number || cardData.setInfo?.setCode,
-                            card_rarity: enhancedInfo.card_rarity || cardData.displayRarity || cardData.rarity,
-                            booster_set_name: enhancedInfo.booster_set_name,
-                            card_art_variant: enhancedInfo.card_art_variant,
-                            set_code: enhancedInfo.set_code,
-                            last_price_updt: enhancedInfo.last_price_updt,
-                            
-                            // Image information - use enhanced info if available, otherwise fall back to extracted URLs
-                            image_url: enhancedInfo.image_url || cardData.image_url,
-                            image_url_small: enhancedInfo.image_url_small || cardData.image_url_small,
-                            image_url_cropped: cardData.image_url_cropped, // This is typically not in enhanced info
-                            
-                            // Source information
-                            scrape_success: enhancedInfo.scrape_success,
-                            source_url: enhancedInfo.source_url,
-                            
-                            // Indicate this card has enhanced information
-                            hasEnhancedInfo: true
-                        });
-                        
-                        this.logger.info(`Enhanced card info fetched for: ${cardData.name} - Price: $${enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || 'N/A'}`);
-                    }
-                } catch (enhanceError) {
-                    this.logger.warn('Failed to fetch enhanced card info, using basic data:', enhanceError.message);
-                    // Continue with basic card data
-                    enhancedCard.hasEnhancedInfo = false;
-                } finally {
-                    // Remove from loading tracking regardless of success/failure
-                    this.loadingPriceData.delete(enhancedCard.id);
-                }
-            } else {
-                // Use imported pricing data - ensure it's properly preserved
+            if (hasValidImportedPricing) {
+                // Use imported pricing data immediately - no need for loading state
                 this.logger.info(`[PRICING PRESERVATION] Using imported pricing data for: ${cardData.name} - TCG Low: $${cardData.tcg_price || 'N/A'}, TCG Market: $${cardData.tcg_market_price || 'N/A'}`);
                 
-                // Ensure pricing data is not overwritten
+                // Update with preserved pricing data
                 enhancedCard.tcg_price = cardData.tcg_price;
                 enhancedCard.tcg_market_price = cardData.tcg_market_price;
                 enhancedCard.price = cardData.price || parseFloat(cardData.tcg_market_price || cardData.tcg_price || '0');
@@ -791,27 +752,117 @@ export class SessionManager {
                 enhancedCard.source_url = cardData.source_url;
                 enhancedCard.scrape_success = cardData.scrape_success;
                 
-                enhancedCard.hasEnhancedInfo = false; // Mark as not enhanced since we're using imported data
-                
                 this.logger.info(`[PRICING PRESERVATION] Pricing data preserved for: ${cardData.name} - TCG Low: $${enhancedCard.tcg_price}, TCG Market: $${enhancedCard.tcg_market_price}`);
             }
             
-            // Add to session
+            // Add to session immediately (before price fetching)
             this.currentSession.cards.push(enhancedCard);
             
             // Update statistics
             this.updateSessionStatistics();
             
-            // Emit events
+            // Emit events immediately
             this.emitCardAdded(enhancedCard);
             this.emitSessionUpdate(this.currentSession);
             
-            this.logger.info('Card added to session:', enhancedCard.name || enhancedCard.card_name || enhancedCard.id);
+            this.logger.info('Card added to session immediately:', enhancedCard.name || enhancedCard.card_name || enhancedCard.id);
+            
+            // Start asynchronous price fetching only if needed
+            if (!hasValidImportedPricing) {
+                this.fetchCardPricingAsync(enhancedCard.id, cardData, forceRefreshPricing);
+            }
+            
             return enhancedCard;
             
         } catch (error) {
             this.logger.error('Failed to add card to session:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Fetch pricing information asynchronously and update the card in session
+     * @param {string} cardId - ID of the card in the session
+     * @param {Object} originalCardData - Original card data for API call
+     * @param {boolean} forceRefreshPricing - Whether to force refresh pricing
+     */
+    async fetchCardPricingAsync(cardId, originalCardData, forceRefreshPricing = false) {
+        try {
+            this.logger.info(`[ASYNC PRICING] Starting price fetch for card: ${originalCardData.name} (ID: ${cardId})`);
+            
+            // Track this card for pricing data loading
+            this.loadingPriceData.add(cardId);
+            
+            // Find the card in the current session
+            const cardIndex = this.currentSession.cards.findIndex(card => card.id === cardId);
+            if (cardIndex === -1) {
+                this.logger.warn(`[ASYNC PRICING] Card ${cardId} not found in session, skipping price fetch`);
+                this.loadingPriceData.delete(cardId);
+                return;
+            }
+            
+            const sessionCard = this.currentSession.cards[cardIndex];
+            
+            // Fetch enhanced pricing information
+            const enhancedInfo = await this.fetchEnhancedCardInfo(originalCardData);
+            
+            if (enhancedInfo) {
+                // Update the existing card with fresh pricing data
+                Object.assign(sessionCard, {
+                    // Price information
+                    tcg_price: enhancedInfo.tcg_price,
+                    tcg_market_price: enhancedInfo.tcg_market_price,
+                    price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
+                    
+                    // Enhanced card details
+                    card_name: enhancedInfo.card_name || originalCardData.name,
+                    card_number: enhancedInfo.card_number || originalCardData.setInfo?.setCode,
+                    card_rarity: enhancedInfo.card_rarity || originalCardData.displayRarity || originalCardData.rarity,
+                    booster_set_name: enhancedInfo.booster_set_name,
+                    card_art_variant: enhancedInfo.card_art_variant,
+                    set_code: enhancedInfo.set_code,
+                    last_price_updt: enhancedInfo.last_price_updt,
+                    
+                    // Image information - use enhanced info if available, otherwise fall back to extracted URLs
+                    image_url: enhancedInfo.image_url || originalCardData.image_url,
+                    image_url_small: enhancedInfo.image_url_small || originalCardData.image_url_small,
+                    image_url_cropped: originalCardData.image_url_cropped, // This is typically not in enhanced info
+                    
+                    // Source information
+                    scrape_success: enhancedInfo.scrape_success,
+                    source_url: enhancedInfo.source_url,
+                    
+                    // Update status
+                    price_status: 'loaded',
+                    hasEnhancedInfo: true
+                });
+                
+                this.logger.info(`[ASYNC PRICING] Enhanced card info fetched for: ${originalCardData.name} - Price: $${enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || 'N/A'}`);
+            } else {
+                // Update status to indicate no pricing data was found
+                sessionCard.price_status = 'failed';
+                sessionCard.hasEnhancedInfo = false;
+                this.logger.warn(`[ASYNC PRICING] No enhanced pricing info available for: ${originalCardData.name}`);
+            }
+            
+        } catch (enhanceError) {
+            this.logger.warn(`[ASYNC PRICING] Failed to fetch pricing for ${originalCardData.name}:`, enhanceError.message);
+            
+            // Update the card status to indicate failure
+            const cardIndex = this.currentSession.cards.findIndex(card => card.id === cardId);
+            if (cardIndex !== -1) {
+                this.currentSession.cards[cardIndex].price_status = 'failed';
+                this.currentSession.cards[cardIndex].hasEnhancedInfo = false;
+            }
+        } finally {
+            // Remove from loading tracking
+            this.loadingPriceData.delete(cardId);
+            
+            // Update session statistics and emit updates
+            this.updateSessionStatistics();
+            this.emitSessionUpdate(this.currentSession);
+            
+            this.logger.info(`[ASYNC PRICING] Completed price fetch for card: ${originalCardData.name} (ID: ${cardId})`);
         }
     }
 
@@ -1308,6 +1359,44 @@ export class SessionManager {
         this.logger.debug(`[CARD SEARCH] Processing transcript: "${transcript}", extractedRarity: "${extractedRarity}"`);
         
         const setCards = this.setCards.get(this.currentSet.id) || [];
+        
+        // Use VoiceEngine's superior matching if available
+        if (this.voiceEngine && typeof this.voiceEngine.findCardMatches === 'function') {
+            this.logger.debug('[CARD SEARCH] Using VoiceEngine advanced matching system');
+            
+            const matches = this.voiceEngine.findCardMatches(
+                transcript,
+                setCards,
+                extractedRarity,
+                40, // minimum confidence (lower than before)
+                10  // max results
+            );
+            
+            // Convert VoiceEngine results to SessionManager format
+            const formattedMatches = [];
+            for (const match of matches) {
+                const card = match.card;
+                const variants = await this.createCardVariants(card, extractedRarity);
+                
+                // Add each variant with the match confidence
+                for (const variant of variants) {
+                    formattedMatches.push({
+                        ...variant,
+                        confidence: match.confidence, // Use VoiceEngine confidence
+                        method: 'voice-engine-fuzzy',
+                        nameScore: match.nameScore,
+                        rarityScore: match.rarityScore
+                    });
+                }
+            }
+            
+            this.logger.info(`[CARD SEARCH] VoiceEngine found ${formattedMatches.length} total variants from ${matches.length} base matches`);
+            return formattedMatches;
+        }
+        
+        // Fallback to original matching system if VoiceEngine not available
+        this.logger.debug('[CARD SEARCH] Using fallback matching system');
+        
         const initialMatches = [];
         
         // Normalize the transcript for better matching
