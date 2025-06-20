@@ -137,6 +137,11 @@ export class UIManager {
         this.elements.stopVoiceBtn = document.getElementById('stop-voice-btn');
         this.elements.testVoiceBtn = document.getElementById('test-voice-btn');
         
+        // Floating voice submenu elements
+        this.elements.floatingVoiceSubmenu = document.getElementById('floating-voice-submenu');
+        this.elements.floatingStopVoiceBtn = document.getElementById('floating-stop-voice-btn');
+        this.elements.floatingSettingsBtn = document.getElementById('floating-settings-btn');
+        
         // Session tracker elements
         this.elements.sessionCards = document.getElementById('session-cards');
         this.elements.emptySession = document.getElementById('empty-session');
@@ -243,6 +248,19 @@ export class UIManager {
         if (this.elements.testVoiceBtn) {
             this.elements.testVoiceBtn.addEventListener('click', () => {
                 this.emitVoiceTest();
+            });
+        }
+
+        // Floating submenu controls
+        if (this.elements.floatingStopVoiceBtn) {
+            this.elements.floatingStopVoiceBtn.addEventListener('click', () => {
+                this.emitVoiceStop();
+            });
+        }
+
+        if (this.elements.floatingSettingsBtn) {
+            this.elements.floatingSettingsBtn.addEventListener('click', () => {
+                this.emitSettingsShow();
             });
         }
 
@@ -395,6 +413,12 @@ export class UIManager {
         
         this.currentTab = tabId;
         this.emitTabChange(tabId);
+        
+        // Update floating submenu visibility based on current tab and voice state
+        if (this.elements.floatingVoiceSubmenu) {
+            const isVoiceActive = this.elements.stopVoiceBtn && !this.elements.stopVoiceBtn.classList.contains('hidden');
+            this.updateFloatingSubmenu(isVoiceActive);
+        }
     }
 
     /**
@@ -1031,12 +1055,23 @@ export class UIManager {
         this.updateSessionViewMode();
         
         // Display cards based on current view mode
+        const previousCardCount = this.elements.sessionCards.querySelectorAll('.session-card').length;
+        
         cards.forEach(card => {
             const cardElement = this.isConsolidatedView ? 
                 this.createConsolidatedCardElement(card) : 
                 this.createSessionCardElement(card);
             this.elements.sessionCards.appendChild(cardElement);
         });
+        
+        // Trigger autoscroll if new cards were added
+        const newCardCount = cards.length;
+        if (newCardCount > previousCardCount) {
+            // Delay autoscroll slightly to ensure DOM is updated
+            setTimeout(() => {
+                this.scrollToNewestCard();
+            }, 100);
+        }
     }
 
     /**
@@ -1485,6 +1520,63 @@ export class UIManager {
         if (this.elements.testVoiceBtn) {
             this.elements.testVoiceBtn.disabled = isListening || disabled;
         }
+        
+        // Update floating submenu visibility
+        this.updateFloatingSubmenu(isListening && !disabled);
+    }
+
+    /**
+     * Update floating submenu visibility and position
+     */
+    updateFloatingSubmenu(show) {
+        if (!this.elements.floatingVoiceSubmenu) return;
+        
+        // Only show if we're in the pack ripper tab
+        const isPackRipperTab = this.currentTab === 'pack-ripper';
+        const shouldShow = show && isPackRipperTab;
+        
+        if (shouldShow) {
+            this.elements.floatingVoiceSubmenu.classList.remove('hidden');
+        } else {
+            this.elements.floatingVoiceSubmenu.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Scroll to newest card in session (contextual autoscrolling)
+     */
+    scrollToNewestCard() {
+        if (!this.elements.sessionCards) return;
+        
+        // Only autoscroll if we're in pack ripper tab and voice is active
+        const isPackRipperTab = this.currentTab === 'pack-ripper';
+        const isVoiceActive = this.elements.stopVoiceBtn && !this.elements.stopVoiceBtn.classList.contains('hidden');
+        
+        if (!isPackRipperTab || !isVoiceActive) return;
+        
+        // Find the last added card (newest)
+        const sessionCards = this.elements.sessionCards.querySelectorAll('.session-card');
+        if (sessionCards.length === 0) return;
+        
+        const newestCard = sessionCards[sessionCards.length - 1];
+        
+        // Smooth scroll to the newest card with some offset for better visibility
+        try {
+            newestCard.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'nearest'
+            });
+        } catch (error) {
+            // Fallback for older browsers
+            newestCard.scrollIntoView();
+        }
+        
+        // Add a brief highlight effect to the newest card
+        newestCard.classList.add('newly-added');
+        setTimeout(() => {
+            newestCard.classList.remove('newly-added');
+        }, 2000);
     }
 
     /**

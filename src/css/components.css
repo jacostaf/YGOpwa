@@ -529,6 +529,25 @@
   box-shadow: var(--shadow-sm);
 }
 
+.session-card.newly-added {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-light) 100%);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+  animation: pulse-glow 2s ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+  }
+}
+
 .session-card .card-info {
   flex: 1;
 }
@@ -1929,6 +1948,75 @@
 .fab:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 4px;
+}
+
+/* Floating Voice Submenu */
+.floating-voice-submenu {
+  position: fixed;
+  bottom: var(--spacing-xl);
+  left: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  z-index: var(--z-fixed);
+  transition: all var(--transition-fast);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.floating-voice-submenu.hidden {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+}
+
+.submenu-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: var(--color-text-inverse);
+  border: none;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-lg);
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.submenu-btn:hover {
+  transform: scale(1.1);
+  box-shadow: var(--shadow-lg);
+}
+
+.submenu-btn:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+
+.submenu-btn:before {
+  content: attr(title);
+  position: absolute;
+  right: calc(100% + var(--spacing-sm));
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--color-background-dark);
+  color: var(--color-text);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+  z-index: 1;
+}
+
+.submenu-btn:hover:before {
+  opacity: 1;
 }
 
 /* Accordion */

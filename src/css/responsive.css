@@ -489,7 +489,8 @@
   .loading-screen,
   .modal-overlay,
   .toast-container,
-  .fab {
+  .fab,
+  .floating-voice-submenu {
     display: none !important;
   }
   
