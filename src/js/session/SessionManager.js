@@ -58,7 +58,7 @@ export class SessionManager {
             autoSave: true,
             autoSaveInterval: 30000, // 30 seconds
             maxSessionHistory: 50,
-            cardMatchThreshold: 0.7,
+            cardMatchThreshold: 0.1,
             enableFuzzyMatching: true,
             apiTimeout: 30000 // 30 second timeout for API calls
         };
@@ -1436,7 +1436,7 @@ export class SessionManager {
                             this.logger.debug(`[VARIANT] Rarity matching: "${extractedRarity}" vs "${rarity}" = ${rarityScore}%`);
                             
                             // Skip variants that don't match the extracted rarity well enough
-                            if (rarityScore < 70) {
+                            if (rarityScore < 20) {
                                 this.logger.debug(`[VARIANT] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
                                 continue;
                             }
