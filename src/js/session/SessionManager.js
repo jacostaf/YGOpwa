@@ -574,7 +574,7 @@ export class SessionManager {
             }
             
             // Stop any existing session
-            if (this.isSessionActive) {
+            if (this.sessionActive) {
                 await this.stopSession();
             }
             
