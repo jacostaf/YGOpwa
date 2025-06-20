@@ -312,6 +312,22 @@ class YGORipperApp {
             this.handleSetsFiltered(data);
         });
 
+        this.sessionManager.addEventListener('sessionUpdate', (session) => {
+            this.handleSessionUpdate(session);
+        });
+
+        this.sessionManager.addEventListener('cardAdded', (card) => {
+            this.handleCardAdded(card);
+        });
+
+        this.sessionManager.addEventListener('sessionStart', (session) => {
+            this.handleSessionStart(session);
+        });
+
+        this.sessionManager.addEventListener('sessionStop', (session) => {
+            this.handleSessionStop(session);
+        });
+
         // Voice engine events
         if (this.voiceEngine) {
             this.voiceEngine.onResult((result) => {
@@ -1088,6 +1104,72 @@ class YGORipperApp {
                 // Show info for refined searches
                 this.logger.debug(`Search "${searchTerm}" returned ${sets.length} results from ${totalSets} total sets`);
             }
+        }
+    }
+
+    /**
+     * Handle session update event from SessionManager
+     * This is crucial for updating the UI when pricing data is fetched asynchronously
+     */
+    handleSessionUpdate(session) {
+        this.logger.debug('Session updated:', session);
+        
+        // Update the UI with the new session data
+        // This will refresh card displays with updated pricing information
+        this.uiManager.updateCurrentSession(session);
+        
+        // Update session statistics if we have a session tracker
+        if (session && session.cards) {
+            this.uiManager.updateSessionStatistics(session.statistics);
+        }
+    }
+
+    /**
+     * Handle card added event from SessionManager
+     */
+    handleCardAdded(card) {
+        this.logger.info(`Card added to session: ${card.name || card.card_name}`);
+        
+        // Show success toast
+        this.uiManager.showToast(`Added: ${card.name || card.card_name}`, 'success');
+        
+        // Update the session display to show the new card
+        if (this.sessionManager.currentSession) {
+            this.uiManager.updateCurrentSession(this.sessionManager.currentSession);
+        }
+    }
+
+    /**
+     * Handle session start event from SessionManager
+     */
+    handleSessionStart(session) {
+        this.logger.info(`Session started for set: ${session.setName}`);
+        
+        // Update UI to show active session
+        this.uiManager.showSessionActive(session);
+        
+        // Show success toast
+        this.uiManager.showToast(`Pack session started: ${session.setName}`, 'success');
+    }
+
+    /**
+     * Handle session stop event from SessionManager
+     */
+    handleSessionStop(session) {
+        this.logger.info(`Session stopped: ${session.setName}`);
+        
+        // Update UI to show session ended
+        this.uiManager.showSessionInactive();
+        
+        // Show session summary
+        if (session.statistics) {
+            const { totalCards, tcgMarketTotal } = session.statistics;
+            this.uiManager.showToast(
+                `Session ended: ${totalCards} cards, $${tcgMarketTotal?.toFixed(2) || '0.00'} total value`, 
+                'info'
+            );
+        } else {
+            this.uiManager.showToast('Pack session ended', 'info');
         }
     }
 

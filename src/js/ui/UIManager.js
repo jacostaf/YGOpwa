@@ -2321,6 +2321,16 @@ export class UIManager {
         });
     }
 
+    emitCardRemove(cardId) {
+        this.eventListeners.cardRemove.forEach(callback => {
+            try {
+                callback(cardId);
+            } catch (error) {
+                this.logger.error('Error in card remove callback:', error);
+            }
+        });
+    }
+
     emitVoiceStart() {
         this.eventListeners.voiceStart.forEach(callback => {
             try {
@@ -2398,6 +2408,224 @@ export class UIManager {
             } catch (error) {
                 this.logger.error('Error in settings show callback:', error);
             }
+        });
+    }
+
+    /**
+     * Update current session display (critical for pricing updates)
+     */
+    updateCurrentSession(session) {
+        if (!session) {
+            this.logger.debug('No session to update');
+            return;
+        }
+
+        this.logger.debug(`Updating session display with ${session.cards?.length || 0} cards`);
+
+        // Update session statistics display
+        if (session.statistics) {
+            this.updateSessionStatistics(session.statistics);
+        }
+
+        // Update session cards display 
+        this.updateSessionCardsDisplay(session.cards || []);
+
+        // Update session status
+        if (this.elements.sessionStatus) {
+            this.elements.sessionStatus.textContent = session.cards?.length > 0 
+                ? `${session.cards.length} cards in session`
+                : 'Session active - no cards yet';
+        }
+    }
+
+    /**
+     * Update session statistics display
+     */
+    updateSessionStatistics(statistics) {
+        if (!statistics) return;
+
+        // Update cards count
+        if (this.elements.cardsCount) {
+            this.elements.cardsCount.textContent = statistics.totalCards || 0;
+        }
+
+        // Update TCG Low total
+        if (this.elements.tcgLowTotal) {
+            const total = statistics.tcgLowTotal || 0;
+            this.elements.tcgLowTotal.textContent = `$${total.toFixed(2)}`;
+        }
+
+        // Update TCG Market total  
+        if (this.elements.tcgMarketTotal) {
+            const total = statistics.tcgMarketTotal || 0;
+            this.elements.tcgMarketTotal.textContent = `$${total.toFixed(2)}`;
+        }
+    }
+
+    /**
+     * Update session cards display (refreshes individual card pricing)
+     */
+    updateSessionCardsDisplay(cards) {
+        if (!this.elements.sessionCards || !Array.isArray(cards)) {
+            return;
+        }
+
+        // Show/hide empty session message
+        if (this.elements.emptySession) {
+            this.elements.emptySession.style.display = cards.length === 0 ? 'block' : 'none';
+        }
+
+        // Clear existing cards display
+        this.elements.sessionCards.innerHTML = '';
+
+        // If no cards, return early
+        if (cards.length === 0) {
+            return;
+        }
+
+        // Generate cards HTML
+        cards.forEach((card, index) => {
+            const cardElement = this.createSessionCardElement(card, index);
+            this.elements.sessionCards.appendChild(cardElement);
+        });
+    }
+
+    /**
+     * Create HTML element for a session card (with dynamic pricing display)
+     */
+    createSessionCardElement(card, index) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'session-card';
+        cardDiv.dataset.cardId = card.id;
+
+        // Determine pricing display based on status
+        let pricingHtml = '';
+        const priceStatus = card.price_status || 'unknown';
+        
+        if (priceStatus === 'loading') {
+            pricingHtml = `
+                <div class="pricing-section loading">
+                    <div class="loading-spinner"></div>
+                    <span>Fetching price...</span>
+                </div>
+            `;
+        } else if (priceStatus === 'failed') {
+            pricingHtml = `
+                <div class="pricing-section error">
+                    <span class="error-icon">⚠️</span>
+                    <span>Price fetch failed</span>
+                </div>
+            `;
+        } else if (card.tcg_price || card.tcg_market_price) {
+            pricingHtml = `
+                <div class="pricing-section loaded">
+                    ${card.tcg_price ? `<div class="price-low">💰 TCG Low: $${card.tcg_price}</div>` : ''}
+                    ${card.tcg_market_price ? `<div class="price-market">📈 TCG Market: $${card.tcg_market_price}</div>` : ''}
+                </div>
+            `;
+        } else {
+            pricingHtml = `
+                <div class="pricing-section no-price">
+                    <span>No pricing data</span>
+                </div>
+            `;
+        }
+
+        cardDiv.innerHTML = `
+            <div class="card-header">
+                <h4>${card.name || card.card_name || 'Unknown Card'}</h4>
+                <button class="remove-card-btn" data-card-id="${card.id}" title="Remove card">×</button>
+            </div>
+            <div class="card-details">
+                <div class="rarity">${card.displayRarity || card.card_rarity || card.rarity || 'Unknown'}</div>
+                ${card.setInfo?.setCode ? `<div class="set-code">${card.setInfo.setCode}</div>` : ''}
+                ${card.quantity ? `<div class="quantity">Qty: ${card.quantity}</div>` : ''}
+            </div>
+            ${pricingHtml}
+            ${card.image_url ? `<img src="${card.image_url}" alt="${card.name}" class="card-image" loading="lazy">` : ''}
+        `;
+
+        // Add remove button event listener
+        const removeBtn = cardDiv.querySelector('.remove-card-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', () => {
+                this.emitCardRemove(card.id);
+            });
+        }
+
+        return cardDiv;
+    }
+
+    /**
+     * Show session as active
+     */
+    showSessionActive(session) {
+        // Update start button to stop button
+        if (this.elements.startSessionBtn) {
+            this.elements.startSessionBtn.textContent = 'Stop Session';
+            this.elements.startSessionBtn.className = 'btn btn-danger';
+        }
+
+        // Update session status
+        if (this.elements.sessionStatus) {
+            this.elements.sessionStatus.textContent = `Session active: ${session.setName}`;
+            this.elements.sessionStatus.className = 'session-status active';
+        }
+
+        // Show current set info
+        if (this.elements.currentSet) {
+            this.elements.currentSet.textContent = session.setName;
+        }
+
+        // Enable session controls
+        [this.elements.refreshPricingBtn, this.elements.exportSessionBtn, 
+         this.elements.clearSessionBtn].forEach(btn => {
+            if (btn) btn.removeAttribute('disabled');
+        });
+    }
+
+    /**
+     * Show session as inactive
+     */
+    showSessionInactive() {
+        // Update stop button back to start button
+        if (this.elements.startSessionBtn) {
+            this.elements.startSessionBtn.textContent = 'Start Session';
+            this.elements.startSessionBtn.className = 'btn btn-primary';
+        }
+
+        // Update session status
+        if (this.elements.sessionStatus) {
+            this.elements.sessionStatus.textContent = 'No active session';
+            this.elements.sessionStatus.className = 'session-status inactive';
+        }
+
+        // Clear current set info
+        if (this.elements.currentSet) {
+            this.elements.currentSet.textContent = 'None';
+        }
+
+        // Disable session controls (except import)
+        [this.elements.refreshPricingBtn, this.elements.exportSessionBtn, 
+         this.elements.clearSessionBtn].forEach(btn => {
+            if (btn) btn.setAttribute('disabled', '');
+        });
+
+        // Clear session display
+        if (this.elements.sessionCards) {
+            this.elements.sessionCards.innerHTML = '';
+        }
+
+        // Show empty session message
+        if (this.elements.emptySession) {
+            this.elements.emptySession.style.display = 'block';
+        }
+
+        // Reset statistics
+        this.updateSessionStatistics({
+            totalCards: 0,
+            tcgLowTotal: 0,
+            tcgMarketTotal: 0
         });
     }
 }

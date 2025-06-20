@@ -13,6 +13,7 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { FuzzyMatch } from '../utils/FuzzyMatch.js';
 
 export class VoiceEngine {
     constructor(permissionManager, logger = null) {
@@ -1213,5 +1214,254 @@ export class VoiceEngine {
     restoreListeners(originalListeners) {
         this.listeners.result = originalListeners.result;
         this.listeners.error = originalListeners.error;
+    }
+
+    /**
+     * Find and present card options using comprehensive fuzzy matching
+     * Based on oldIteration.py's sophisticated approach
+     * 
+     * @param {string} voiceInput - The voice input text
+     * @param {Array} cardDatabase - Array of card objects to search through
+     * @param {string} rarity - Optional rarity filter
+     * @param {number} minConfidence - Minimum confidence threshold (default: 40)
+     * @param {number} maxResults - Maximum number of results to return (default: 10)
+     * @returns {Array} Array of matching cards with confidence scores
+     */
+    findCardMatches(voiceInput, cardDatabase, rarity = null, minConfidence = 40, maxResults = 10) {
+        if (!voiceInput || !Array.isArray(cardDatabase) || cardDatabase.length === 0) {
+            this.logger.warn('Invalid input for card matching:', { voiceInput, cardCount: cardDatabase?.length });
+            return [];
+        }
+
+        this.logger.info(`[VOICE SEARCH] Starting card search for: "${voiceInput}"${rarity ? ` (rarity: ${rarity})` : ''}`);
+
+        // Generate comprehensive variants for the input (like oldIteration.py)
+        const searchVariants = this.generateCardNameVariants(voiceInput);
+        this.logger.debug(`[VOICE SEARCH] Generated ${searchVariants.length} search variants:`, searchVariants.slice(0, 10));
+
+        const cardMatches = [];
+
+        // Search through each card in the database
+        for (const card of cardDatabase) {
+            try {
+                const cardName = card.name || card.card_name || '';
+                if (!cardName) continue;
+
+                // Calculate name confidence using multiple methods (like oldIteration.py)
+                const nameConfidence = this.calculateNameConfidence(voiceInput, cardName, searchVariants);
+
+                // Calculate rarity confidence if rarity was specified
+                let rarityConfidence = 0;
+                if (rarity) {
+                    rarityConfidence = this.calculateRarityConfidence(rarity, card);
+                }
+
+                // Weight name more heavily than rarity (75% name + 25% rarity)
+                // Getting the correct card is more important than identifying the correct rarity
+                let totalConfidence;
+                if (rarity) {
+                    totalConfidence = (nameConfidence * 0.75) + (rarityConfidence * 0.25);
+                    
+                    // Require minimum name score to prevent poor card matches being boosted by perfect rarity matches
+                    if (nameConfidence < 30) {
+                        totalConfidence = totalConfidence * 0.5; // Heavily penalize poor name matches
+                    }
+                } else {
+                    totalConfidence = nameConfidence;
+                }
+
+                // Apply confidence caps to prevent over-confidence
+                if (rarity && rarityConfidence === 100) { // Exact rarity match
+                    totalConfidence = Math.min(95, totalConfidence);
+                } else {
+                    totalConfidence = Math.min(85, totalConfidence);
+                }
+
+                // Only include matches above minimum confidence
+                if (totalConfidence >= minConfidence) {
+                    cardMatches.push({
+                        card: card,
+                        confidence: Math.round(totalConfidence),
+                        nameScore: Math.round(nameConfidence),
+                        rarityScore: Math.round(rarityConfidence),
+                        name: cardName,
+                        rarity: this.getCardRarityDisplay(card, rarity)
+                    });
+                }
+
+            } catch (error) {
+                this.logger.warn(`[VOICE SEARCH] Error processing card "${card.name || 'Unknown'}":`, error);
+                continue;
+            }
+        }
+
+        // Sort by confidence and limit results
+        const sortedMatches = cardMatches
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, maxResults);
+
+        // Adjust confidence scores for uniqueness (avoid identical scores)
+        this.adjustConfidenceForUniqueness(sortedMatches);
+
+        this.logger.info(`[VOICE SEARCH] Found ${sortedMatches.length} matches above ${minConfidence}% confidence`);
+        
+        if (sortedMatches.length > 0) {
+            this.logger.debug('[VOICE SEARCH] Top matches:', sortedMatches.slice(0, 3).map(m => 
+                `${m.name} (${m.confidence}%)`
+            ));
+        }
+
+        return sortedMatches;
+    }
+
+    /**
+     * Calculate name confidence using multiple methods (inspired by oldIteration.py)
+     */
+    calculateNameConfidence(inputName, cardName, searchVariants) {
+        const scores = [];
+
+        // Method 1: Best fuzzy match across all variants (using our FuzzyMatch utility)
+        let bestFuzzyScore = 0;
+        for (const variant of searchVariants) {
+            const score = FuzzyMatch.tokenSetRatio(variant, cardName);
+            bestFuzzyScore = Math.max(bestFuzzyScore, score);
+        }
+        scores.push(bestFuzzyScore);
+
+        // Method 2: Enhanced substring/word matching for fantasy names
+        const cleanInput = inputName.replace(/[^\w\s]/g, '').toLowerCase();
+        const cleanCard = cardName.replace(/[^\w\s]/g, '').toLowerCase();
+        
+        const inputWords = cleanInput.split(/\s+/).filter(w => w.length >= 2);
+        const cardWords = cleanCard.split(/\s+/);
+        
+        // Calculate percentage of input words that have good matches in card name
+        let wordMatchScore = 0;
+        if (inputWords.length > 0) {
+            let matchedWords = 0;
+            for (const inputWord of inputWords) {
+                let bestWordMatch = 0;
+                for (const cardWord of cardWords) {
+                    // Check for exact substring match first (for meaningful words)
+                    if (cardWord.length >= 3 && inputWord.length >= 3) {
+                        if (inputWord.includes(cardWord) || cardWord.includes(inputWord)) {
+                            bestWordMatch = 100;
+                            break;
+                        }
+                    }
+                    // Check fuzzy similarity for all words
+                    const wordSimilarity = FuzzyMatch.ratio(inputWord, cardWord);
+                    bestWordMatch = Math.max(bestWordMatch, wordSimilarity);
+                }
+                
+                // Consider it a match if similarity is high enough
+                if (bestWordMatch >= 80) {
+                    matchedWords++;
+                }
+            }
+            wordMatchScore = (matchedWords / inputWords.length) * 100;
+        }
+        scores.push(wordMatchScore);
+
+        // Method 3: Special handling for compound words (like "Metal flame" -> "Metalflame")
+        const noSpaceInput = cleanInput.replace(/\s+/g, '');
+        const noSpaceCard = cleanCard.replace(/\s+/g, '');
+        const compoundScore = FuzzyMatch.ratio(noSpaceInput, noSpaceCard);
+        scores.push(compoundScore);
+
+        // Return the best score from all methods
+        return Math.max(...scores);
+    }
+
+    /**
+     * Calculate rarity confidence (direct from oldIteration.py logic)
+     */
+    calculateRarityConfidence(inputRarity, card) {
+        if (!inputRarity) return 0;
+
+        const inputRarityLower = inputRarity.toLowerCase().trim();
+        
+        // Check card_sets array for rarity information
+        const cardSets = card.card_sets || [];
+        let bestRarityMatch = 0;
+
+        for (const cardSet of cardSets) {
+            const setRarity = (cardSet.set_rarity || '').toLowerCase().trim();
+            
+            if (setRarity === inputRarityLower) {
+                bestRarityMatch = 100; // Perfect match
+                break;
+            } else if (inputRarityLower.includes(setRarity) || setRarity.includes(inputRarityLower)) {
+                bestRarityMatch = Math.max(bestRarityMatch, 80); // Good partial match
+            } else {
+                const fuzzyMatch = FuzzyMatch.ratio(inputRarityLower, setRarity) * 0.7; // Fuzzy match scaled down
+                bestRarityMatch = Math.max(bestRarityMatch, fuzzyMatch);
+            }
+        }
+
+        // Also check direct rarity field
+        const directRarity = (card.rarity || card.card_rarity || '').toLowerCase().trim();
+        if (directRarity) {
+            if (directRarity === inputRarityLower) {
+                bestRarityMatch = Math.max(bestRarityMatch, 100);
+            } else if (inputRarityLower.includes(directRarity) || directRarity.includes(inputRarityLower)) {
+                bestRarityMatch = Math.max(bestRarityMatch, 80);
+            } else {
+                const fuzzyMatch = FuzzyMatch.ratio(inputRarityLower, directRarity) * 0.7;
+                bestRarityMatch = Math.max(bestRarityMatch, fuzzyMatch);
+            }
+        }
+
+        return bestRarityMatch;
+    }
+
+    /**
+     * Get display rarity for a card
+     */
+    getCardRarityDisplay(card, requestedRarity = null) {
+        // If a specific rarity was requested, try to find it in card_sets
+        if (requestedRarity) {
+            const cardSets = card.card_sets || [];
+            for (const cardSet of cardSets) {
+                const setRarity = cardSet.set_rarity || '';
+                if (setRarity.toLowerCase().includes(requestedRarity.toLowerCase())) {
+                    return setRarity;
+                }
+            }
+        }
+
+        // Fallback to any available rarity
+        const cardSets = card.card_sets || [];
+        if (cardSets.length > 0 && cardSets[0].set_rarity) {
+            return cardSets[0].set_rarity;
+        }
+
+        return card.rarity || card.card_rarity || 'Unknown';
+    }
+
+    /**
+     * Adjust confidence scores to ensure uniqueness
+     */
+    adjustConfidenceForUniqueness(matches) {
+        const usedScores = new Set();
+        
+        for (const match of matches) {
+            let confidence = match.confidence;
+            const originalConfidence = confidence;
+            
+            // If this confidence is already used, find a unique one
+            while (usedScores.has(confidence) && confidence > 0) {
+                confidence -= 0.1;
+            }
+            
+            // Round to one decimal place and update
+            confidence = Math.round(confidence * 10) / 10;
+            match.confidence = confidence;
+            usedScores.add(confidence);
+            
+            if (confidence !== originalConfidence) {
+                this.logger.debug(`[VOICE SEARCH] Adjusted confidence for uniqueness: ${match.name} ${originalConfidence}% -> ${confidence}%`);
+            }
+        }
     }
 }
