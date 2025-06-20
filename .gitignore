@@ -75,3 +75,4 @@ screenshots/
 # Testing and temporary files
 test_*.html
 test_*.js
+test-voice-improvements*.js

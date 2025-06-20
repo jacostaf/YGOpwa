@@ -614,6 +614,8 @@ export class VoiceEngine {
             { pattern: /pharoh/gi, replacement: 'Pharaoh' },
             
             // Common card names - flexible patterns
+            { pattern: /blue.*eyes?.*white.*dragun/gi, replacement: 'Blue-Eyes White Dragon' },
+            { pattern: /blue.*eyes?.*white.*dragon/gi, replacement: 'Blue-Eyes White Dragon' },
             { pattern: /blue.*i.*white.*dragun/gi, replacement: 'Blue-Eyes White Dragon' },
             { pattern: /blue.*eye.*white.*dragon/gi, replacement: 'Blue-Eyes White Dragon' },
             { pattern: /dark.*majician/gi, replacement: 'Dark Magician' },
