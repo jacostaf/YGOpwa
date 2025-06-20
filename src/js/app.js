@@ -94,9 +94,16 @@ class YGORipperApp {
             
             this.updateLoadingProgress(50, 'Initializing voice engine...');
             
-            // Initialize voice engine with permission manager
-            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
-            await this.voiceEngine.initialize();
+            // Initialize voice engine with permission manager (with graceful error handling)
+            try {
+                this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
+                await this.voiceEngine.initialize();
+                this.logger.info('Voice engine initialized successfully');
+            } catch (error) {
+                this.logger.warn('Voice engine initialization failed:', error);
+                this.voiceEngine = null; // Clear failed instance
+                // Don't throw - continue initialization without voice features
+            }
             
             this.updateLoadingProgress(70, 'Loading session data...');
             
@@ -331,7 +338,7 @@ class YGORipperApp {
             this.handleSessionStop(session);
         });
 
-        // Voice engine events
+        // Voice engine events (if available)
         if (this.voiceEngine) {
             this.voiceEngine.onResult((result) => {
                 this.handleVoiceResult(result);
@@ -344,6 +351,10 @@ class YGORipperApp {
             this.voiceEngine.onError((error) => {
                 this.handleVoiceError(error);
             });
+        } else {
+            // Voice engine not available - update UI accordingly
+            this.logger.warn('Voice engine not available - disabling voice features');
+            this.uiManager.updateVoiceStatus('not-available');
         }
 
         // Window events

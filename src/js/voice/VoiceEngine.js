@@ -667,10 +667,12 @@ export class VoiceEngine {
             'wo': ['wo', 'o'], // を particle
             'de': ['de', 'at'], // で particle
             
-            // Common Japanese words in card names
-            'mitsurugi': ['mitsurugi', 'mitsurgi', 'mitsu rugi'],
-            'mitama': ['mitama', 'mi tama'],
-            'futsu': ['futsu', 'fu tsu'],
+            // Common Japanese words in card names (enhanced with user-reported issues)
+            'mitsurugi': ['mitsurugi', 'mitsurgi', 'mitsu rugi', 'mitsu-rugi', 'mit surugi', 'mitsuru gi', 'misurugi', 'mizurugi', 'mitzurugi'],
+            'mitama': ['mitama', 'mi tama', 'mi-tama', 'meta ma', 'mit ama'],
+            'futsu': ['futsu', 'fu tsu', 'fu-tsu', 'futs u', 'foot su', 'fusu', 'fuzu', 'futzu', 'hutsu', 'putsu'],
+            'infinity': ['infinity', 'infiniti', 'infin ity', 'infin-ity', 'in finity', 'nfinity'],
+            'ten': ['ten', '10', 'tin', 'tan'],
             'kage': ['kage', 'ka ge', 'cage'],
             'yami': ['yami', 'ya mi', 'dark'],
             'hikari': ['hikari', 'hi kari', 'light'],
@@ -827,21 +829,25 @@ export class VoiceEngine {
     }
 
     /**
-     * Generate compound word variants (like "metal flame" -> "metalflame")
+     * Generate compound word variants (enhanced for better voice recognition)
      */
     generateCompoundWordVariants(input) {
         const variants = new Set([input]);
         const words = input.split(/\s+/);
         
         if (words.length >= 2) {
-            // Remove all spaces (compound word)
+            // Complete compound (no spaces)
             variants.add(words.join(''));
             
-            // Add hyphens instead of spaces
+            // Hyphenated
             variants.add(words.join('-'));
             
-            // Various spacing combinations for multi-word terms
+            // Underscored (sometimes used in databases)
+            variants.add(words.join('_'));
+            
+            // Various partial combinations for multi-word terms
             for (let i = 1; i < words.length; i++) {
+                // Split at position i
                 const leftPart = words.slice(0, i).join('');
                 const rightPart = words.slice(i).join(' ');
                 variants.add(`${leftPart} ${rightPart}`);
@@ -849,6 +855,23 @@ export class VoiceEngine {
                 const leftPartSpaced = words.slice(0, i).join(' ');
                 const rightPartCompound = words.slice(i).join('');
                 variants.add(`${leftPartSpaced} ${rightPartCompound}`);
+                
+                // Mixed with hyphens
+                const leftPartHyphen = words.slice(0, i).join('-');
+                const rightPartHyphen = words.slice(i).join('-');
+                variants.add(`${leftPartHyphen} ${rightPartHyphen}`);
+            }
+            
+            // Enhanced partial word combinations (for partial matching)
+            for (let len = 1; len <= words.length; len++) {
+                for (let start = 0; start <= words.length - len; start++) {
+                    const partial = words.slice(start, start + len).join(' ');
+                    if (partial !== input && partial.length > 2) { // Avoid very short partials
+                        variants.add(partial);
+                        variants.add(words.slice(start, start + len).join(''));
+                        variants.add(words.slice(start, start + len).join('-'));
+                    }
+                }
             }
         }
         
@@ -871,34 +894,42 @@ export class VoiceEngine {
             }
         }
         
-        // Special handling for Japanese particles - remove them completely
-        let particleRemoved = input;
-        const particles = ['no', 'ni', 'wa', 'ga', 'wo', 'de'];
-        for (const particle of particles) {
-            // Remove particle with surrounding spaces
-            const particleRegex = new RegExp(`\\s+${particle}\\s+`, 'gi');
-            particleRemoved = particleRemoved.replace(particleRegex, ' ');
-        }
+        // Enhanced handling for Japanese particles - more comprehensive removal
+        const particles = [
+            { particle: 'no', replacements: [' ', '-', ''] },  // の particle
+            { particle: 'ni', replacements: [' ', '-', ''] },  // に particle  
+            { particle: 'wa', replacements: [' ', '-', ''] },  // は particle
+            { particle: 'ga', replacements: [' ', '-', ''] },  // が particle
+            { particle: 'wo', replacements: [' ', '-', ''] },  // を particle
+            { particle: 'de', replacements: [' ', '-', ''] }   // で particle
+        ];
         
-        // Clean up extra spaces and add to variants
-        if (particleRemoved !== input) {
-            const cleaned = particleRemoved.replace(/\s+/g, ' ').trim();
-            if (cleaned) {
-                variants.add(cleaned);
+        // Create a working set of variants for particle processing
+        let particleVariants = new Set([input]);
+        
+        for (const {particle, replacements} of particles) {
+            const currentVariants = Array.from(particleVariants);
+            for (const variant of currentVariants) {
+                // Remove particle with surrounding spaces
+                const spacedRegex = new RegExp(`\\s+${particle}\\s+`, 'gi');
+                const directRegex = new RegExp(`\\b${particle}\\b`, 'gi');
                 
-                // Also add compound version (no spaces)
-                const compound = cleaned.replace(/\s+/g, '');
-                if (compound) {
-                    variants.add(compound);
-                }
-                
-                // Add hyphenated version
-                const hyphenated = cleaned.replace(/\s+/g, '-');
-                if (hyphenated) {
-                    variants.add(hyphenated);
+                for (const replacement of replacements) {
+                    let modified = variant.replace(spacedRegex, replacement);
+                    modified = modified.replace(directRegex, replacement);
+                    if (modified !== variant) {
+                        // Clean up extra spaces
+                        modified = modified.replace(/\s+/g, ' ').trim();
+                        if (modified) {
+                            particleVariants.add(modified);
+                        }
+                    }
                 }
             }
         }
+        
+        // Add all particle variants to main set
+        particleVariants.forEach(v => variants.add(v));
         
         return Array.from(variants);
     }
