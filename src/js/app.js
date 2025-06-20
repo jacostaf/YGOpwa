@@ -152,7 +152,7 @@ class YGORipperApp {
                 debugMode: false,
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
-                autoConfirmThreshold: 85,
+                autoConfirmThreshold: 75,  // Lowered from 85 to 75 for easier auto-confirmation
                 // Auto-extraction settings (matching oldIteration.py)
                 autoExtractRarity: false,
                 autoExtractArtVariant: false,
@@ -177,7 +177,7 @@ class YGORipperApp {
                 debugMode: false,
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
-                autoConfirmThreshold: 85,
+                autoConfirmThreshold: 75,  // Lowered from 85 to 75 for easier auto-confirmation
                 // Auto-extraction settings (matching oldIteration.py)
                 autoExtractRarity: false,
                 autoExtractArtVariant: false

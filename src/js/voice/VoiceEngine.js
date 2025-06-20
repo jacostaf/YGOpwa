@@ -41,7 +41,7 @@ export class VoiceEngine {
             retryDelay: 1000,
             // Yu-Gi-Oh specific settings
             cardNameOptimization: true,
-            confidenceThreshold: 0.7
+            confidenceThreshold: 0.5  // Lowered from 0.7 to show more potential matches
         };
         
         // Event listeners
@@ -592,24 +592,68 @@ export class VoiceEngine {
         
         this.logger.info('Loading Yu-Gi-Oh card name optimizations...');
         
-        // Common Yu-Gi-Oh terms and their phonetic variations
+        // Phonetic and common fantasy spelling variations
         this.commonCardTerms = [
-            // Card types
+            // Card types - common misrecognitions
             { pattern: /dragun/gi, replacement: 'Dragon' },
+            { pattern: /dragoon/gi, replacement: 'Dragon' },
             { pattern: /majician/gi, replacement: 'Magician' },
+            { pattern: /magishun/gi, replacement: 'Magician' },
             { pattern: /warriar/gi, replacement: 'Warrior' },
+            { pattern: /warrior/gi, replacement: 'Warrior' },
             { pattern: /elemental/gi, replacement: 'Elemental' },
+            { pattern: /spellcaster/gi, replacement: 'Spellcaster' },
+            { pattern: /fiend/gi, replacement: 'Fiend' },
             
-            // Common card names
+            // Common Yu-Gi-Oh terms
+            { pattern: /yu.*gi.*oh/gi, replacement: 'Yu-Gi-Oh' },
+            { pattern: /duel.*monsters/gi, replacement: 'Duel Monsters' },
+            { pattern: /millennium/gi, replacement: 'Millennium' },
+            { pattern: /millenium/gi, replacement: 'Millennium' },
+            { pattern: /pharaoh/gi, replacement: 'Pharaoh' },
+            { pattern: /pharoh/gi, replacement: 'Pharaoh' },
+            
+            // Common card names - flexible patterns
             { pattern: /blue.*i.*white.*dragun/gi, replacement: 'Blue-Eyes White Dragon' },
+            { pattern: /blue.*eye.*white.*dragon/gi, replacement: 'Blue-Eyes White Dragon' },
             { pattern: /dark.*majician/gi, replacement: 'Dark Magician' },
+            { pattern: /dark.*magishun/gi, replacement: 'Dark Magician' },
             { pattern: /red.*i.*black.*dragun/gi, replacement: 'Red-Eyes Black Dragon' },
+            { pattern: /red.*eye.*black.*dragon/gi, replacement: 'Red-Eyes Black Dragon' },
             { pattern: /time.*wiserd/gi, replacement: 'Time Wizard' },
+            { pattern: /time.*wizard/gi, replacement: 'Time Wizard' },
+            { pattern: /celtic.*guardian/gi, replacement: 'Celtic Guardian' },
+            { pattern: /curse.*of.*dragon/gi, replacement: 'Curse of Dragon' },
             
-            // Common misrecognitions
+            // Common spell/trap cards
             { pattern: /pott?.*of.*greed/gi, replacement: 'Pot of Greed' },
+            { pattern: /pot.*of.*greed/gi, replacement: 'Pot of Greed' },
             { pattern: /mirror.*four.*ce/gi, replacement: 'Mirror Force' },
+            { pattern: /mirror.*force/gi, replacement: 'Mirror Force' },
             { pattern: /ryu.*gin.*jin/gi, replacement: 'Raigeki' },
+            { pattern: /raigeki/gi, replacement: 'Raigeki' },
+            { pattern: /lightning.*bolt/gi, replacement: 'Raigeki' },
+            { pattern: /mystical.*space.*typhoon/gi, replacement: 'Mystical Space Typhoon' },
+            { pattern: /heavy.*storm/gi, replacement: 'Heavy Storm' },
+            { pattern: /swords.*of.*revealing.*light/gi, replacement: 'Swords of Revealing Light' },
+            
+            // Common archetype names
+            { pattern: /elemental.*hero/gi, replacement: 'Elemental HERO' },
+            { pattern: /neo.*spacian/gi, replacement: 'Neo-Spacian' },
+            { pattern: /destiny.*hero/gi, replacement: 'Destiny HERO' },
+            { pattern: /cyber.*dragon/gi, replacement: 'Cyber Dragon' },
+            { pattern: /crystal.*beast/gi, replacement: 'Crystal Beast' },
+            { pattern: /blackwing/gi, replacement: 'Blackwing' },
+            { pattern: /ancient.*gear/gi, replacement: 'Ancient Gear' },
+            { pattern: /gladiator.*beast/gi, replacement: 'Gladiator Beast' },
+            
+            // Common phonetic variations
+            { pattern: /ex.*odia/gi, replacement: 'Exodia' },
+            { pattern: /ojama/gi, replacement: 'Ojama' },
+            { pattern: /kuriboh/gi, replacement: 'Kuriboh' },
+            { pattern: /jinzo/gi, replacement: 'Jinzo' },
+            { pattern: /summoned.*skull/gi, replacement: 'Summoned Skull' },
+            { pattern: /gaia.*the.*fierce.*knight/gi, replacement: 'Gaia the Fierce Knight' }
         ];
         
         this.logger.info(`Loaded ${this.commonCardTerms.length} card name optimizations`);
@@ -630,10 +674,13 @@ export class VoiceEngine {
             optimizedTranscript = optimizedTranscript.replace(term.pattern, term.replacement);
         }
         
+        // Apply additional phonetic optimizations
+        optimizedTranscript = this.applyPhoneticOptimizations(optimizedTranscript);
+        
         // Clean up common issues
         optimizedTranscript = optimizedTranscript
             .replace(/\s+/g, ' ') // Multiple spaces
-            .replace(/[^\w\s-]/g, '') // Special characters except hyphens
+            .replace(/[^\w\s'-]/g, '') // Special characters except hyphens and apostrophes
             .trim();
         
         return {
@@ -641,6 +688,53 @@ export class VoiceEngine {
             confidence: result.confidence,
             originalTranscript: result.transcript
         };
+    }
+
+    /**
+     * Apply phonetic optimizations for better voice recognition
+     */
+    applyPhoneticOptimizations(transcript) {
+        let optimized = transcript;
+        
+        // Common phonetic substitutions for Yu-Gi-Oh names
+        const phoneticMap = [
+            // Numbers that might be misheard
+            { from: /\bone\b/gi, to: '1' },
+            { from: /\btwo\b/gi, to: '2' },
+            { from: /\bthree\b/gi, to: '3' },
+            { from: /\bfour\b/gi, to: '4' },
+            { from: /\bfive\b/gi, to: '5' },
+            { from: /\bsix\b/gi, to: '6' },
+            { from: /\bseven\b/gi, to: '7' },
+            { from: /\beight\b/gi, to: '8' },
+            { from: /\bnine\b/gi, to: '9' },
+            { from: /\bten\b/gi, to: '10' },
+            
+            // Common phonetic confusions
+            { from: /ph/gi, to: 'f' },
+            { from: /ck/gi, to: 'k' },
+            { from: /kn/gi, to: 'n' },
+            { from: /wr/gi, to: 'r' },
+            { from: /gh/gi, to: '' },
+            
+            // Fantasy/Japanese name optimizations
+            { from: /sh/gi, to: 'sh' }, // Preserve sh sounds
+            { from: /ch/gi, to: 'ch' }, // Preserve ch sounds
+            { from: /ou/gi, to: 'oo' }, // Common in Japanese romanization
+            { from: /ei/gi, to: 'ay' }, // Another common pattern
+            
+            // Common Yu-Gi-Oh specific patterns
+            { from: /\bz\b/gi, to: 'Z' }, // Preserve single Z (often in card names)
+            { from: /\bx\b/gi, to: 'X' }, // Preserve single X
+            { from: /\by\b/gi, to: 'Y' }, // Preserve single Y
+        ];
+        
+        // Apply phonetic mappings
+        for (const mapping of phoneticMap) {
+            optimized = optimized.replace(mapping.from, mapping.to);
+        }
+        
+        return optimized;
     }
 
     /**

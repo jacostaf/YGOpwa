@@ -1147,7 +1147,17 @@ export class UIManager {
                     </div>
                     
                     <div class="card-pricing">
-                        ${price > 0 ? `
+                        ${card.price_status === 'loading' ? `
+                            <div class="pricing-loading">
+                                <div class="loading-spinner-small"></div>
+                                <div class="loading-text-small">Fetching price...</div>
+                            </div>
+                        ` : card.price_status === 'failed' ? `
+                            <div class="price-error">
+                                <span class="error-icon">⚠️</span>
+                                <span class="error-text">Price fetch failed</span>
+                            </div>
+                        ` : price > 0 ? `
                             <div class="pricing-info">
                                 ${card.tcg_price ? `
                                     <div class="price-item">
@@ -1887,7 +1897,7 @@ export class UIManager {
         }
         
         if (autoConfirmThreshold) {
-            const threshold = settings.autoConfirmThreshold || 85;
+            const threshold = settings.autoConfirmThreshold || 75;  // Updated default from 85 to 75
             autoConfirmThreshold.value = threshold;
             if (thresholdValue) {
                 thresholdValue.textContent = `${threshold}%`;
@@ -1963,7 +1973,7 @@ export class UIManager {
         // Reset to default values
         const defaultSettings = {
             autoConfirm: false,
-            autoConfirmThreshold: 85,
+            autoConfirmThreshold: 75,  // Updated default from 85 to 75
             voiceTimeout: 5000,
             sessionAutoSave: true,
             theme: 'dark'
@@ -1988,7 +1998,7 @@ export class UIManager {
         
         return {
             autoConfirm: autoConfirmCheckbox?.checked || false,
-            autoConfirmThreshold: parseInt(autoConfirmThreshold?.value) || 85,
+            autoConfirmThreshold: parseInt(autoConfirmThreshold?.value) || 75,  // Updated default from 85 to 75
             autoExtractRarity: autoExtractRarityCheckbox?.checked || false,
             autoExtractArtVariant: autoExtractArtVariantCheckbox?.checked || false,
             voiceTimeout: (parseInt(voiceTimeout?.value) || 5) * 1000, // Convert to ms
