@@ -103,6 +103,9 @@ export class SessionManager {
             this.storage = storage;
         }
         
+        // Initialize voice engine reference (will be set by app)
+        this.voiceEngine = null;
+        
         try {
             // Load card sets
             await this.loadCardSets();
@@ -117,6 +120,14 @@ export class SessionManager {
             this.logger.error('Failed to initialize session manager:', error);
             throw error;
         }
+    }
+
+    /**
+     * Set the voice engine instance for improved card matching
+     */
+    setVoiceEngine(voiceEngine) {
+        this.voiceEngine = voiceEngine;
+        this.logger.info('Voice engine connected to session manager');
     }
 
     /**
@@ -1348,6 +1359,44 @@ export class SessionManager {
         this.logger.debug(`[CARD SEARCH] Processing transcript: "${transcript}", extractedRarity: "${extractedRarity}"`);
         
         const setCards = this.setCards.get(this.currentSet.id) || [];
+        
+        // Use VoiceEngine's superior matching if available
+        if (this.voiceEngine && typeof this.voiceEngine.findCardMatches === 'function') {
+            this.logger.debug('[CARD SEARCH] Using VoiceEngine advanced matching system');
+            
+            const matches = this.voiceEngine.findCardMatches(
+                transcript,
+                setCards,
+                extractedRarity,
+                40, // minimum confidence (lower than before)
+                10  // max results
+            );
+            
+            // Convert VoiceEngine results to SessionManager format
+            const formattedMatches = [];
+            for (const match of matches) {
+                const card = match.card;
+                const variants = await this.createCardVariants(card, extractedRarity);
+                
+                // Add each variant with the match confidence
+                for (const variant of variants) {
+                    formattedMatches.push({
+                        ...variant,
+                        confidence: match.confidence, // Use VoiceEngine confidence
+                        method: 'voice-engine-fuzzy',
+                        nameScore: match.nameScore,
+                        rarityScore: match.rarityScore
+                    });
+                }
+            }
+            
+            this.logger.info(`[CARD SEARCH] VoiceEngine found ${formattedMatches.length} total variants from ${matches.length} base matches`);
+            return formattedMatches;
+        }
+        
+        // Fallback to original matching system if VoiceEngine not available
+        this.logger.debug('[CARD SEARCH] Using fallback matching system');
+        
         const initialMatches = [];
         
         // Normalize the transcript for better matching

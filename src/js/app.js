@@ -103,6 +103,9 @@ class YGORipperApp {
             // Initialize session manager
             await this.sessionManager.initialize(this.storage);
             
+            // Connect voice engine to session manager for superior card matching
+            this.sessionManager.setVoiceEngine(this.voiceEngine);
+            
             this.updateLoadingProgress(80, 'Setting up price checker...');
             
             // Initialize price checker
