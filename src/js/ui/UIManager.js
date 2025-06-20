@@ -1031,6 +1031,29 @@ export class UIManager {
     /**
      * Display session cards with quantity adjustment buttons
      */
+    /**
+     * Update a single card's display in the UI
+     * @param {Object} card - The updated card data
+     */
+    updateCardDisplay(card) {
+        if (!this.elements.sessionCards) return;
+        
+        // Find the existing card element
+        const cardElement = this.elements.sessionCards.querySelector(`.session-card[data-card-id="${card.id}"]`);
+        if (!cardElement) return;
+        
+        // Create a new card element with updated data
+        const newCardElement = this.isConsolidatedView ? 
+            this.createConsolidatedCardElement(card) : 
+            this.createSessionCardElement(card);
+            
+        // Replace the old card with the updated one
+        cardElement.replaceWith(newCardElement);
+    }
+
+    /**
+     * Display session cards with quantity adjustment buttons
+     */
     displaySessionCards(cards) {
         if (!this.elements.sessionCards) return;
         
@@ -1147,7 +1170,12 @@ export class UIManager {
                     </div>
                     
                     <div class="card-pricing">
-                        ${price > 0 ? `
+                        ${card.price_status === 'loading' ? `
+                            <div class="price-loading">
+                                <div class="loading-spinner-tiny"></div>
+                                <span>Loading price...</span>
+                            </div>
+                        ` : price > 0 ? `
                             <div class="pricing-info">
                                 ${card.tcg_price ? `
                                     <div class="price-item">
@@ -2220,6 +2248,11 @@ export class UIManager {
 
     onPricingRefresh(callback) {
         this.eventListeners.pricingRefresh.push(callback);
+    }
+    
+    onCardUpdated(callback) {
+        this.eventListeners.cardUpdated = this.eventListeners.cardUpdated || [];
+        this.eventListeners.cardUpdated.push(callback);
     }
 
     onSettingsSave(callback) {

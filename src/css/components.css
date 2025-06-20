@@ -682,6 +682,32 @@
   color: var(--color-text-secondary);
 }
 
+/* Price loading state */
+.price-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+  padding: 8px;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-surface-light);
+}
+
+.loading-spinner-tiny {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-top: 2px solid var(--color-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .session-card .loading-spinner-small {
   width: 20px;
   height: 20px;

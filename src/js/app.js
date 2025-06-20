@@ -239,6 +239,16 @@ class YGORipperApp {
                 this.handlePackRipperTabActivated();
             }
         });
+        
+        // Listen for card updates from SessionManager
+        this.sessionManager.onCardUpdated((card) => {
+            this.logger.debug('Card updated:', card);
+            // Update the card display in the UI
+            this.uiManager.updateCardDisplay(card);
+            
+            // Also update the session info in case totals changed
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+        });
 
         // Price checker events
         this.uiManager.onPriceCheck(async (formData) => {
