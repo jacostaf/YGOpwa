@@ -1561,11 +1561,16 @@ export class UIManager {
         const newestCard = sessionCards[sessionCards.length - 1];
         
         // Smooth scroll to the newest card with some offset for better visibility
-        newestCard.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-            inline: 'nearest'
-        });
+        try {
+            newestCard.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'nearest'
+            });
+        } catch (error) {
+            // Fallback for older browsers
+            newestCard.scrollIntoView();
+        }
         
         // Add a brief highlight effect to the newest card
         newestCard.classList.add('newly-added');
