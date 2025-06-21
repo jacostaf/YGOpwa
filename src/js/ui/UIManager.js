@@ -1840,10 +1840,43 @@ export class UIManager {
                         <label for="auto-confirm-threshold">Auto-confirm Threshold</label>
                         <div class="threshold-input">
                             <input type="range" id="auto-confirm-threshold" name="autoConfirmThreshold" 
-                                   min="70" max="95" step="5" value="85">
+                                   min="0" max="100" step="1" value="85">
                             <span class="threshold-value">85%</span>
                         </div>
-                        <p class="setting-description">Minimum confidence required for auto-confirm (70-95%)</p>
+                        <p class="setting-description">Minimum confidence required for auto-confirm (0-100%)</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="voice-confidence-threshold">Voice Confidence Threshold</label>
+                        <div class="threshold-input">
+                            <input type="range" id="voice-confidence-threshold" name="voiceConfidenceThreshold" 
+                                   min="0" max="100" step="1" value="50">
+                            <span class="threshold-value">50%</span>
+                        </div>
+                        <p class="setting-description">Minimum confidence level for voice recognition (0-100%)</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="voice-max-alternatives">Max Voice Alternatives</label>
+                        <input type="number" id="voice-max-alternatives" name="voiceMaxAlternatives" 
+                               min="1" max="10" value="5">
+                        <p class="setting-description">Number of recognition alternatives to consider (1-10)</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="voice-continuous">
+                            <input type="checkbox" id="voice-continuous" name="voiceContinuous" checked>
+                            Continuous Listening
+                        </label>
+                        <p class="setting-description">Keep listening for multiple commands</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="voice-interim-results">
+                            <input type="checkbox" id="voice-interim-results" name="voiceInterimResults" checked>
+                            Show Interim Results
+                        </label>
+                        <p class="setting-description">Show recognition results while speaking</p>
                     </div>
                     
                     <div class="setting-item">
@@ -1947,13 +1980,23 @@ export class UIManager {
      * Setup event listeners for settings form
      */
     setupSettingsEventListeners() {
-        // Threshold slider update
+        // Auto-confirm threshold slider update
         const autoConfirmThreshold = document.getElementById('auto-confirm-threshold');
-        const thresholdValue = document.querySelector('.threshold-value');
+        const autoConfirmThresholdValue = autoConfirmThreshold?.parentElement?.querySelector('.threshold-value');
         
-        if (autoConfirmThreshold && thresholdValue) {
+        if (autoConfirmThreshold && autoConfirmThresholdValue) {
             autoConfirmThreshold.addEventListener('input', (e) => {
-                thresholdValue.textContent = `${e.target.value}%`;
+                autoConfirmThresholdValue.textContent = `${e.target.value}%`;
+            });
+        }
+        
+        // Voice confidence threshold slider update
+        const voiceConfidenceThreshold = document.getElementById('voice-confidence-threshold');
+        const voiceConfidenceThresholdValue = voiceConfidenceThreshold?.parentElement?.querySelector('.threshold-value');
+        
+        if (voiceConfidenceThreshold && voiceConfidenceThresholdValue) {
+            voiceConfidenceThreshold.addEventListener('input', (e) => {
+                voiceConfidenceThresholdValue.textContent = `${e.target.value}%`;
             });
         }
         
@@ -1973,7 +2016,7 @@ export class UIManager {
             });
         }
     }
-
+    
     /**
      * Handle save settings
      */
@@ -1990,11 +2033,19 @@ export class UIManager {
     handleResetSettings() {
         // Reset to default values
         const defaultSettings = {
+            // General settings
             autoConfirm: false,
             autoConfirmThreshold: 85,
             voiceTimeout: 5000,
             sessionAutoSave: true,
-            theme: 'dark'
+            theme: 'dark',
+            
+            // Voice recognition settings
+            voiceConfidenceThreshold: 0.5,
+            voiceMaxAlternatives: 5,
+            voiceContinuous: true,
+            voiceInterimResults: true,
+            voiceLanguage: 'en-US'
         };
         
         this.populateSettingsForm(defaultSettings);
@@ -2005,23 +2056,26 @@ export class UIManager {
     /**
      * Collect settings data from form
      */
+    /**
+     * Collect settings data from form
+     */
     collectSettingsData() {
-        const autoConfirmCheckbox = document.getElementById('auto-confirm-checkbox');
-        const autoConfirmThreshold = document.getElementById('auto-confirm-threshold');
-        const voiceTimeout = document.getElementById('voice-timeout');
-        const sessionAutoSave = document.getElementById('session-auto-save');
-        const themeSelect = document.getElementById('theme-select');
-        const autoExtractRarityCheckbox = document.getElementById('auto-extract-rarity-checkbox');
-        const autoExtractArtVariantCheckbox = document.getElementById('auto-extract-art-variant-checkbox');
-        
         return {
-            autoConfirm: autoConfirmCheckbox?.checked || false,
-            autoConfirmThreshold: parseInt(autoConfirmThreshold?.value) || 85,
-            autoExtractRarity: autoExtractRarityCheckbox?.checked || false,
-            autoExtractArtVariant: autoExtractArtVariantCheckbox?.checked || false,
-            voiceTimeout: (parseInt(voiceTimeout?.value) || 5) * 1000, // Convert to ms
-            sessionAutoSave: sessionAutoSave?.checked !== false, // Default to true
-            theme: themeSelect?.value || 'dark'
+            // General settings
+            autoConfirm: document.getElementById('auto-confirm-checkbox')?.checked || false,
+            autoConfirmThreshold: parseInt(document.getElementById('auto-confirm-threshold')?.value || '85'),
+            autoExtractRarity: document.getElementById('auto-extract-rarity-checkbox')?.checked || false,
+            autoExtractArtVariant: document.getElementById('auto-extract-art-variant-checkbox')?.checked || false,
+            voiceTimeout: (parseInt(document.getElementById('voice-timeout')?.value || '5') * 1000), // Convert to ms
+            sessionAutoSave: document.getElementById('session-auto-save')?.checked !== false, // Default to true
+            theme: document.getElementById('theme-select')?.value || 'dark',
+            
+            // Voice recognition settings
+            voiceConfidenceThreshold: parseInt(document.getElementById('voice-confidence-threshold')?.value || '50') / 100, // Convert to 0-1 range
+            voiceMaxAlternatives: parseInt(document.getElementById('voice-max-alternatives')?.value || '5'),
+            voiceContinuous: document.getElementById('voice-continuous')?.checked !== false, // Default to true
+            voiceInterimResults: document.getElementById('voice-interim-results')?.checked !== false, // Default to true
+            voiceLanguage: 'en-US' // Default language, can be made configurable later
         };
     }
 

@@ -178,6 +178,11 @@ class YGORipperApp {
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
                 autoConfirmThreshold: 85,
+                // Voice recognition settings
+                voiceConfidenceThreshold: 0.5,
+                voiceMaxAlternatives: 5,
+                voiceContinuous: true,
+                voiceInterimResults: true,
                 // Auto-extraction settings (matching oldIteration.py)
                 autoExtractRarity: false,
                 autoExtractArtVariant: false
@@ -816,20 +821,32 @@ class YGORipperApp {
         try {
             this.logger.info('Saving settings:', newSettings);
             
-            // Update application settings
+            // Update current settings
             this.settings = { ...this.settings, ...newSettings };
-            
-            // Update SessionManager settings for auto-extraction
-            this.sessionManager.updateSettings(this.settings);
             
             // Save to storage
             await this.saveSettings();
             
-            this.logger.info('Settings saved successfully');
+            // Update UI based on theme
+            if (newSettings.theme) {
+                document.documentElement.setAttribute('data-theme', newSettings.theme);
+            }
+            
+            // Update voice engine with new settings
+            if (this.voiceEngine) {
+                this.voiceEngine.updateConfig(this.settings);
+            }
+            
+            // Notify other components
+            if (this.sessionManager) {
+                this.sessionManager.updateSettings(this.settings);
+            }
+            
+            this.uiManager.showToast('Settings saved successfully', 'success');
             
         } catch (error) {
             this.logger.error('Failed to save settings:', error);
-            this.uiManager.showToast('Error saving settings: ' + error.message, 'error');
+            this.uiManager.showToast('Failed to save settings', 'error');
         }
     }
 

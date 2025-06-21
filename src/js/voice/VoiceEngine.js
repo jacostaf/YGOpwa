@@ -70,6 +70,46 @@ export class VoiceEngine {
     /**
      * Initialize the voice engine
      */
+    /**
+     * Update engine configuration
+     * @param {Object} settings - Settings to update
+     */
+    updateConfig(settings = {}) {
+        if (!settings) return;
+        
+        // Map settings to our internal config
+        const configUpdates = {
+            confidenceThreshold: settings.voiceConfidenceThreshold,
+            maxAlternatives: settings.voiceMaxAlternatives,
+            continuous: settings.voiceContinuous,
+            interimResults: settings.voiceInterimResults,
+            language: settings.voiceLanguage || this.config.language
+        };
+        
+        // Apply updates
+        Object.keys(configUpdates).forEach(key => {
+            if (configUpdates[key] !== undefined) {
+                this.config[key] = configUpdates[key];
+            }
+        });
+        
+        this.logger.debug('Voice engine config updated:', this.config);
+        
+        // Reinitialize if already initialized
+        if (this.isInitialized) {
+            this.reinitialize();
+        }
+    }
+    
+    /**
+     * Reinitialize the voice engine with current config
+     */
+    async reinitialize() {
+        this.logger.info('Reinitializing voice engine with updated config...');
+        await this.stop();
+        await this.initialize();
+    }
+    
     async initialize() {
         if (this.isInitialized) {
             return true;
@@ -77,6 +117,7 @@ export class VoiceEngine {
 
         try {
             this.logger.info('Initializing voice engine...');
+            this.logger.debug('Voice engine config:', this.config);
             
             // Check environment compatibility
             if (!this.isEnvironmentSupported()) {
@@ -594,23 +635,49 @@ export class VoiceEngine {
         
         // Common Yu-Gi-Oh terms and their phonetic variations
         this.commonCardTerms = [
-            // Card types
+            // Card types and common mispronunciations
             { pattern: /dragun/gi, replacement: 'Dragon' },
-            { pattern: /majician/gi, replacement: 'Magician' },
-            { pattern: /warriar/gi, replacement: 'Warrior' },
-            { pattern: /elemental/gi, replacement: 'Elemental' },
+            { pattern: /maj?i[sc]h?i[ea]n/gi, replacement: 'Magician' },
+            { pattern: /warri[oa]r/gi, replacement: 'Warrior' },
+            { pattern: /element[a-z]*/gi, replacement: 'Elemental' },
+            { pattern: /synch?ro/gi, replacement: 'Synchro' },
+            { pattern: /ex[cs]ee?z/gi, replacement: 'XYZ' },
+            { pattern: /linku?/gi, replacement: 'Link' },
+            { pattern: /pendulum/gi, replacement: 'Pendulum' },
             
-            // Common card names
-            { pattern: /blue.*i.*white.*dragun/gi, replacement: 'Blue-Eyes White Dragon' },
-            { pattern: /dark.*majician/gi, replacement: 'Dark Magician' },
-            { pattern: /red.*i.*black.*dragun/gi, replacement: 'Red-Eyes Black Dragon' },
-            { pattern: /time.*wiserd/gi, replacement: 'Time Wizard' },
+            // Specific problematic cards
+            { pattern: /mulch?army\s*me[ao]wls?/gi, replacement: 'Mulcharmy Meowls' },
+            { pattern: /futsu\s*no\s*mitama\s*no\s*mitsurugi/gi, replacement: 'Futsu no Mitama no Mitsurugi' },
+            { pattern: /blue\s*[ie]y?e[ds]?\s*white\s*drag[ou]n/gi, replacement: 'Blue-Eyes White Dragon' },
+            { pattern: /dark\s*mag?i[sc]h?i[ea]n/gi, replacement: 'Dark Magician' },
+            { pattern: /red\s*-?\s*ey?e[ds]?\s*black\s*drag[ou]n/gi, replacement: 'Red-Eyes Black Dragon' },
+            { pattern: /time\s*wiz[ae]rd/gi, replacement: 'Time Wizard' },
+            { pattern: /pot\s*of\s*greed/gi, replacement: 'Pot of Greed' },
+            { pattern: /mirror\s*force/gi, replacement: 'Mirror Force' },
+            { pattern: /ryu[ -]?jin/gi, replacement: 'Raigeki' },
+            { pattern: /har[ip]e[iy]e?/gi, replacement: 'Harpie' },
+            { 
+                pattern: /toon\s*([^\s]*)/gi, 
+                replacement: (match, p1) => 'Toon ' + p1 
+            },
             
-            // Common misrecognitions
-            { pattern: /pott?.*of.*greed/gi, replacement: 'Pot of Greed' },
-            { pattern: /mirror.*four.*ce/gi, replacement: 'Mirror Force' },
-            { pattern: /ryu.*gin.*jin/gi, replacement: 'Raigeki' },
+            // Japanese card name patterns
+            { pattern: /shin?d[ou]\s*in?sh[ou]k[au]n/gi, replacement: 'Shin Do Inshoukan' },
+            { pattern: /y[ou]?[ -]?g[ie]?[ -]?[ou]h?[ou]?/gi, replacement: 'Yu-Gi-Oh' },
+            { pattern: /m[ae]k[ou]?sh[aei]/gi, replacement: 'Mekk-Knight' },
+            { pattern: /salamangreat/gi, replacement: 'Salamangreat' },
+            
+            // Common prefixes and suffixes
+            { pattern: /\b(?:the|a|an)\s+/gi, replacement: '' }, // Remove articles
+            { pattern: /(?:monster|card|dragon|warrior|spell|trap)\b/gi, replacement: '' }, // Remove common generic terms
+            { pattern: /\s{2,}/g, replacement: ' ' }, // Clean up extra spaces
+            { pattern: /^\s+|\s+$/g, replacement: '' } // Trim spaces
         ];
+        
+        // Configure recognition settings for better fantasy name recognition
+        this.config.confidenceThreshold = 0.5; // Lower threshold for better acceptance
+        this.config.maxAlternatives = 5; // Consider more alternatives
+        this.config.continuous = true; // Better for multi-word card names
         
         this.logger.info(`Loaded ${this.commonCardTerms.length} card name optimizations`);
     }
