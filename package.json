@@ -6,7 +6,7 @@
   "main": "index.html",
   "scripts": {
     "start": "python3 -m http.server 8080 --directory .",
-    "dev": "python3 -m http.server 7030 --directory . --bind 127.0.0.1",
+    "dev": "python3 -m http.server 7036 --directory . --bind 127.0.0.1",
     "test": "node src/tests/runner.js",
     "test-voice": "node src/tests/voice.test.js",
     "build": "node scripts/build.js",

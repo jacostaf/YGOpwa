@@ -894,20 +894,29 @@ class YGORipperApp {
                 return;
             }
             
-            // Process the voice result to identify cards
-            const cards = await this.sessionManager.processVoiceInput(result.transcript);
+            // Always show what was heard in the main window immediately
+            this.uiManager.showVoiceFeedback(result.transcript);
             
-            if (cards.length > 0) {
-                // Sort cards by confidence for auto-confirm logic (highest to lowest)
+            // Process the voice result to identify cards
+            let cards = [];
+            try {
+                cards = await this.sessionManager.processVoiceInput(result.transcript);
+            } catch (error) {
+                this.logger.error('Error processing voice input:', error);
+                this.uiManager.showToast(`Error processing: "${result.transcript}"`, 'error');
+                return;
+            }
+            
+            if (cards && cards.length > 0) {
+                // Sort cards by confidence (highest to lowest)
                 const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+                const bestMatch = sortedCards[0];
+                const bestConfidencePercent = (bestMatch.confidence || 0) * 100;
                 
-                this.logger.info(`Found ${cards.length} card matches, best confidence: ${(sortedCards[0].confidence || 0) * 100}%`);
+                this.logger.info(`Found ${cards.length} card matches, best confidence: ${bestConfidencePercent.toFixed(1)}%`);
                 
                 // Check for auto-confirm
-                const bestMatch = sortedCards[0];
-                const bestConfidencePercent = bestMatch.confidence || 0;
-                
-                if (this.settings.autoConfirm && bestConfidencePercent >= this.settings.autoConfirmThreshold) {
+                if (this.settings.autoConfirm && bestConfidencePercent >= (this.settings.autoConfirmThreshold || 90)) {
                     // Auto-confirm the best match
                     this.logger.info(`Auto-confirming: ${bestMatch.name} (${bestConfidencePercent.toFixed(1)}% confidence)`);
                     
@@ -930,6 +939,7 @@ class YGORipperApp {
                     this.showCardSelectionDialog(sortedCards, result.transcript);
                 }
             } else {
+                this.logger.warn(`No cards matched for: "${result.transcript}"`);
                 this.uiManager.showToast(`No cards recognized for: "${result.transcript}"`, 'warning');
             }
             
@@ -983,31 +993,65 @@ class YGORipperApp {
      */
     showCardSelectionDialog(cards, transcript) {
         this.logger.info(`Showing card selection dialog for ${cards.length} cards`);
+        this.logger.debug('Cards data:', cards);
         
         // Create the dialog HTML
         const dialogHTML = `
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>Select Card</h3>
-                    <button class="modal-close" type="button">&times;</button>
+                    <button class="modal-close" type="button" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p class="voice-query">Voice input: "<em>${transcript}</em>"</p>
-                    <p class="instructions">Select the card you meant:</p>
+                    <div class="instructions">
+                        Select the correct card from the options below:
+                    </div>
                     <div class="card-options">
                         ${cards.map((card, index) => {
-                            const confidencePercent = (card.confidence || 0).toFixed(1);
+                            const confidencePercent = ((card.confidence || 0) * 100).toFixed(1);
+                            
+                            // Get the card data from the most reliable source
+                            const cardData = card.card || card;
+                            
+                            // Get the rarity with proper fallback chain
+                            let rarity = 'Unknown';
+                            if (cardData.rarity) {
+                                rarity = cardData.rarity;
+                            } else if (cardData.rarities && Array.isArray(cardData.rarities) && cardData.rarities.length > 0) {
+                                // If we have multiple rarities, use the first one
+                                rarity = cardData.rarities[0];
+                            } else if (card.rarity) {
+                                // Fall back to top-level rarity if available
+                                rarity = card.rarity;
+                            } else if (card.displayRarity) {
+                                // Try displayRarity as last resort
+                                rarity = card.displayRarity;
+                            }
+                            
+                            // Clean up the rarity string
+                            rarity = String(rarity || '').trim() || 'Unknown';
+                            
+                            // Get the card name from the most reliable source
+                            const cardName = cardData.name || card.name || 'Unknown Card';
+                            
+                            // Get set code if available
+                            const setCode = (card.setInfo && card.setInfo.setCode) || 
+                                         card.set_code || 
+                                         (card.card && card.card.set_code) || '';
+                            
                             return `
-                                <div class="card-option" data-card-index="${index}">
+                                <div class="card-option" data-card-index="${index}" role="option" aria-selected="false">
                                     <div class="card-info">
-                                        <div class="card-name">${card.name}</div>
+                                        <div class="card-name">${cardName}</div>
                                         <div class="card-details">
-                                            <span class="card-rarity">${card.displayRarity || card.rarity}</span>
-                                            <span class="card-confidence">${confidencePercent}% confidence</span>
-                                            ${card.setInfo ? `<span class="card-set">${card.setInfo.setCode}</span>` : ''}
+                                            <span class="card-rarity ${rarity.toLowerCase().replace(/\s+/g, '-')}">${rarity}</span>
+                                            <span class="card-confidence">${confidencePercent}% match</span>
+                                            ${setCode ? `<span class="card-set">${setCode}</span>` : ''}
                                         </div>
                                     </div>
-                                    <button class="btn btn-primary select-card-btn" data-card-index="${index}">
+                                    <button class="btn btn-primary select-card-btn" 
+                                            data-card-index="${index}"
+                                            aria-label="Select ${cardName}">
                                         Select
                                     </button>
                                 </div>
@@ -1015,11 +1059,12 @@ class YGORipperApp {
                         }).join('')}
                     </div>
                     <div class="dialog-actions">
-                        <button class="btn btn-secondary" id="cancel-card-selection">Cancel</button>
+                        <button class="btn btn-secondary" id="cancel-card-selection">
+                            Cancel
+                        </button>
                     </div>
                 </div>
-            </div>
-        `;
+            </div>`;
         
         // Create modal element
         const modal = document.createElement('div');

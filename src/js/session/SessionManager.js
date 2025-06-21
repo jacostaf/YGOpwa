@@ -1283,19 +1283,25 @@ export class SessionManager {
                 const matches = await this.findCardsInCurrentSet(cleanTranscript, extractedRarity);
                 
                 // Transform matches to ensure they have the expected structure
-                recognizedCards = matches.map(match => ({
-                    ...match.card,  // Spread all card properties
-                    confidence: match.score * 100,  // Convert to percentage
-                    displayRarity: match.rarity,    // Ensure displayRarity is set
-                    setInfo: {
-                        setCode: this.currentSet?.code,
-                        setName: this.currentSet?.name
-                    },
-                    matchedVariant: match.matchedVariant,
-                    matchMethod: match.matchMethod,
-                    lengthPenalty: match.lengthPenalty,
-                    rawScore: match.rawScore
-                }));
+                recognizedCards = matches.map(match => {
+                    // Use the card's rarity if available, otherwise fall back to the extracted rarity or match.rarity
+                    const displayRarity = match.card.rarity || extractedRarity || match.rarity || 'Unknown';
+                    
+                    return {
+                        ...match.card,  // Spread all card properties
+                        confidence: match.score * 100,  // Convert to percentage
+                        displayRarity: displayRarity,    // Use the determined rarity
+                        rarity: displayRarity,          // Ensure both displayRarity and rarity are set
+                        setInfo: {
+                            setCode: this.currentSet?.code,
+                            setName: this.currentSet?.name
+                        },
+                        matchedVariant: match.matchedVariant,
+                        matchMethod: match.matchMethod,
+                        lengthPenalty: match.lengthPenalty,
+                        rawScore: match.rawScore
+                    };
+                });
             }
             
             this.logger.info(`Found ${recognizedCards.length} potential card matches`);

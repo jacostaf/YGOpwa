@@ -1623,6 +1623,51 @@ export class UIManager {
     }
 
     /**
+     * Show voice recognition feedback in the UI
+     * @param {string} transcript - The recognized voice transcript
+     */
+    showVoiceFeedback(transcript) {
+        // Create or update voice feedback element
+        let feedbackEl = document.getElementById('voice-feedback');
+        
+        if (!feedbackEl) {
+            // Create the feedback element if it doesn't exist
+            feedbackEl = document.createElement('div');
+            feedbackEl.id = 'voice-feedback';
+            feedbackEl.className = 'voice-feedback';
+            feedbackEl.style.position = 'fixed';
+            feedbackEl.style.bottom = '20px';
+            feedbackEl.style.left = '50%';
+            feedbackEl.style.transform = 'translateX(-50%)';
+            feedbackEl.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+            feedbackEl.style.color = 'white';
+            feedbackEl.style.padding = '10px 20px';
+            feedbackEl.style.borderRadius = '20px';
+            feedbackEl.style.zIndex = '1000';
+            feedbackEl.style.fontSize = '14px';
+            feedbackEl.style.maxWidth = '80%';
+            feedbackEl.style.textAlign = 'center';
+            feedbackEl.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
+            document.body.appendChild(feedbackEl);
+        }
+        
+        // Update the content
+        feedbackEl.innerHTML = `I heard: <strong>${transcript}</strong>`;
+        feedbackEl.style.display = 'block';
+        
+        // Auto-hide after a delay if no new input
+        if (this.voiceFeedbackTimer) {
+            clearTimeout(this.voiceFeedbackTimer);
+        }
+        
+        this.voiceFeedbackTimer = setTimeout(() => {
+            if (feedbackEl) {
+                feedbackEl.style.display = 'none';
+            }
+        }, 5000); // Hide after 5 seconds of no new input
+    }
+
+    /**
      * Show toast notification
      */
     showToast(message, type = 'info', duration = null) {
