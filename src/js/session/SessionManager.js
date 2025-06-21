@@ -58,9 +58,19 @@ export class SessionManager {
             autoSave: true,
             autoSaveInterval: 30000, // 30 seconds
             maxSessionHistory: 50,
-            cardMatchThreshold: 0.1,
+            cardMatchThreshold: 0.3, // Increased from 0.1 to filter out weaker matches
+            minWordMatchPercentage: 0.6, // Minimum percentage of words that must match
             enableFuzzyMatching: true,
-            apiTimeout: 30000 // 30 second timeout for API calls
+            apiTimeout: 30000, // 30 second timeout for API calls
+            scoring: {
+                fuzzyWeight: 0.4,
+                wordWeight: 0.4,
+                compoundWeight: 0.2,
+                rarityWeight: 0.4, // Increased weight when rarity is provided
+                minRarityConfidence: 0.7, // Minimum confidence to apply rarity boost
+                positionWeight: 0.3, // Weight for position-based scoring
+                minWordLength: 3 // Minimum word length to consider for matching
+            }
         };
         
         // Auto-save timer
@@ -1141,69 +1151,108 @@ export class SessionManager {
 
 
     /**
-     * Find cards by fuzzy matching using advanced variant generation
+     * Find cards by fuzzy matching with enhanced scoring
      */
-     async findCardsByFuzzyMatch(transcript, extractedRarity = null) {
+    async findCardsByFuzzyMatch(transcript, extractedRarity = null) {
         if (!this.currentSet) {
             return [];
         }
         
         const setCards = this.setCards.get(this.currentSet.id) || [];
         const matches = [];
+        const transcriptLower = transcript.toLowerCase();
         
         // Generate search variants for the transcript
         const searchVariants = this.generateCardNameVariants(transcript);
         
         for (const card of setCards) {
-            const cardNameVariants = this.generateCardNameVariants(card.name);
+            const cardNameLower = card.name.toLowerCase();
             
+            // Fast path: exact match (case insensitive)
+            if (transcriptLower === cardNameLower) {
+                return [{
+                    ...card,
+                    confidence: 100,
+                    method: 'exact',
+                    transcript: transcript,
+                    rawScore: 1,
+                    lengthPenalty: 1
+                }];
+            }
+            
+            // Initialize scores
             let bestScore = 0;
-            let bestMethod = '';
+            let bestVariant = '';
             
             // Test all combinations of search variants vs card variants
             for (const searchVariant of searchVariants) {
-                for (const cardVariant of cardNameVariants) {
-                    // Method 1: Fuzzy ratio
-                    const fuzzyScore = this.calculateSimilarity(searchVariant, cardVariant);
+                const cardVariants = this.generateCardNameVariants(card.name);
+                
+                for (const cardVariant of cardVariants) {
+                    // Calculate individual scores with weights
+                    const fuzzyScore = this.calculateSimilarity(searchVariant, cardVariant) * 0.4;
+                    const wordScore = this.calculateWordByWordScore(searchVariant, cardVariant) * 0.3;
+                    const compoundScore = this.calculateCompoundWordScore(searchVariant, cardVariant) * 0.3;
                     
-                    // Method 2: Word-by-word matching
-                    const wordScore = this.calculateWordByWordScore(searchVariant, cardVariant);
+                    // Combined score with weights
+                    const combinedScore = fuzzyScore + wordScore + compoundScore;
                     
-                    // Method 3: Compound word detection
-                    const compoundScore = this.calculateCompoundWordScore(searchVariant, cardVariant);
-                    
-                    // Take the best score from all methods
-                    const scores = [fuzzyScore, wordScore, compoundScore];
-                    const maxScore = Math.max(...scores);
-                    
-                    if (maxScore > bestScore) {
-                        bestScore = maxScore;
-                        const methodIndex = scores.indexOf(maxScore);
-                        bestMethod = ['fuzzy', 'word', 'compound'][methodIndex];
+                    if (combinedScore > bestScore) {
+                        bestScore = combinedScore;
+                        bestVariant = cardVariant;
                     }
                 }
             }
             
-            // Apply length penalty (similar to oldIteration.py)
-            const lengthDifference = Math.abs(transcript.length - card.name.length);
+            // Apply length penalty (more aggressive for longer differences)
+            const lengthRatio = Math.min(transcript.length, card.name.length) / 
+                              Math.max(transcript.length, card.name.length);
+            // Exponential penalty for length differences
+            const lengthPenalty = Math.pow(lengthRatio, 1.5);
+            
+            // Penalize if the match is based on a small part of the name
+            const minLength = Math.min(transcript.length, card.name.length);
             const maxLength = Math.max(transcript.length, card.name.length);
-            const lengthPenalty = maxLength > 0 ? Math.max(0, 1 - (lengthDifference / maxLength)) : 1;
+            const lengthMismatchPenalty = minLength / maxLength < 0.5 ? 0.7 : 1;
             
-            const finalScore = bestScore * lengthPenalty;
+            // Calculate final score with penalties
+            let finalScore = bestScore * lengthPenalty * lengthMismatchPenalty;
             
+            // Boost score if rarity matches (when provided)
+            if (extractedRarity && card.rarity) {
+                const rarityScore = this.calculateRarityScore(extractedRarity, card.rarity) / 100;
+                if (rarityScore > 0.7) { // Only boost if we're fairly confident in the rarity match
+                    finalScore = Math.min(1, finalScore * (1 + (rarityScore * 0.3)));
+                }
+            }
+            
+            // Only include matches above the threshold
             if (finalScore >= this.config.cardMatchThreshold) {
                 matches.push({
                     ...card,
-                    confidence: finalScore * 100, // Convert to percentage like Python
-                    method: `fuzzy-${bestMethod}`,
+                    confidence: Math.min(99, finalScore * 100), // Cap at 99% for non-exact matches
+                    method: 'fuzzy',
+                    variant: bestVariant,
                     transcript: transcript,
                     rawScore: bestScore,
-                    lengthPenalty: lengthPenalty
+                    lengthPenalty: lengthPenalty,
+                    lengthMismatchPenalty: lengthMismatchPenalty
                 });
             }
         }
         
-        return matches.sort((a, b) => b.confidence - a.confidence);
+        // Sort by confidence, then by length difference (prefer closer matches)
+        return matches.sort((a, b) => {
+            // If confidences are significantly different, sort by confidence
+            if (Math.abs(b.confidence - a.confidence) > 5) {
+                return b.confidence - a.confidence;
+            }
+            
+            // If confidences are close, prefer the one with smaller length difference
+            const aLengthDiff = Math.abs(transcript.length - a.name.length);
+            const bLengthDiff = Math.abs(transcript.length - b.name.length);
+            return aLengthDiff - bLengthDiff;
+        });
     }
 
     /**
@@ -1280,39 +1329,202 @@ export class SessionManager {
     }
 
     /**
-     * Calculate word-by-word matching score
+     * Calculate word-by-word matching score with improved weighting
+     * Gives more weight to longer and more unique words, and considers word positions
      */
     calculateWordByWordScore(str1, str2) {
-        const words1 = str1.toLowerCase().split(/[\s-]+/);
-        const words2 = str2.toLowerCase().split(/[\s-]+/);
+        // Handle possessive forms (e.g., "King's" -> "King")
+        const normalizeWord = (word) => word.replace(/'s$/, '');
         
-        let matchCount = 0;
-        const totalWords = Math.max(words1.length, words2.length);
+        const words1 = str1.toLowerCase().split(/[\s-]+/).map(normalizeWord);
+        const words2 = str2.toLowerCase().split(/[\s-]+/).map(normalizeWord);
         
-        for (const word1 of words1) {
-            for (const word2 of words2) {
-                if (word1 === word2 || this.calculateSimilarity(word1, word2) >= 0.8) {
-                    matchCount++;
-                    break;
+        if (words1.length === 0 || words2.length === 0) {
+            return 0;
+        }
+        
+        // Calculate word weights based on length and uniqueness
+        const wordWeights = {};
+        const allWords = [...new Set([...words1, ...words2])];
+        
+        // Common words that shouldn't carry much weight
+        const commonWords = new Set(['the', 'and', 'of', 'to', 'in', 'a', 'for', 'is', 'on', 'that', 'by', 'this', 'with', 'you', 'it', 'not', 'or', 'be', 'are']);
+        
+        // First pass: calculate inverse document frequency (IDF) for each word
+        for (const word of allWords) {
+            if (commonWords.has(word) || word.length < this.config.scoring.minWordLength) {
+                wordWeights[word] = 0.1; // Very low weight for common/short words
+                continue;
+            }
+            
+            // Calculate IDF-like score (rarer words get higher weight)
+            const docFreq = (words1.includes(word) ? 1 : 0) + (words2.includes(word) ? 1 : 0);
+            wordWeights[word] = Math.log(3 / (1 + docFreq));
+        }
+        
+        // Track matched words to avoid double-counting
+        const matchedWords2 = new Set();
+        let totalScore = 0;
+        let maxPossibleScore = 0;
+        
+        // For each word in the first string, find best match in second string
+        words1.forEach((word1, pos1) => {
+            if (word1.length < this.config.scoring.minWordLength) return;
+            
+            let bestMatchScore = 0;
+            let bestPosDiff = Infinity;
+            
+            words2.forEach((word2, pos2) => {
+                if (word2.length < this.config.scoring.minWordLength || matchedWords2.has(pos2)) return;
+                
+                let similarity;
+                if (word1 === word2) {
+                    similarity = 1.0;
+                } else {
+                    // Only calculate similarity for words that share a prefix
+                    if (word1[0] === word2[0] && Math.abs(word1.length - word2.length) <= 2) {
+                        similarity = this.calculateSimilarity(word1, word2);
+                    } else {
+                        return; // Skip if words don't share first letter
+                    }
+                }
+                
+                if (similarity < 0.7) return; // Skip low similarity matches
+                
+                // Position-based scoring - prefer matches in similar positions
+                const posDiff = Math.abs(pos1 - pos2);
+                const posScore = 1 - (posDiff / Math.max(words1.length, words2.length));
+                
+                // Apply word weights and position score
+                const weight = (wordWeights[word1] || 0.3) * (wordWeights[word2] || 0.3);
+                const weightedScore = similarity * weight * (0.7 + 0.3 * posScore);
+                
+                if (weightedScore > bestMatchScore || 
+                   (Math.abs(weightedScore - bestMatchScore) < 0.05 && posDiff < bestPosDiff)) {
+                    bestMatchScore = weightedScore;
+                    bestPosDiff = posDiff;
+                }
+            });
+            
+            if (bestMatchScore > 0) {
+                totalScore += bestMatchScore * (word1.length / 4); // Favor longer words more
+                // Mark the best matching word as used
+                const bestMatchIndex = words2.findIndex((w, i) => 
+                    !matchedWords2.has(i) && 
+                    this.calculateSimilarity(word1, w) >= 0.7
+                );
+                if (bestMatchIndex !== -1) {
+                    matchedWords2.add(bestMatchIndex);
+                }
+            }
+            
+            maxPossibleScore += (wordWeights[word1] || 0.3) * (word1.length / 4);
+        });
+        
+        // Calculate word coverage penalty
+        const matchedRatio = matchedWords2.size / Math.max(1, words2.length);
+        const coveragePenalty = matchedRatio < this.config.minWordMatchPercentage ? 
+            (matchedRatio / this.config.minWordMatchPercentage) : 1;
+        
+        // Normalize and apply coverage penalty
+        const score = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * coveragePenalty : 0;
+        
+        // Penalize if we didn't match enough words in the search term
+        const searchTermCoverage = matchedWords2.size / Math.max(1, words1.length);
+        const searchTermPenalty = searchTermCoverage < 0.5 ? 
+            (0.5 + searchTermCoverage) : 1;
+            
+        return Math.min(1, score * searchTermPenalty);
+    }
+
+    /**
+     * Calculate compound word detection score with improved handling
+     * of abbreviations and partial matches
+     */
+    calculateCompoundWordScore(str1, str2) {
+        // Skip very short strings as they often cause false positives
+        if (str1.length < 3 || str2.length < 3) {
+            return 0;
+        }
+        
+        const clean1 = str1.replace(/[\s-]/g, '').toLowerCase();
+        const clean2 = str2.replace(/[\s-]/g, '').toLowerCase();
+        
+        if (clean1 === clean2) {
+            return 1.0;
+        }
+        
+        // Check for direct inclusion with position awareness
+        if (clean1.includes(clean2) || clean2.includes(clean1)) {
+            const shorter = clean1.length < clean2.length ? clean1 : clean2;
+            const longer = clean1.length >= clean2.length ? clean1 : clean2;
+            
+            // Require minimum length for partial matches
+            if (shorter.length < 3) {
+                return 0;
+            }
+            
+            // Higher score for longer matches
+            const lengthRatio = shorter.length / longer.length;
+            
+            // Check for boundary matches (start/end of string or after uppercase)
+            const boundaryMatch = 
+                longer.startsWith(shorter) || 
+                longer.endsWith(shorter) ||
+                longer.includes(shorter.charAt(0).toUpperCase() + shorter.slice(1)) ||
+                longer.includes(' ' + shorter) ||
+                longer.includes(shorter + ' ');
+            
+            // Base score depends on boundary match and length ratio
+            let baseScore = boundaryMatch ? 0.7 : 0.5;
+            
+            // Scale by how much of the shorter string is matched
+            const score = baseScore * (0.3 + 0.7 * lengthRatio);
+            
+            // Cap the score to prevent false positives
+            return Math.min(0.8, score);
+        }
+        
+        // Check for common abbreviations (e.g., 'zrc' for 'zero')
+        const abbreviationMap = {
+            'zrc': 'zero',
+            'zro': 'zero',
+            'ark': 'arc',
+            'drac': 'dragon',
+            'draco': 'dragon',
+            'sup': 'supreme',
+            'supr': 'supreme',
+            'suprm': 'supreme',
+            'kings': 'king',
+            'kngs': 'king',
+            'kng': 'king',
+            'supk': 'supreme king',
+            'supkng': 'supreme king',
+            'supkings': 'supreme kings'
+        };
+        
+        // Check if either string is an abbreviation of the other
+        for (const [abbr, full] of Object.entries(abbreviationMap)) {
+            if ((clean1 === abbr && clean2.includes(full)) || 
+                (clean2 === abbr && clean1.includes(full)) ||
+                (clean1.includes(abbr) && clean2.includes(full)) ||
+                (clean2.includes(abbr) && clean1.includes(full))) {
+                
+                const fullInClean1 = clean1.includes(full);
+                const fullInClean2 = clean2.includes(full);
+                const abbrInClean1 = clean1.includes(abbr);
+                const abbrInClean2 = clean2.includes(abbr);
+                
+                // Only return a score if we have both the abbreviation and full form
+                if ((fullInClean1 && abbrInClean2) || (fullInClean2 && abbrInClean1)) {
+                    return 0.7 + (0.2 * (abbr.length / full.length));
                 }
             }
         }
         
-        return totalWords > 0 ? (matchCount / totalWords) : 0;
-    }
-
-    /**
-     * Calculate compound word detection score
-     */
-    calculateCompoundWordScore(str1, str2) {
-        const clean1 = str1.replace(/[\s-]/g, '').toLowerCase();
-        const clean2 = str2.replace(/[\s-]/g, '').toLowerCase();
-        
-        if (clean1.includes(clean2) || clean2.includes(clean1)) {
-            return 0.9;
-        }
-        
-        return this.calculateSimilarity(clean1, clean2);
+        // For non-matches, use a more conservative similarity check
+        const similarity = this.calculateSimilarity(clean1, clean2);
+        return similarity > 0.8 ? similarity * 0.6 : 0;
     }
 
     /**
@@ -1607,19 +1819,47 @@ export class SessionManager {
     
 
     /**
-     * Calculate similarity between two strings
+     * Calculate similarity between two strings using Levenshtein distance
+     * with case-insensitive comparison and common typo handling
      */
     calculateSimilarity(str1, str2) {
-        // Simple Levenshtein distance-based similarity
-        const longer = str1.length > str2.length ? str1 : str2;
-        const shorter = str1.length > str2.length ? str2 : str1;
+        // Convert to lowercase for case-insensitive comparison
+        const s1 = str1.toLowerCase();
+        const s2 = str2.toLowerCase();
         
-        if (longer.length === 0) {
-            return 1.0;
+        // Check for empty strings
+        if (s1 === s2) return 1.0;
+        if (s1.length === 0 || s2.length === 0) return 0;
+        
+        // Check for common abbreviations and typos
+        const commonTypos = {
+            'zero': ['zrc', 'zro'],
+            'arc': ['ark', 'arck'],
+            'dragon': ['dargon', 'dragn'],
+            'supreme': ['superm', 'suprime'],
+            'king': ['kin', 'kng', 'kingg']
+        };
+        
+        // Check if strings are common typos of each other
+        for (const [correct, typos] of Object.entries(commonTypos)) {
+            if ((s1 === correct && typos.includes(s2)) || 
+                (s2 === correct && typos.includes(s1))) {
+                return 0.9; // High score for common typos
+            }
         }
         
+        // Use Levenshtein distance for general case
+        const longer = s1.length > s2.length ? s1 : s2;
+        const shorter = s1.length > s2.length ? s2 : s1;
+        
         const distance = this.levenshteinDistance(longer, shorter);
-        return (longer.length - distance) / longer.length;
+        const similarity = (longer.length - distance) / longer.length;
+        
+        // Apply length-based adjustment
+        const lengthRatio = shorter.length / longer.length;
+        const adjustedSimilarity = similarity * (0.3 + 0.7 * lengthRatio);
+        
+        return Math.min(1, Math.max(0, adjustedSimilarity));
     }
 
     /**

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtualized List Performance Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        button {
+            padding: 8px 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e9f7ef;
+            border-left: 4px solid #4CAF50;
+            display: none;
+        }
+        #test-container {
+            height: 600px;
+            border: 1px solid #ddd;
+            position: relative;
+            overflow: hidden;
+            background: white;
+        }
+        .metrics {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f8ff;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .card {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            position: absolute;
+            width: 100%;
+            box-sizing: border-box;
+            background: white;
+            transition: transform 0.1s ease-out;
+        }
+        .card img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-right: 15px;
+            background: #f5f5f5;
+        }
+        .card-info {
+            flex: 1;
+        }
+        .card-title {
+            font-weight: bold;
+            margin: 0 0 5px 0;
+        }
+        .card-details {
+            font-size: 0.9em;
+            color: #666;
+            margin: 0;
+        }
+        .virtual-list-scroll-container {
+            height: 100%;
+            overflow-y: auto;
+            position: relative;
+        }
+        .virtual-list-inner {
+            position: relative;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Virtualized List Performance Test</h1>
+        
+        <div class="controls">
+            <div>
+                <label for="itemCount">Number of items:</label>
+                <input type="number" id="itemCount" value="1000" min="1" max="100000">
+            </div>
+            <button id="runTest">Run Test</button>
+            <button id="clearTest" disabled>Clear</button>
+            <div style="flex: 1; text-align: right;">
+                <label>
+                    <input type="checkbox" id="useVirtualization" checked>
+                    Use Virtualization
+                </label>
+            </div>
+        </div>
+        
+        <div class="status" id="status"></div>
+        
+        <div id="test-container"></div>
+        
+        <div class="metrics" id="metrics">
+            <div>Click "Run Test" to start performance testing...</div>
+        </div>
+    </div>
+
+    <script src="src/js/components/VirtualizedCardList.js"></script>
+    <script>
+        class PerformanceTest {
+            constructor() {
+                this.container = document.getElementById('test-container');
+                this.statusEl = document.getElementById('status');
+                this.metricsEl = document.getElementById('metrics');
+                this.runButton = document.getElementById('runTest');
+                this.clearButton = document.getElementById('clearTest');
+                this.itemCountInput = document.getElementById('itemCount');
+                this.useVirtualizationCheckbox = document.getElementById('useVirtualization');
+                
+                this.virtualList = null;
+                this.testData = [];
+                this.metrics = {
+                    dataGeneration: 0,
+                    renderTime: 0,
+                    memoryUsage: 0,
+                    fps: 0,
+                    frameTimes: []
+                };
+                
+                this.attachEventListeners();
+            }
+            
+            attachEventListeners() {
+                this.runButton.addEventListener('click', () => this.runTest());
+                this.clearButton.addEventListener('click', () => this.clearTest());
+            }
+            
+            async runTest() {
+                const itemCount = parseInt(this.itemCountInput.value, 10) || 1000;
+                const useVirtualization = this.useVirtualizationCheckbox.checked;
+                
+                this.updateStatus(`Generating ${itemCount.toLocaleString()} test items...`);
+                this.clearTest();
+                this.toggleButtons(true);
+                
+                try {
+                    // Generate test data
+                    const startTime = performance.now();
+                    this.testData = this.generateTestData(itemCount);
+                    this.metrics.dataGeneration = performance.now() - startTime;
+                    
+                    this.updateStatus(`Rendering ${itemCount.toLocaleString()} items ${useVirtualization ? 'with' : 'without'} virtualization...`);
+                    
+                    if (useVirtualization) {
+                        await this.testVirtualizedRendering();
+                    } else {
+                        await this.testStandardRendering();
+                    }
+                    
+                    this.measurePerformance();
+                    this.displayMetrics();
+                    
+                } catch (error) {
+                    console.error('Test failed:', error);
+                    this.updateStatus(`Test failed: ${error.message}`, 'error');
+                } finally {
+                    this.toggleButtons(false);
+                }
+            }
+            
+            async testVirtualizedRendering() {
+                const startTime = performance.now();
+                
+                this.virtualList = new VirtualizedCardList(this.container, {
+                    renderItem: (item) => this.createCardElement(item),
+                    itemHeight: 92, // Height of each card with padding
+                    overscan: 10,
+                    onRender: () => {
+                        this.metrics.renderTime = performance.now() - startTime;
+                        this.updateStatus(`Rendered ${this.testData.length.toLocaleString()} items in ${this.metrics.renderTime.toFixed(2)}ms`);
+                    }
+                });
+                
+                this.virtualList.setItems(this.testData);
+                
+                // Force a reflow and style calculation
+                this.container.offsetHeight;
+                
+                return new Promise(resolve => {
+                    // Small delay to ensure rendering is complete
+                    requestAnimationFrame(() => {
+                        resolve();
+                    });
+                });
+            }
+            
+            async testStandardRendering() {
+                const startTime = performance.now();
+                const fragment = document.createDocumentFragment();
+                
+                // Create all elements at once
+                this.testData.forEach((item, index) => {
+                    const card = this.createCardElement(item);
+                    card.style.position = 'absolute';
+                    card.style.top = `${index * 92}px`;
+                    card.style.width = '100%';
+                    card.style.boxSizing = 'border-box';
+                    fragment.appendChild(card);
+                });
+                
+                // Set container height
+                this.container.style.overflowY = 'auto';
+                this.container.style.position = 'relative';
+                this.container.style.height = '600px';
+                
+                // Append all at once
+                this.container.appendChild(fragment);
+                
+                // Force a reflow and style calculation
+                this.container.offsetHeight;
+                
+                this.metrics.renderTime = performance.now() - startTime;
+                this.updateStatus(`Rendered ${this.testData.length.toLocaleString()} items in ${this.metrics.renderTime.toFixed(2)}ms`);
+                
+                return Promise.resolve();
+            }
+            
+            createCardElement(item) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <img src="${item.image}" alt="${item.name}" onerror="this.src='data:image/svg+xml;charset=UTF-8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'60\' height=\'60\' viewBox=\'0 0 60 60\'><rect width=\'60\' height=\'60\' fill=\'%23f5f5f5\'/><text x=\'30\' y=\'30\' font-family=\'Arial\' font-size=\'10\' text-anchor=\'middle\' dominant-baseline=\'middle\'>${item.id}</text></svg>'">
+                    <div class="card-info">
+                        <div class="card-title">${item.name}</div>
+                        <div class="card-details">${item.type} • ${item.set} • $${item.price.toFixed(2)}</div>
+                    </div>
+                `;
+                return card;
+            }
+            
+            measurePerformance() {
+                // Measure memory usage (approximate)
+                if (window.performance && window.performance.memory) {
+                    this.metrics.memoryUsage = window.performance.memory.usedJSHeapSize / (1024 * 1024);
+                }
+                
+                // Measure FPS
+                this.measureFPS();
+                
+                // Measure scroll performance
+                this.measureScrollPerformance();
+            }
+            
+            measureFPS() {
+                const fpsValues = [];
+                let frameCount = 0;
+                let lastTime = performance.now();
+                
+                const checkFPS = () => {
+                    frameCount++;
+                    const now = performance.now();
+                    const delta = now - lastTime;
+                    
+                    if (delta >= 1000) {
+                        const fps = Math.round((frameCount * 1000) / delta);
+                        fpsValues.push(fps);
+                        frameCount = 0;
+                        lastTime = now;
+                    }
+                    
+                    if (fpsValues.length < 5) {
+                        requestAnimationFrame(checkFPS);
+                    } else {
+                        const avgFPS = fpsValues.reduce((sum, fps) => sum + fps, 0) / fpsValues.length;
+                        this.metrics.fps = Math.round(avgFPS * 10) / 10;
+                    }
+                };
+                
+                requestAnimationFrame(checkFPS);
+            }
+            
+            measureScrollPerformance() {
+                if (!this.virtualList) return;
+                
+                const scrollContainer = this.virtualList.scrollContainer;
+                const startTime = performance.now();
+                let frameCount = 0;
+                const frameTimes = [];
+                
+                const onScroll = () => {
+                    frameCount++;
+                    frameTimes.push(performance.now());
+                    
+                    if (scrollContainer.scrollTop >= scrollContainer.scrollHeight - scrollContainer.clientHeight) {
+                        scrollContainer.removeEventListener('scroll', onScroll);
+                        
+                        const endTime = performance.now();
+                        const totalTime = endTime - startTime;
+                        const avgFrameTime = totalTime / frameCount;
+                        
+                        // Calculate frame drops (frames that took longer than 16.67ms for 60fps)
+                        let droppedFrames = 0;
+                        for (let i = 1; i < frameTimes.length; i++) {
+                            const frameTime = frameTimes[i] - frameTimes[i - 1];
+                            if (frameTime > 16.67) {
+                                droppedFrames++;
+                            }
+                        }
+                        
+                        this.metrics.scrollTime = totalTime;
+                        this.metrics.avgFrameTime = avgFrameTime;
+                        this.metrics.droppedFrames = droppedFrames;
+                        this.metrics.scrollFPS = Math.round((1000 / avgFrameTime) * 10) / 10;
+                        
+                        // Scroll back to top
+                        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+                        
+                        // Update metrics display
+                        this.displayMetrics();
+                    }
+                };
+                
+                scrollContainer.addEventListener('scroll', onScroll, { passive: true });
+                
+                // Start scrolling
+                scrollContainer.scrollTo({
+                    top: scrollContainer.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+            
+            generateTestData(count) {
+                const types = ['Monster', 'Spell', 'Trap'];
+                const rarities = ['Common', 'Rare', 'Super Rare', 'Ultra Rare', 'Secret Rare'];
+                const sets = ['LOB', 'MRD', 'SRL', 'PSV', 'LON', 'LOD', 'IOC', 'AST', 'SOD', 'RDS', 'FET', 'TLM', 'CRV', 'EEN', 'SOI', 'EOJ', 'POTD', 'STON', 'FOTB', 'TAEV', 'GLAS', 'PTDN', 'LODT', 'TDGS', 'CSOC', 'CRMS', 'RGBT', 'ANPR', 'SOVR', 'ABPF', 'TSHD', 'DREV', 'STBL', 'EXVC', 'GENF', 'PHSW', 'ORCS', 'GAOV', 'REDU', 'ABYR', 'CBLZ', 'LTGY', 'JOTL', 'SHSP', 'LVAL', 'PRIO', 'DUEA', 'NECH', 'SECE', 'CROS', 'CORE', 'DOCS', 'BOSH', 'SHVI', 'TDIL', 'INOV', 'RATE', 'MACR', 'COTD', 'CIBR', 'EXFO', 'FLOD', 'DASA', 'SAST', 'DUPO', 'SOFU', 'SESL', 'DANE', 'RIRA', 'CHIM', 'ETCO', 'ROTD', 'LIOV', 'BODE', 'DIFO', 'POTE', 'DABL', 'PHHY', 'CYAC', 'DUNE', 'AGOV', 'PHNI', 'LEDE', 'LED9', 'LDS3'];
+                const adjectives = ['Ancient', 'Mystical', 'Powerful', 'Forgotten', 'Legendary', 'Cursed', 'Divine', 'Infernal', 'Celestial', 'Abyssal'];
+                const nouns = ['Dragon', 'Warrior', 'Wizard', 'Beast', 'Sorcerer', 'Knight', 'Dragon', 'Fiend', 'Spellcaster', 'Machine', 'Aqua', 'Pyro', 'Rock', 'Winged Beast', 'Plant', 'Insect', 'Dinosaur', 'Reptile', 'Fish', 'Sea Serpent', 'Thunder', 'Fairy', 'Zombie', 'Psychic', 'Wyrm', 'Cyberse'];
+                
+                return Array.from({ length: count }, (_, i) => {
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    const name = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+                    const set = sets[Math.floor(Math.random() * sets.length)];
+                    const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+                    const price = Math.random() * 1000; // Random price up to $1000
+                    
+                    // Generate a placeholder image URL with a unique ID
+                    const imageId = Math.floor(Math.random() * 1000);
+                    
+                    return {
+                        id: i + 1,
+                        name: `${name} #${i + 1}`,
+                        type,
+                        set: `${set}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
+                        rarity,
+                        price,
+                        image: `https://picsum.photos/200/300?random=${imageId}`,
+                        quantity: Math.floor(Math.random() * 10) + 1
+                    };
+                });
+            }
+            
+            displayMetrics() {
+                let metricsText = `=== Performance Metrics ===\n`;
+                metricsText += `Items: ${this.testData.length.toLocaleString()}\n`;
+                metricsText += `Data Generation: ${this.metrics.dataGeneration.toFixed(2)}ms\n`;
+                metricsText += `Render Time: ${this.metrics.renderTime.toFixed(2)}ms\n`;
+                
+                if (this.metrics.memoryUsage) {
+                    metricsText += `Memory Usage: ${this.metrics.memoryUsage.toFixed(2)}MB\n`;
+                }
+                
+                if (this.metrics.fps) {
+                    metricsText += `Average FPS: ${this.metrics.fps}\n`;
+                }
+                
+                if (this.metrics.scrollTime) {
+                    metricsText += `\n=== Scroll Performance ===\n`;
+                    metricsText += `Total Scroll Time: ${this.metrics.scrollTime.toFixed(2)}ms\n`;
+                    metricsText += `Average Frame Time: ${this.metrics.avgFrameTime.toFixed(2)}ms\n`;
+                    metricsText += `Dropped Frames: ${this.metrics.droppedFrames}\n`;
+                    metricsText += `Average FPS During Scroll: ${this.metrics.scrollFPS}\n`;
+                }
+                
+                metricsText += `\n=== System Info ===\n`;
+                metricsText += `User Agent: ${navigator.userAgent}\n`;
+                metricsText += `Device Memory: ${navigator.deviceMemory || 'N/A'}GB\n`;
+                metricsText += `Hardware Concurrency: ${navigator.hardwareConcurrency || 'N/A'} cores\n`;
+                
+                this.metricsEl.textContent = metricsText;
+            }
+            
+            clearTest() {
+                if (this.virtualList) {
+                    this.virtualList.destroy();
+                    this.virtualList = null;
+                }
+                
+                this.container.innerHTML = '';
+                this.metricsEl.textContent = 'Test cleared. Click "Run Test" to start a new test.';
+                this.updateStatus('');
+                
+                // Reset metrics
+                this.metrics = {
+                    dataGeneration: 0,
+                    renderTime: 0,
+                    memoryUsage: 0,
+                    fps: 0,
+                    frameTimes: []
+                };
+            }
+            
+            updateStatus(message, type = 'info') {
+                if (!message) {
+                    this.statusEl.style.display = 'none';
+                    return;
+                }
+                
+                this.statusEl.textContent = message;
+                this.statusEl.style.display = 'block';
+                this.statusEl.style.borderLeftColor = type === 'error' ? '#f44336' : '#4CAF50';
+                this.statusEl.style.backgroundColor = type === 'error' ? '#ffebee' : '#e9f7ef';
+            }
+            
+            toggleButtons(isRunning) {
+                this.runButton.disabled = isRunning;
+                this.clearButton.disabled = isRunning;
+            }
+        }
+        
+        // Initialize the test when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.performanceTest = new PerformanceTest();
+        });
+    </script>
+</body>
+</html>
