@@ -56,14 +56,23 @@ export class Logger {
 
     /**
      * Check if running in development mode
+     * Works in both browser and Node.js environments
      */
     isDevelopment() {
-        return (
-            window.location.hostname === 'localhost' ||
-            window.location.hostname === '127.0.0.1' ||
-            window.location.protocol === 'file:' ||
-            window.location.search.includes('debug=true')
-        );
+        // Browser environment
+        if (typeof window !== 'undefined' && window.location) {
+            return (
+                window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1' ||
+                window.location.protocol === 'file:' ||
+                window.location.search.includes('debug=true')
+            );
+        }
+        
+        // Node.js environment - check NODE_ENV
+        return process.env.NODE_ENV === 'development' || 
+               process.env.NODE_ENV === 'test' ||
+               process.env.DEBUG === 'true';
     }
 
     /**

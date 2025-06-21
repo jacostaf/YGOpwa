@@ -68,69 +68,110 @@ class YGORipperApp {
      * @private
      */
     async _performInitialization() {
+        const startTime = performance.now();
+        const logStep = (step, message) => {
+            const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+            this.logger.debug(`[INIT] [${elapsed}s] ${step}: ${message}`);
+            console.log(`[INIT] [${elapsed}s] ${step}: ${message}`);
+        };
+
         try {
-            this.logger.info('Initializing YGO Ripper UI v2...');
-            
-            // Update loading progress
-            this.updateLoadingProgress(10, 'Loading settings...');
+            logStep('START', 'Initializing YGO Ripper UI v2...');
+            this.updateLoadingProgress(5, 'Starting initialization...');
             
             // Load settings and configuration
-            await this.loadSettings();
-            
-            this.updateLoadingProgress(20, 'Initializing storage...');
+            logStep('CONFIG', 'Loading settings...');
+            this.updateLoadingProgress(10, 'Loading settings...');
+            await this.loadSettings().catch(err => {
+                logStep('ERROR', `Failed to load settings: ${err.message}`);
+                throw new Error(`Failed to load settings: ${err.message}`);
+            });
             
             // Initialize storage
-            await this.storage.initialize();
-            
-            this.updateLoadingProgress(30, 'Setting up UI...');
+            logStep('STORAGE', 'Initializing storage...');
+            this.updateLoadingProgress(20, 'Initializing storage...');
+            await this.storage.initialize().catch(err => {
+                logStep('ERROR', `Storage initialization failed: ${err.message}`);
+                throw new Error(`Storage initialization failed: ${err.message}`);
+            });
             
             // Initialize UI Manager
-            await this.uiManager.initialize(this);
-            
-            this.updateLoadingProgress(40, 'Checking permissions...');
+            logStep('UI', 'Setting up UI...');
+            this.updateLoadingProgress(30, 'Setting up UI...');
+            await this.uiManager.initialize(this).catch(err => {
+                logStep('ERROR', `UI initialization failed: ${err.message}`);
+                throw new Error(`UI initialization failed: ${err.message}`);
+            });
             
             // Initialize permission manager
-            await this.permissionManager.initialize();
+            logStep('PERMISSIONS', 'Checking permissions...');
+            this.updateLoadingProgress(40, 'Checking permissions...');
+            await this.permissionManager.initialize().catch(err => {
+                logStep('WARN', `Permission check warning: ${err.message}`);
+                // Continue even if permissions fail, as they might be requested later
+            });
             
+            // Initialize voice engine
+            logStep('VOICE', 'Initializing voice engine...');
             this.updateLoadingProgress(50, 'Initializing voice engine...');
-            
-            // Initialize voice engine with permission manager
-            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
-            await this.voiceEngine.initialize();
-            
-            this.updateLoadingProgress(70, 'Loading session data...');
+            try {
+                this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
+                await this.voiceEngine.initialize();
+            } catch (err) {
+                logStep('WARN', `Voice engine initialization warning: ${err.message}`);
+                // Continue even if voice initialization fails
+            }
             
             // Initialize session manager
-            await this.sessionManager.initialize(this.storage);
-            
-            this.updateLoadingProgress(80, 'Setting up price checker...');
+            logStep('SESSION', 'Loading session data...');
+            this.updateLoadingProgress(70, 'Loading session data...');
+            await this.sessionManager.initialize(this.storage).catch(err => {
+                logStep('ERROR', `Session manager initialization failed: ${err.message}`);
+                throw new Error(`Session manager initialization failed: ${err.message}`);
+            });
             
             // Initialize price checker
-            await this.priceChecker.initialize();
-            
-            this.updateLoadingProgress(90, 'Setting up event handlers...');
+            logStep('PRICING', 'Setting up price checker...');
+            this.updateLoadingProgress(80, 'Setting up price checker...');
+            await this.priceChecker.initialize().catch(err => {
+                logStep('WARN', `Price checker initialization warning: ${err.message}`);
+                // Continue even if price checker fails
+            });
             
             // Set up event handlers
-            this.setupEventHandlers();
-            
-            this.updateLoadingProgress(95, 'Loading initial data...');
+            logStep('EVENTS', 'Setting up event handlers...');
+            this.updateLoadingProgress(90, 'Setting up event handlers...');
+            try {
+                this.setupEventHandlers();
+            } catch (err) {
+                logStep('WARN', `Event handler setup warning: ${err.message}`);
+            }
             
             // Load initial data
-            await this.loadInitialData();
-            
-            this.updateLoadingProgress(100, 'Ready!');
+            logStep('DATA', 'Loading initial data...');
+            this.updateLoadingProgress(95, 'Loading initial data...');
+            await this.loadInitialData().catch(err => {
+                logStep('WARN', `Initial data load warning: ${err.message}`);
+                // Continue even if initial data load fails
+            });
             
             // Mark as initialized
             this.isInitialized = true;
             
             // Hide loading screen and show app
+            logStep('COMPLETE', 'Initialization completed successfully');
+            this.updateLoadingProgress(100, 'Ready!');
             this.showApp();
             
-            this.logger.info('Application initialized successfully');
+            const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            this.logger.info(`Application initialized successfully in ${totalTime}s`);
             this.uiManager.showToast('YGO Ripper UI v2 is ready!', 'success');
             
         } catch (error) {
-            this.logger.error('Failed to initialize application:', error);
+            const errorTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            const errorMsg = `Initialization failed after ${errorTime}s: ${error.message}`;
+            this.logger.error(errorMsg, error);
+            console.error(errorMsg, error);
             this.showInitializationError(error);
             throw error;
         }
