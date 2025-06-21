@@ -669,7 +669,7 @@ export class VoiceEngine {
             
             // Common prefixes and suffixes
             { pattern: /\b(?:the|a|an)\s+/gi, replacement: '' }, // Remove articles
-            { pattern: /(?:monster|card|dragon|warrior|spell|trap)\b/gi, replacement: '' }, // Remove common generic terms
+            { pattern: /(?:monster|card|spell|trap)\b/gi, replacement: '' }, // Remove common generic terms
             { pattern: /\s{2,}/g, replacement: ' ' }, // Clean up extra spaces
             { pattern: /^\s+|\s+$/g, replacement: '' } // Trim spaces
         ];
