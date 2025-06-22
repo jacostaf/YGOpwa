@@ -50,7 +50,8 @@ export class SessionManager {
             cardRemoved: [],
             sessionClear: [],
             setsLoaded: [],
-            setsFiltered: []
+            setsFiltered: [],
+            setSwitched: []
         };
         
         // Configuration
@@ -548,6 +549,70 @@ export class SessionManager {
     }
 
 
+
+    /**
+     * Switch to a different card set while keeping the current session active
+     * @param {string} newSetId - The ID of the new set to switch to
+     * @returns {Promise<Object>} The updated session object
+     */
+    async switchSet(newSetId) {
+        if (!this.sessionActive || !this.currentSession) {
+            throw new Error('No active session to switch sets');
+        }
+
+        try {
+            this.logger.info(`Switching to set: ${newSetId}`);
+            
+            // Find the new set
+            const newSet = this.cardSets.find(s => s.id === newSetId || s.code === newSetId);
+            if (!newSet) {
+                throw new Error(`Card set not found: ${newSetId}`);
+            }
+
+            // Don't do anything if switching to the same set
+            if (this.currentSession.setId === newSet.id) {
+                this.logger.info('Already using the requested set, no change needed');
+                return this.currentSession;
+            }
+
+            // Store the current session state
+            const currentCards = [...(this.currentSession.cards || [])];
+            const currentStats = { ...(this.currentSession.statistics || {}) };
+            
+            // Update the current set and session properties
+            const oldSetId = this.currentSession.setId;
+            this.currentSet = newSet;
+            this.currentSession.setId = newSet.id;
+            this.currentSession.setName = newSet.name || newSet.set_name || newSet.code;
+            this.currentSession.lastUpdated = new Date().toISOString();
+
+            // Load the new set's cards
+            await this.loadSetCards(newSet.id);
+
+            // Restore the cards and statistics
+            this.currentSession.cards = currentCards;
+            this.currentSession.statistics = currentStats;
+
+            // Save the updated session
+            if (this.config.autoSave) {
+                await this.saveSession();
+            }
+
+            // Emit event for UI updates
+            this.emit('setSwitched', {
+                oldSetId,
+                newSetId: newSet.id,
+                session: this.currentSession
+            });
+
+            this.logger.info(`Successfully switched to set: ${newSet.id} (${newSet.name || newSet.set_name || newSet.code})`);
+            return this.currentSession;
+
+        } catch (error) {
+            this.logger.error('Failed to switch sets:', error);
+            throw error;
+        }
+    }
 
     /**
      * Start a new session
@@ -2618,6 +2683,14 @@ export class SessionManager {
 
     onSessionClear(callback) {
         this.listeners.sessionClear.push(callback);
+    }
+
+    /**
+     * Register a callback for set switched events
+     * @param {Function} callback - The callback function
+     */
+    onSetSwitched(callback) {
+        this.listeners.setSwitched.push(callback);
     }
 
     emitSessionStart(session) {

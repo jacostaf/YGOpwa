@@ -255,6 +255,29 @@ class YGORipperApp {
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
         });
 
+        // Listen for set switched events from SessionManager
+        this.sessionManager.onSetSwitched(({ oldSetId, newSetId, session }) => {
+            this.logger.debug(`Set switched from ${oldSetId} to ${newSetId}`);
+            // Update the UI with the new set information
+            this.uiManager.updateSessionInfo(session);
+            // Show a toast notification
+            this.uiManager.showToast(`Switched to set: ${session.setName}`, 'success');
+        });
+        
+        // Listen for set switch requests from UI
+        this.uiManager.onSetSwitched(async ({ newSetId }) => {
+            try {
+                if (this.sessionManager.isSessionActive()) {
+                    await this.sessionManager.switchSet(newSetId);
+                } else {
+                    this.uiManager.showToast('No active session to switch sets', 'warning');
+                }
+            } catch (error) {
+                this.logger.error('Failed to switch sets:', error);
+                this.uiManager.showToast(`Failed to switch sets: ${error.message}`, 'error');
+            }
+        });
+
         // Price checker events
         this.uiManager.onPriceCheck(async (formData) => {
             await this.handlePriceCheck(formData);

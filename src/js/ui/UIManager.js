@@ -36,7 +36,8 @@ export class UIManager {
             cardRemove: [],
             pricingRefresh: [],
             settingsSave: [],
-            settingsShow: []
+            settingsShow: [],
+            setSwitched: []
         };
         
         // UI state
@@ -150,6 +151,11 @@ export class UIManager {
         this.elements.importSessionBtn = document.getElementById('import-session-btn');
         this.elements.clearSessionBtn = document.getElementById('clear-session-btn');
         
+        // Session management
+        this.elements.startSessionBtn = document.getElementById('start-session-btn');
+        this.elements.swapSetBtn = document.getElementById('swap-set-btn');
+        this.elements.stopSessionBtn = document.getElementById('stop-session-btn');
+        
         // View control elements
         this.elements.consolidatedViewToggle = document.getElementById('consolidated-view-toggle');
         this.elements.cardSizeSlider = document.getElementById('card-size-slider');
@@ -229,6 +235,17 @@ export class UIManager {
         if (this.elements.startSessionBtn) {
             this.elements.startSessionBtn.addEventListener('click', () => {
                 this.handleSessionStart();
+            });
+        }
+
+        if (this.elements.swapSetBtn) {
+            this.elements.swapSetBtn.addEventListener('click', () => {
+                const newSetId = this.elements.setSelect?.value;
+                if (newSetId) {
+                    this.emitSetSwitched({ newSetId });
+                } else {
+                    this.showToast('Please select a card set first', 'warning');
+                }
             });
         }
 
@@ -1001,6 +1018,13 @@ export class UIManager {
         const hasSession = sessionInfo.cardCount > 0;
         this.elements.exportSessionBtn?.toggleAttribute('disabled', !hasSession);
         this.elements.clearSessionBtn?.toggleAttribute('disabled', !hasSession);
+        
+        // Show and enable the swap set button when a session is active
+        if (this.elements.swapSetBtn) {
+            const isActiveSession = sessionInfo.isActive === true;
+            this.elements.swapSetBtn.classList.toggle('hidden', !isActiveSession);
+            this.elements.swapSetBtn.disabled = !isActiveSession;
+        }
         
         // Enable/disable refresh pricing button based on whether there are imported cards
         if (this.elements.refreshPricingBtn && this.app && this.app.sessionManager) {
@@ -2317,6 +2341,28 @@ export class UIManager {
         this.eventListeners.settingsShow.push(callback);
     }
 
+    /**
+     * Register a callback for set switched events
+     * @param {Function} callback - Function to call when a set is switched
+     */
+    onSetSwitched(callback) {
+        this.eventListeners.setSwitched.push(callback);
+    }
+    
+    /**
+     * Emit a set switched event
+     * @param {Object} eventData - Event data containing newSetId
+     */
+    emitSetSwitched(eventData) {
+        this.eventListeners.setSwitched.forEach(callback => {
+            try {
+                callback(eventData);
+            } catch (error) {
+                this.logger.error('Error in setSwitched callback:', error);
+            }
+        });
+    }
+
     // Event emission methods
     emitTabChange(tabId) {
         this.eventListeners.tabChange.forEach(callback => {
@@ -2474,6 +2520,20 @@ export class UIManager {
                 callback();
             } catch (error) {
                 this.logger.error('Error in settings show callback:', error);
+            }
+        });
+    }
+    
+    /**
+     * Emit a set switched event
+     * @param {Object} eventData - Event data containing oldSetId, newSetId, and session
+     */
+    emitSetSwitched(eventData) {
+        this.eventListeners.setSwitched.forEach(callback => {
+            try {
+                callback(eventData);
+            } catch (error) {
+                this.logger.error('Error in set switched callback:', error);
             }
         });
     }
