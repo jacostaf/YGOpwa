@@ -21,7 +21,8 @@ export class PriceChecker {
         this.imageManager = new ImageManager();
         
         // Backend API URL (matching SessionManager)
-        this.apiUrl = 'http://127.0.0.1:8081';
+       //this.apiUrl = 'http://127.0.0.1:8081';
+       this.apiUrl = 'https://ygopyguy.onrender.com';
         
         // Price sources configuration
         this.priceSources = new Map([

@@ -91,7 +91,8 @@ export class SessionManager {
     getApiUrl() {
         // realBackendAPI.py backend runs on port 8081
         // Based on the realBackendAPI.py backend API
-        return 'http://127.0.0.1:8081';
+        return 'https://ygopyguy.onrender.com';
+        //return 'http://127.0.0.1:8081';
     }
 
     /**
