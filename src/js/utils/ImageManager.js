@@ -10,6 +10,8 @@
  */
 
 import { Logger } from './Logger.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export class ImageManager {
     constructor() {
@@ -204,7 +206,7 @@ export class ImageManager {
         return new Promise((resolve, reject) => {
             const img = new Image();
             
-            const proxyUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
+            const proxyUrl = `${process.env.API_URL}/cards/image?url=${encodeURIComponent(imageUrl)}`;
             this.logger.debug(`Loading via proxy: ${imageUrl} -> ${proxyUrl}`);
             
             // Set crossOrigin to anonymous to avoid CORS tainted canvas issues

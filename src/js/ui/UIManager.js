@@ -11,6 +11,8 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export class UIManager {
     constructor(logger = null) {
@@ -586,7 +588,7 @@ export class UIManager {
                         <h5>💡 To fix this:</h5>
                         <ol>
                             <li>Start the backend server: <code>python realBackendAPI.py</code></li>
-                            <li>Ensure the server is running on <code>http://127.0.0.1:8081</code></li>
+                            <li>Ensure the server is running on <code>${process.env.API_URL}</code></li>
                             <li>Check that your firewall allows connections to port 8081</li>
                         </ol>
                         <p><em>Mock data has been disabled to ensure you use the real API.</em></p>
