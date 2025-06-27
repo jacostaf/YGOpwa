@@ -218,6 +218,11 @@ export class Storage {
      */
     async get(key) {
         try {
+            // Ensure we have a backend selected
+            if (!this.currentBackend) {
+                await this.initialize();
+            }
+            
             switch (this.currentBackend) {
                 case 'indexeddb':
                     return await this.getFromIndexedDB(key);
@@ -241,6 +246,11 @@ export class Storage {
      */
     async set(key, value) {
         try {
+            // Ensure we have a backend selected
+            if (!this.currentBackend) {
+                await this.initialize();
+            }
+            
             switch (this.currentBackend) {
                 case 'indexeddb':
                     return await this.setInIndexedDB(key, value);

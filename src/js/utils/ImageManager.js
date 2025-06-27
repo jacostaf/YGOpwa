@@ -10,6 +10,7 @@
  */
 
 import { Logger } from './Logger.js';
+import { config } from './config.js';
 
 export class ImageManager {
     constructor() {
@@ -203,8 +204,9 @@ export class ImageManager {
     async loadImageViaProxy(imageUrl, size) {
         return new Promise((resolve, reject) => {
             const img = new Image();
+            let temp =config.API_URL ||'http://127.0.0.1:8081'
             
-            const proxyUrl = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(imageUrl)}`;
+            const proxyUrl = `${temp}/cards/image?url=${encodeURIComponent(imageUrl)}`;
             this.logger.debug(`Loading via proxy: ${imageUrl} -> ${proxyUrl}`);
             
             // Set crossOrigin to anonymous to avoid CORS tainted canvas issues

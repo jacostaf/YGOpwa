@@ -11,6 +11,7 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { config } from '../utils/config.js';
 
 export class UIManager {
     constructor(logger = null) {
@@ -603,7 +604,7 @@ export class UIManager {
                         <h5>💡 To fix this:</h5>
                         <ol>
                             <li>Start the backend server: <code>python realBackendAPI.py</code></li>
-                            <li>Ensure the server is running on <code>http://127.0.0.1:8081</code></li>
+                            <li>Ensure the server is running on <code>${config.API_URL}</code></li>
                             <li>Check that your firewall allows connections to port 8081</li>
                         </ol>
                         <p><em>Mock data has been disabled to ensure you use the real API.</em></p>
@@ -1052,9 +1053,6 @@ export class UIManager {
         this.displaySessionCards(sessionInfo.cards || []);
     }
 
-    /**
-     * Display session cards with quantity adjustment buttons
-     */
     /**
      * Update a single card's display in the UI
      * @param {Object} card - The updated card data
@@ -1574,18 +1572,18 @@ export class UIManager {
         }
         
         // Update floating submenu visibility
-        this.updateFloatingSubmenu(isListening && !disabled);
+        this.updateFloatingSubmenu(isListening, disabled);
     }
 
     /**
      * Update floating submenu visibility and position
      */
-    updateFloatingSubmenu(show) {
+    updateFloatingSubmenu(show, disabled = false) {
         if (!this.elements.floatingVoiceSubmenu) return;
         
         // Only show if we're in the pack ripper tab
         const isPackRipperTab = this.currentTab === 'pack-ripper';
-        const shouldShow = show && isPackRipperTab;
+        const shouldShow = show && isPackRipperTab && !disabled;
         
         if (shouldShow) {
             this.elements.floatingVoiceSubmenu.classList.remove('hidden');
@@ -2162,6 +2160,8 @@ export class UIManager {
     handleResize() {
         this.updateResponsiveClasses();
     }
+
+   
 
     /**
      * Update responsive classes

@@ -11,6 +11,7 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { config } from '../utils/config.js';
 
 export class SessionManager {
     constructor(storage = null, logger = null) {
@@ -91,7 +92,7 @@ export class SessionManager {
     getApiUrl() {
         // realBackendAPI.py backend runs on port 8081
         // Based on the realBackendAPI.py backend API
-        return 'http://127.0.0.1:8081';
+        return config.API_URL || 'http://127.0.0.1:8081';
     }
 
     /**
@@ -254,6 +255,8 @@ export class SessionManager {
             
             this.logger.info(`[API DEBUG] Making fetch request with timeout: ${this.config.apiTimeout}ms`);
             
+            
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
@@ -331,7 +334,7 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('[API DEBUG] Request timed out after', this.config.apiTimeout, 'ms');
-                throw new Error('Request timed out. Please check if the backend is running on http://127.0.0.1:8081');
+                throw new Error('Request timed out. Please check if the backend is running');
             }
             
             this.logger.error('[API DEBUG] Failed to fetch card sets from API:', error);
@@ -344,7 +347,7 @@ export class SessionManager {
             // Provide more specific error messages for debugging
             if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
                 this.logger.error('[API DEBUG] Network error detected - backend may not be running or accessible');
-                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
+                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on');
             }
             
             if (error.message.includes('ECONNREFUSED')) {
@@ -540,7 +543,7 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('Set cards request timed out after', this.config.apiTimeout, 'ms');
-                throw new Error(`Request timed out loading cards for set ${setIdentifier}. Please check if the backend is running on http://127.0.0.1:8081`);
+                throw new Error(`Request timed out loading cards for set ${setIdentifier}. Please check if the backend is running on`);
             } else {
                 this.logger.error(`Failed to load cards for set ${setIdentifier}:`, error);
                 throw error;

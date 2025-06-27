@@ -11,6 +11,7 @@
 
 import { Logger } from '../utils/Logger.js';
 import { ImageManager } from '../utils/ImageManager.js';
+import { config } from '../utils/config.js';
 
 export class PriceChecker {
     constructor(storage = null, logger = null, config = {}) {
@@ -21,7 +22,7 @@ export class PriceChecker {
         this.imageManager = new ImageManager();
         
         // Backend API URL (matching SessionManager)
-        this.apiUrl = 'http://127.0.0.1:8081';
+        this.apiUrl = config.API_URL;
         
         // Price sources configuration
         this.priceSources = new Map([
