@@ -66,7 +66,7 @@ export class PriceChecker {
         
         // Configuration
         this.config = {
-            timeout: 30000, // 30 seconds timeout for API calls
+            timeout: 120000, // 30 seconds timeout for API calls
             retryAttempts: 3,
             retryDelay: 1000,
             enableCache: true,

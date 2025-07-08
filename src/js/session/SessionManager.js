@@ -62,7 +62,7 @@ export class SessionManager {
             maxSessionHistory: 50,
             cardMatchThreshold: 0.35,
             enableFuzzyMatching: true,
-            apiTimeout: 30000 // 30 second timeout for API calls
+            apiTimeout: 120000 // 30 second timeout for API calls
         };
         
         // Auto-save timer
