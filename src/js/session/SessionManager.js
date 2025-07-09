@@ -436,7 +436,9 @@ export class SessionManager {
             if (!data.success) {
                 throw new Error(data.message || 'Backend API returned failure');
             }
-            
+            console.log("\n\n\n\n\nhere data",data,"\n\n")
+            console.log("\n\n\n\n\n here data.data",data.data,"\n\n")
+
             return data.data; // Return the card data portion
             
         } catch (error) {
