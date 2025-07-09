@@ -1,3 +1,4 @@
+
 // Configuration for YGO Ripper UI
 // This works across all platforms (Mac, Windows, iOS, Android, etc.)
 export const config = {
@@ -19,3 +20,4 @@ export const config = {
 
 // Legacy export for compatibility
 export const API_URL = config.API_URL;
+

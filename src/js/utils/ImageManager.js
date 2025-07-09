@@ -205,9 +205,10 @@ export class ImageManager {
         return new Promise((resolve, reject) => {
             const img = new Image();
             let temp =config.API_URL ||'http://127.0.0.1:8081'
-            
+
             const proxyUrl = `${temp}/cards/image?url=${encodeURIComponent(imageUrl)}`;
-            this.logger.debug(`Loading via proxy: ${imageUrl} -> ${proxyUrl}`);
+
+
             
             // Set crossOrigin to anonymous to avoid CORS tainted canvas issues
             // This allows canvas operations like toDataURL() to work with the proxy-loaded images

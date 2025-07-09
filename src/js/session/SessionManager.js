@@ -93,6 +93,7 @@ export class SessionManager {
         // realBackendAPI.py backend runs on port 8081
         // Based on the realBackendAPI.py backend API
         return config.API_URL || 'http://127.0.0.1:8081';
+
     }
 
     /**
