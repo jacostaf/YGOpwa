@@ -11,6 +11,7 @@
 
 import { Logger } from '../utils/Logger.js';
 import { ImageManager } from '../utils/ImageManager.js';
+import { config } from '../utils/config.js';
 
 export class PriceChecker {
     constructor(storage = null, logger = null, config = {}) {
@@ -21,8 +22,7 @@ export class PriceChecker {
         this.imageManager = new ImageManager();
         
         // Backend API URL (matching SessionManager)
-       //this.apiUrl = 'http://127.0.0.1:8081';
-       this.apiUrl = 'https://ygopyguy.onrender.com';
+        this.apiUrl = config.API_URL;
         
         // Price sources configuration
         this.priceSources = new Map([
@@ -66,7 +66,7 @@ export class PriceChecker {
         
         // Configuration
         this.config = {
-            timeout: 30000, // 30 seconds timeout for API calls
+            timeout: 120000, // 30 seconds timeout for API calls
             retryAttempts: 3,
             retryDelay: 1000,
             enableCache: true,
