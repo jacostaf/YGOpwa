@@ -74,7 +74,7 @@ export class VoiceTrainer {
      */
     async loadTrainingData() {
         try {
-            const storedData = await this.storage.getItem(this.config.storageKey);
+            const storedData = await this.storage.get(this.config.storageKey);
             
             if (storedData) {
                 // Convert arrays back to Maps for mappings
@@ -107,7 +107,7 @@ export class VoiceTrainer {
                 rarityMappings: Array.from(this.data.rarityMappings.entries())
             };
             
-            await this.storage.setItem(this.config.storageKey, dataToStore);
+            await this.storage.set(this.config.storageKey, dataToStore);
             this.logger.debug('Training data saved to storage');
             
         } catch (error) {
