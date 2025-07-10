@@ -68,7 +68,8 @@ export class SessionManager {
             sessionUpdate: [],
             cardAdded: [],
             cardRemoved: [],
-            setChanged: []
+            sessionClear: [],
+            setSwitched: []
         };
         
         this.logger.info('SessionManager initialized');
