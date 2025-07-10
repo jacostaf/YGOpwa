@@ -2728,6 +2728,45 @@ export class SessionManager {
         } : null;
     }
 
+    /**
+     * Get cards for a specific set (used for voice training)
+     */
+    async getCardsForSet(setCode) {
+        if (!setCode) {
+            this.logger.warn('No set code provided for getCardsForSet');
+            return [];
+        }
+        
+        try {
+            // Load the set cards (this will use cache if already loaded)
+            const cards = await this.loadSetCards(setCode);
+            
+            if (!cards || cards.length === 0) {
+                this.logger.warn(`No cards found for set: ${setCode}`);
+                return [];
+            }
+            
+            // Return the cards with proper structure for voice training
+            return cards.map(card => ({
+                id: card.id,
+                name: card.name,
+                cardName: card.name, // For compatibility
+                type: card.type,
+                atk: card.atk,
+                def: card.def,
+                level: card.level,
+                race: card.race,
+                attribute: card.attribute,
+                archetype: card.archetype,
+                card_sets: card.card_sets || []
+            }));
+            
+        } catch (error) {
+            this.logger.error(`Error loading cards for set ${setCode}:`, error);
+            return [];
+        }
+    }
+
     getCurrentSession() {
         return this.currentSession;
     }

@@ -1357,11 +1357,6 @@ class YGORipperApp {
             if (!this.voiceEngine || !this.voiceEngine.isAvailable()) {
                 throw new Error('Voice recognition not available');
             }
-            
-            // Check if a training set has been selected
-            if (!this.uiManager.voiceTrainingState.currentSet) {
-                throw new Error('Please select a training set first');
-            }
 
             // Set voice engine to training mode
             this.voiceEngine.setTrainingMode(true);
@@ -1440,14 +1435,63 @@ class YGORipperApp {
             } else if (this.uiManager.voiceTrainingState.isRarityTraining) {
                 // Find similar rarities using dynamic set rarities
                 try {
-                    // Use the selected training set, not the current session set
+                    let setRarities = [];
+                    
+                    // Use the selected training set, or fall back to a default set of rarities
                     const trainingSet = this.uiManager.voiceTrainingState.currentSet;
-                    const setRarities = await this.sessionManager.getSetRarities(trainingSet);
+                    if (trainingSet) {
+                        setRarities = await this.sessionManager.getSetRarities(trainingSet);
+                    }
+                    
+                    // If no set is selected or no rarities found, use default rarities
+                    if (!setRarities || setRarities.length === 0) {
+                        setRarities = [
+                            'quarter century secret rare',
+                            'quarter century secret',
+                            'prismatic collectors rare',
+                            'prismatic ultimate rare',
+                            'platinum secret rare',
+                            'starlight rare',
+                            'collector rare',
+                            'collectors rare',
+                            'ghost rare',
+                            'secret rare',
+                            'ultimate rare',
+                            'ultra rare',
+                            'super rare',
+                            'parallel rare',
+                            'short print',
+                            'rare',
+                            'common'
+                        ];
+                    }
+                    
                     const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, setRarities);
                     this.uiManager.showRarityTrainingResult(transcript, suggestions.slice(0, 5));
                 } catch (error) {
                     this.logger.error('Error getting set rarities for training:', error);
-                    this.uiManager.showRarityTrainingResult(transcript, []);
+                    // Use default rarities as fallback
+                    const defaultRarities = [
+                        'quarter century secret rare',
+                        'quarter century secret',
+                        'prismatic collectors rare',
+                        'prismatic ultimate rare',
+                        'platinum secret rare',
+                        'starlight rare',
+                        'collector rare',
+                        'collectors rare',
+                        'ghost rare',
+                        'secret rare',
+                        'ultimate rare',
+                        'ultra rare',
+                        'super rare',
+                        'parallel rare',
+                        'short print',
+                        'rare',
+                        'common'
+                    ];
+                    const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, defaultRarities);
+                    this.uiManager.showRarityTrainingResult(transcript, suggestions.slice(0, 5));
                 }
             }
 
