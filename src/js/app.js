@@ -1164,6 +1164,9 @@ class YGORipperApp {
             // Update UI with the loaded sets and comprehensive data
             this.uiManager.updateCardSets(sets, searchTerm, totalSets || sets.length);
             
+            // Also populate training set select with the same sets
+            this.uiManager.populateTrainingSetSelect(sets);
+            
             // Show appropriate success messages
             if (searchTerm) {
                 this.uiManager.showToast(`Found ${sets.length} sets matching "${searchTerm}"`, 'success');
@@ -1186,6 +1189,9 @@ class YGORipperApp {
         
         // Update UI with filtered sets
         this.uiManager.updateCardSets(sets, searchTerm, totalSets);
+        
+        // Also populate training set select with the same filtered sets
+        this.uiManager.populateTrainingSetSelect(sets);
         
         // Provide user feedback for search results
         if (searchTerm) {
