@@ -356,6 +356,10 @@ class YGORipperApp {
             this.handleAddRarityMapping(data);
         });
 
+        this.uiManager.onViewMappings(() => {
+            this.handleViewMappings();
+        });
+
         this.uiManager.onExportTrainingData(() => {
             this.handleExportTrainingData();
         });
@@ -1542,6 +1546,27 @@ class YGORipperApp {
         } catch (error) {
             this.logger.error('Failed to add rarity mapping:', error);
             this.uiManager.showToast('Failed to add rarity mapping: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle view mappings
+     */
+    async handleViewMappings() {
+        try {
+            if (!this.voiceTrainer) {
+                throw new Error('Voice trainer not initialized');
+            }
+
+            const cardMappings = this.voiceTrainer.getAllCardMappings();
+            const rarityMappings = this.voiceTrainer.getAllRarityMappings();
+            
+            // Show mappings in a modal or display area
+            this.uiManager.showMappingsModal(cardMappings, rarityMappings);
+            
+        } catch (error) {
+            this.logger.error('Failed to view mappings:', error);
+            this.uiManager.showToast('Failed to view mappings: ' + error.message, 'error');
         }
     }
 

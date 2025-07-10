@@ -1889,6 +1889,77 @@ export class UIManager {
     }
 
     /**
+     * Show mappings modal
+     */
+    showMappingsModal(cardMappings, rarityMappings) {
+        const content = this.generateMappingsHTML(cardMappings, rarityMappings);
+        const modal = this.createModal('Voice Recognition Mappings', content);
+        this.showModal(modal);
+    }
+
+    /**
+     * Generate mappings HTML
+     */
+    generateMappingsHTML(cardMappings, rarityMappings) {
+        return `
+            <div class="mappings-container">
+                <div class="mappings-section">
+                    <h4>Card Name Mappings (${cardMappings.length})</h4>
+                    <div class="mappings-list">
+                        ${cardMappings.length > 0 ? 
+                            cardMappings.map(mapping => `
+                                <div class="mapping-item">
+                                    <div class="mapping-voice">
+                                        <span class="mapping-label">Voice:</span>
+                                        <span class="mapping-value">"${mapping.voiceInput}"</span>
+                                    </div>
+                                    <div class="mapping-arrow">→</div>
+                                    <div class="mapping-target">
+                                        <span class="mapping-label">Card:</span>
+                                        <span class="mapping-value">${mapping.cardName}</span>
+                                        ${mapping.setCode ? `<span class="mapping-set">(${mapping.setCode})</span>` : ''}
+                                    </div>
+                                    <div class="mapping-stats">
+                                        <span class="mapping-confidence">Confidence: ${(mapping.confidence * 100).toFixed(1)}%</span>
+                                        <span class="mapping-usage">Used: ${mapping.useCount || 0} times</span>
+                                    </div>
+                                </div>
+                            `).join('') 
+                            : '<div class="mapping-empty">No card mappings found. Start training to create some!</div>'
+                        }
+                    </div>
+                </div>
+                
+                <div class="mappings-section">
+                    <h4>Rarity Mappings (${rarityMappings.length})</h4>
+                    <div class="mappings-list">
+                        ${rarityMappings.length > 0 ? 
+                            rarityMappings.map(mapping => `
+                                <div class="mapping-item">
+                                    <div class="mapping-voice">
+                                        <span class="mapping-label">Voice:</span>
+                                        <span class="mapping-value">"${mapping.voiceInput}"</span>
+                                    </div>
+                                    <div class="mapping-arrow">→</div>
+                                    <div class="mapping-target">
+                                        <span class="mapping-label">Rarity:</span>
+                                        <span class="mapping-value">${mapping.rarity}</span>
+                                    </div>
+                                    <div class="mapping-stats">
+                                        <span class="mapping-confidence">Confidence: ${(mapping.confidence * 100).toFixed(1)}%</span>
+                                        <span class="mapping-usage">Used: ${mapping.useCount || 0} times</span>
+                                    </div>
+                                </div>
+                            `).join('') 
+                            : '<div class="mapping-empty">No rarity mappings found. Start training to create some!</div>'
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
      * Show help modal
      */
     showHelp() {
@@ -2444,6 +2515,10 @@ export class UIManager {
 
     onAddRarityMapping(callback) {
         this.eventListeners.addRarityMapping.push(callback);
+    }
+
+    onViewMappings(callback) {
+        this.eventListeners.viewMappings.push(callback);
     }
 
     onExportTrainingData(callback) {
