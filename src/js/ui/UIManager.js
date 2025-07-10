@@ -33,6 +33,18 @@ export class UIManager {
             voiceStart: [],
             voiceStop: [],
             voiceTest: [],
+            voiceTrainingStart: [],
+            voiceTrainingStop: [],
+            cardTrainingStart: [],
+            cardTrainingStop: [],
+            rarityTrainingStart: [],
+            rarityTrainingStop: [],
+            addCardMapping: [],
+            addRarityMapping: [],
+            removeMapping: [],
+            exportTrainingData: [],
+            importTrainingData: [],
+            clearTrainingData: [],
             quantityAdjust: [],
             cardRemove: [],
             pricingRefresh: [],
@@ -49,6 +61,15 @@ export class UIManager {
         this.isConsolidatedView = false;
         this.cardSize = 120;
         this.currentPopup = null;
+        
+        // Voice training state
+        this.voiceTrainingState = {
+            isCardTraining: false,
+            isRarityTraining: false,
+            currentSet: null,
+            lastRecognition: null,
+            suggestions: []
+        };
         
         // Configuration
         this.config = {
@@ -138,6 +159,33 @@ export class UIManager {
         this.elements.startVoiceBtn = document.getElementById('start-voice-btn');
         this.elements.stopVoiceBtn = document.getElementById('stop-voice-btn');
         this.elements.testVoiceBtn = document.getElementById('test-voice-btn');
+        
+        // Voice training elements
+        this.elements.trainingSetSelect = document.getElementById('training-set-select');
+        this.elements.cardTrainingControls = document.getElementById('card-training-controls');
+        this.elements.startCardTrainingBtn = document.getElementById('start-card-training');
+        this.elements.stopCardTrainingBtn = document.getElementById('stop-card-training');
+        this.elements.cardTrainingFeedback = document.getElementById('card-training-feedback');
+        this.elements.cardRecognitionResult = document.getElementById('card-recognition-result');
+        this.elements.recognizedText = document.getElementById('recognized-text');
+        this.elements.cardSuggestions = document.getElementById('card-suggestions');
+        
+        this.elements.startRarityTrainingBtn = document.getElementById('start-rarity-training');
+        this.elements.stopRarityTrainingBtn = document.getElementById('stop-rarity-training');
+        this.elements.rarityTrainingFeedback = document.getElementById('rarity-training-feedback');
+        this.elements.rarityRecognitionResult = document.getElementById('rarity-recognition-result');
+        this.elements.recognizedRarityText = document.getElementById('recognized-rarity-text');
+        this.elements.raritySuggestions = document.getElementById('rarity-suggestions');
+        
+        this.elements.cardMappingsCount = document.getElementById('card-mappings-count');
+        this.elements.rarityMappingsCount = document.getElementById('rarity-mappings-count');
+        this.elements.trainingSessionsCount = document.getElementById('training-sessions-count');
+        this.elements.lastTrainingDate = document.getElementById('last-training-date');
+        
+        this.elements.viewMappingsBtn = document.getElementById('view-mappings');
+        this.elements.exportTrainingDataBtn = document.getElementById('export-training-data');
+        this.elements.importTrainingDataBtn = document.getElementById('import-training-data');
+        this.elements.clearTrainingDataBtn = document.getElementById('clear-training-data');
         
         // Floating voice submenu elements
         this.elements.floatingVoiceSubmenu = document.getElementById('floating-voice-submenu');
@@ -266,6 +314,61 @@ export class UIManager {
         if (this.elements.testVoiceBtn) {
             this.elements.testVoiceBtn.addEventListener('click', () => {
                 this.emitVoiceTest();
+            });
+        }
+
+        // Voice training controls
+        if (this.elements.trainingSetSelect) {
+            this.elements.trainingSetSelect.addEventListener('change', () => {
+                this.handleTrainingSetChange();
+            });
+        }
+
+        if (this.elements.startCardTrainingBtn) {
+            this.elements.startCardTrainingBtn.addEventListener('click', () => {
+                this.handleStartCardTraining();
+            });
+        }
+
+        if (this.elements.stopCardTrainingBtn) {
+            this.elements.stopCardTrainingBtn.addEventListener('click', () => {
+                this.handleStopCardTraining();
+            });
+        }
+
+        if (this.elements.startRarityTrainingBtn) {
+            this.elements.startRarityTrainingBtn.addEventListener('click', () => {
+                this.handleStartRarityTraining();
+            });
+        }
+
+        if (this.elements.stopRarityTrainingBtn) {
+            this.elements.stopRarityTrainingBtn.addEventListener('click', () => {
+                this.handleStopRarityTraining();
+            });
+        }
+
+        if (this.elements.viewMappingsBtn) {
+            this.elements.viewMappingsBtn.addEventListener('click', () => {
+                this.handleViewMappings();
+            });
+        }
+
+        if (this.elements.exportTrainingDataBtn) {
+            this.elements.exportTrainingDataBtn.addEventListener('click', () => {
+                this.handleExportTrainingData();
+            });
+        }
+
+        if (this.elements.importTrainingDataBtn) {
+            this.elements.importTrainingDataBtn.addEventListener('click', () => {
+                this.handleImportTrainingData();
+            });
+        }
+
+        if (this.elements.clearTrainingDataBtn) {
+            this.elements.clearTrainingDataBtn.addEventListener('click', () => {
+                this.handleClearTrainingData();
             });
         }
 
@@ -2535,6 +2638,433 @@ export class UIManager {
             } catch (error) {
                 this.logger.error('Error in set switched callback:', error);
             }
+        });
+    }
+
+    // Voice Training Methods
+
+    /**
+     * Handle training set change
+     */
+    handleTrainingSetChange() {
+        const selectedSet = this.elements.trainingSetSelect.value;
+        if (selectedSet) {
+            this.voiceTrainingState.currentSet = selectedSet;
+            this.elements.cardTrainingControls.style.display = 'block';
+            this.logger.info(`Training set selected: ${selectedSet}`);
+        } else {
+            this.voiceTrainingState.currentSet = null;
+            this.elements.cardTrainingControls.style.display = 'none';
+        }
+    }
+
+    /**
+     * Handle start card training
+     */
+    handleStartCardTraining() {
+        if (!this.voiceTrainingState.currentSet) {
+            this.showToast('Please select a card set first', 'warning');
+            return;
+        }
+
+        this.voiceTrainingState.isCardTraining = true;
+        this.updateTrainingUI();
+        
+        this.emitCardTrainingStart({
+            setCode: this.voiceTrainingState.currentSet
+        });
+        
+        this.logger.info('Card training started');
+    }
+
+    /**
+     * Handle stop card training
+     */
+    handleStopCardTraining() {
+        this.voiceTrainingState.isCardTraining = false;
+        this.updateTrainingUI();
+        
+        this.emitCardTrainingStop();
+        
+        this.logger.info('Card training stopped');
+    }
+
+    /**
+     * Handle start rarity training
+     */
+    handleStartRarityTraining() {
+        this.voiceTrainingState.isRarityTraining = true;
+        this.updateTrainingUI();
+        
+        this.emitRarityTrainingStart();
+        
+        this.logger.info('Rarity training started');
+    }
+
+    /**
+     * Handle stop rarity training
+     */
+    handleStopRarityTraining() {
+        this.voiceTrainingState.isRarityTraining = false;
+        this.updateTrainingUI();
+        
+        this.emitRarityTrainingStop();
+        
+        this.logger.info('Rarity training stopped');
+    }
+
+    /**
+     * Update training UI based on current state
+     */
+    updateTrainingUI() {
+        // Card training controls
+        if (this.elements.startCardTrainingBtn && this.elements.stopCardTrainingBtn) {
+            this.elements.startCardTrainingBtn.style.display = 
+                this.voiceTrainingState.isCardTraining ? 'none' : 'block';
+            this.elements.stopCardTrainingBtn.style.display = 
+                this.voiceTrainingState.isCardTraining ? 'block' : 'none';
+        }
+
+        if (this.elements.cardTrainingFeedback) {
+            this.elements.cardTrainingFeedback.style.display = 
+                this.voiceTrainingState.isCardTraining ? 'block' : 'none';
+        }
+
+        // Rarity training controls
+        if (this.elements.startRarityTrainingBtn && this.elements.stopRarityTrainingBtn) {
+            this.elements.startRarityTrainingBtn.style.display = 
+                this.voiceTrainingState.isRarityTraining ? 'none' : 'block';
+            this.elements.stopRarityTrainingBtn.style.display = 
+                this.voiceTrainingState.isRarityTraining ? 'block' : 'none';
+        }
+
+        if (this.elements.rarityTrainingFeedback) {
+            this.elements.rarityTrainingFeedback.style.display = 
+                this.voiceTrainingState.isRarityTraining ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * Show voice recognition result for card training
+     */
+    showCardTrainingResult(transcript, suggestions) {
+        if (this.elements.recognizedText) {
+            this.elements.recognizedText.textContent = transcript;
+        }
+
+        if (this.elements.cardRecognitionResult) {
+            this.elements.cardRecognitionResult.style.display = 'block';
+        }
+
+        this.showCardSuggestions(suggestions);
+    }
+
+    /**
+     * Show card suggestions
+     */
+    showCardSuggestions(suggestions) {
+        if (!this.elements.cardSuggestions) return;
+
+        this.elements.cardSuggestions.innerHTML = '';
+
+        if (!suggestions || suggestions.length === 0) {
+            this.elements.cardSuggestions.innerHTML = '<p>No similar cards found. Try again.</p>';
+            return;
+        }
+
+        const suggestionsList = document.createElement('div');
+        suggestionsList.className = 'suggestions-list';
+
+        suggestions.forEach((suggestion, index) => {
+            const suggestionBtn = document.createElement('button');
+            suggestionBtn.className = 'suggestion-btn';
+            suggestionBtn.innerHTML = `
+                <span class="card-name">${suggestion.cardName || suggestion.name}</span>
+                <span class="confidence">Confidence: ${(suggestion.score * 100).toFixed(0)}%</span>
+            `;
+            
+            suggestionBtn.addEventListener('click', () => {
+                this.handleCardSuggestionSelect(suggestion);
+            });
+
+            suggestionsList.appendChild(suggestionBtn);
+        });
+
+        this.elements.cardSuggestions.appendChild(suggestionsList);
+    }
+
+    /**
+     * Handle card suggestion selection
+     */
+    handleCardSuggestionSelect(suggestion) {
+        const voiceInput = this.voiceTrainingState.lastRecognition;
+        const cardName = suggestion.cardName || suggestion.name;
+        
+        this.emitAddCardMapping({
+            voiceInput,
+            cardName,
+            setCode: this.voiceTrainingState.currentSet,
+            confidence: suggestion.score
+        });
+
+        this.showToast(`Added mapping: "${voiceInput}" → "${cardName}"`, 'success');
+        this.hideCardTrainingResult();
+    }
+
+    /**
+     * Hide card training result
+     */
+    hideCardTrainingResult() {
+        if (this.elements.cardRecognitionResult) {
+            this.elements.cardRecognitionResult.style.display = 'none';
+        }
+    }
+
+    /**
+     * Show voice recognition result for rarity training
+     */
+    showRarityTrainingResult(transcript, suggestions) {
+        if (this.elements.recognizedRarityText) {
+            this.elements.recognizedRarityText.textContent = transcript;
+        }
+
+        if (this.elements.rarityRecognitionResult) {
+            this.elements.rarityRecognitionResult.style.display = 'block';
+        }
+
+        this.showRaritySuggestions(suggestions);
+    }
+
+    /**
+     * Show rarity suggestions
+     */
+    showRaritySuggestions(suggestions) {
+        if (!this.elements.raritySuggestions) return;
+
+        this.elements.raritySuggestions.innerHTML = '';
+
+        if (!suggestions || suggestions.length === 0) {
+            this.elements.raritySuggestions.innerHTML = '<p>No similar rarities found. Try again.</p>';
+            return;
+        }
+
+        const suggestionsList = document.createElement('div');
+        suggestionsList.className = 'suggestions-list';
+
+        suggestions.forEach((suggestion, index) => {
+            const suggestionBtn = document.createElement('button');
+            suggestionBtn.className = 'suggestion-btn';
+            suggestionBtn.innerHTML = `
+                <span class="rarity-name">${suggestion.rarity}</span>
+                <span class="confidence">Confidence: ${(suggestion.score * 100).toFixed(0)}%</span>
+            `;
+            
+            suggestionBtn.addEventListener('click', () => {
+                this.handleRaritySuggestionSelect(suggestion);
+            });
+
+            suggestionsList.appendChild(suggestionBtn);
+        });
+
+        this.elements.raritySuggestions.appendChild(suggestionsList);
+    }
+
+    /**
+     * Handle rarity suggestion selection
+     */
+    handleRaritySuggestionSelect(suggestion) {
+        const voiceInput = this.voiceTrainingState.lastRecognition;
+        
+        this.emitAddRarityMapping({
+            voiceInput,
+            rarity: suggestion.rarity,
+            confidence: suggestion.score
+        });
+
+        this.showToast(`Added mapping: "${voiceInput}" → "${suggestion.rarity}"`, 'success');
+        this.hideRarityTrainingResult();
+    }
+
+    /**
+     * Hide rarity training result
+     */
+    hideRarityTrainingResult() {
+        if (this.elements.rarityRecognitionResult) {
+            this.elements.rarityRecognitionResult.style.display = 'none';
+        }
+    }
+
+    /**
+     * Update training statistics display
+     */
+    updateTrainingStats(stats) {
+        if (this.elements.cardMappingsCount) {
+            this.elements.cardMappingsCount.textContent = stats.cardMappings || 0;
+        }
+        if (this.elements.rarityMappingsCount) {
+            this.elements.rarityMappingsCount.textContent = stats.rarityMappings || 0;
+        }
+        if (this.elements.trainingSessionsCount) {
+            this.elements.trainingSessionsCount.textContent = stats.totalTrainingSessions || 0;
+        }
+        if (this.elements.lastTrainingDate) {
+            const date = stats.lastTrainingDate ? 
+                new Date(stats.lastTrainingDate).toLocaleDateString() : 'Never';
+            this.elements.lastTrainingDate.textContent = date;
+        }
+    }
+
+    /**
+     * Handle view mappings
+     */
+    handleViewMappings() {
+        this.emitViewMappings();
+    }
+
+    /**
+     * Handle export training data
+     */
+    handleExportTrainingData() {
+        this.emitExportTrainingData();
+    }
+
+    /**
+     * Handle import training data
+     */
+    handleImportTrainingData() {
+        // Create file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = e.target.result;
+                        this.emitImportTrainingData(data);
+                    } catch (error) {
+                        this.showToast('Failed to read training data file', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+        fileInput.click();
+    }
+
+    /**
+     * Handle clear training data
+     */
+    handleClearTrainingData() {
+        if (confirm('Are you sure you want to clear all training data? This cannot be undone.')) {
+            this.emitClearTrainingData();
+        }
+    }
+
+    // Event emitters for voice training
+
+    emitCardTrainingStart(data) {
+        this.eventListeners.cardTrainingStart.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in card training start callback:', error);
+            }
+        });
+    }
+
+    emitCardTrainingStop() {
+        this.eventListeners.cardTrainingStop.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in card training stop callback:', error);
+            }
+        });
+    }
+
+    emitRarityTrainingStart() {
+        this.eventListeners.rarityTrainingStart.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in rarity training start callback:', error);
+            }
+        });
+    }
+
+    emitRarityTrainingStop() {
+        this.eventListeners.rarityTrainingStop.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in rarity training stop callback:', error);
+            }
+        });
+    }
+
+    emitAddCardMapping(data) {
+        this.eventListeners.addCardMapping.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in add card mapping callback:', error);
+            }
+        });
+    }
+
+    emitAddRarityMapping(data) {
+        this.eventListeners.addRarityMapping.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in add rarity mapping callback:', error);
+            }
+        });
+    }
+
+    emitViewMappings() {
+        this.eventListeners.viewMappings.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in view mappings callback:', error);
+            }
+        });
+    }
+
+    emitExportTrainingData() {
+        this.eventListeners.exportTrainingData.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in export training data callback:', error);
+            }
+        });
+    }
+
+    emitImportTrainingData(data) {
+        this.eventListeners.importTrainingData.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in import training data callback:', error);
+            }
+        });
+    }
+
+    emitClearTrainingData() {
+        this.eventListeners.clearTrainingData.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in clear training data callback:', error);
+            }
+        });
+    }
+
+    /**
+     * Update voice training state
+     */
+    updateVoiceTrainingState(transcript) {
+        this.voiceTrainingState.lastRecognition = transcript;
+    }
+
+    /**
+     * Populate training set select
+     */
+    populateTrainingSetSelect(sets) {
+        if (!this.elements.trainingSetSelect) return;
+
+        this.elements.trainingSetSelect.innerHTML = '<option value="">Choose a set to train with...</option>';
+        
+        sets.forEach(set => {
+            const option = document.createElement('option');
+            option.value = set.setCode || set.code;
+            option.textContent = `${set.setName || set.name} (${set.setCode || set.code})`;
+            this.elements.trainingSetSelect.appendChild(option);
         });
     }
 }
