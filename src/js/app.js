@@ -51,7 +51,7 @@ class YGORipperApp {
         // Voice training configuration
         this.trainingConfig = {
             maxSuggestions: 30, // Configurable number of suggestions to show
-            minThreshold: 0.25, // Minimum confidence threshold (don't go below 25%)
+            minThreshold: 0.01, // Minimum confidence threshold (consider all options 0-100%)
             startThreshold: 0.45, // Starting threshold for finding matches
             thresholdStep: 0.05  // How much to reduce threshold each iteration
         };
