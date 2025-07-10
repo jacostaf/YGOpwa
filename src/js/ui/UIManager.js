@@ -2419,6 +2419,43 @@ export class UIManager {
         this.eventListeners.voiceTest.push(callback);
     }
 
+    // Voice training event listeners
+    onCardTrainingStart(callback) {
+        this.eventListeners.cardTrainingStart.push(callback);
+    }
+
+    onCardTrainingStop(callback) {
+        this.eventListeners.cardTrainingStop.push(callback);
+    }
+
+    onRarityTrainingStart(callback) {
+        this.eventListeners.rarityTrainingStart.push(callback);
+    }
+
+    onRarityTrainingStop(callback) {
+        this.eventListeners.rarityTrainingStop.push(callback);
+    }
+
+    onAddCardMapping(callback) {
+        this.eventListeners.addCardMapping.push(callback);
+    }
+
+    onAddRarityMapping(callback) {
+        this.eventListeners.addRarityMapping.push(callback);
+    }
+
+    onExportTrainingData(callback) {
+        this.eventListeners.exportTrainingData.push(callback);
+    }
+
+    onImportTrainingData(callback) {
+        this.eventListeners.importTrainingData.push(callback);
+    }
+
+    onClearTrainingData(callback) {
+        this.eventListeners.clearTrainingData.push(callback);
+    }
+
     onQuantityAdjust(callback) {
         this.eventListeners.quantityAdjust.push(callback);
     }
