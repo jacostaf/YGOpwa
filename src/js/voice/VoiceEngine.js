@@ -509,6 +509,30 @@ export class VoiceEngine {
             
             if (validAlternatives.length === 0) {
                 this.logger.warn('No high-confidence recognition results');
+                
+                // In training mode, still process the best result even if confidence is low
+                if (this.isTrainingMode && alternatives.length > 0) {
+                    const bestLowConfidenceResult = alternatives[0];
+                    this.logger.info(`Training mode: processing low confidence result: "${bestLowConfidenceResult.transcript}" (${bestLowConfidenceResult.confidence})`);
+                    
+                    // Apply Yu-Gi-Oh specific optimizations
+                    const optimizedResult = this.optimizeCardNameRecognition(bestLowConfidenceResult);
+                    
+                    const result = {
+                        transcript: optimizedResult.transcript,
+                        confidence: optimizedResult.confidence,
+                        alternatives: alternatives,
+                        engine: this.currentEngine?.name || 'unknown',
+                        timestamp: new Date().toISOString(),
+                        isFinal: true,
+                        isLowConfidence: true
+                    };
+                    
+                    this.lastResult = result;
+                    this.emitResult(result);
+                    return;
+                }
+                
                 return;
             }
             

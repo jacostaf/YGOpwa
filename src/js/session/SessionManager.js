@@ -2703,6 +2703,31 @@ export class SessionManager {
         return [...this.cardSets];
     }
 
+    /**
+     * Get information about a specific set
+     */
+    getSetInfo(setCode) {
+        if (!setCode) {
+            return null;
+        }
+        
+        const set = this.cardSets.find(s => 
+            s.code === setCode || 
+            s.set_code === setCode ||
+            s.id === setCode ||
+            s.name === setCode
+        );
+        
+        return set ? {
+            id: set.id,
+            code: set.code || set.set_code,
+            name: set.name || set.set_name,
+            setName: set.set_name || set.name,
+            cardCount: set.num_of_cards || set.cardCount || 0,
+            releaseDate: set.release_date || set.releaseDate
+        } : null;
+    }
+
     getCurrentSession() {
         return this.currentSession;
     }

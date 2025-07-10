@@ -1357,6 +1357,11 @@ class YGORipperApp {
             if (!this.voiceEngine || !this.voiceEngine.isAvailable()) {
                 throw new Error('Voice recognition not available');
             }
+            
+            // Check if a training set has been selected
+            if (!this.uiManager.voiceTrainingState.currentSet) {
+                throw new Error('Please select a training set first');
+            }
 
             // Set voice engine to training mode
             this.voiceEngine.setTrainingMode(true);
@@ -1406,7 +1411,15 @@ class YGORipperApp {
     async handleTrainingVoiceResult(result) {
         try {
             const transcript = result.transcript;
+            const isLowConfidence = result.isLowConfidence || false;
+            
             this.logger.info('Training voice result:', transcript);
+            
+            // Show what was interpreted, especially for low confidence
+            if (isLowConfidence) {
+                this.logger.info(`Low confidence result interpreted as: "${transcript}" (${result.confidence})`);
+                this.uiManager.showToast(`Interpreted as: "${transcript}" (low confidence)`, 'info');
+            }
 
             // Update UI with recognition result
             this.uiManager.updateVoiceTrainingState(transcript);
@@ -1427,7 +1440,9 @@ class YGORipperApp {
             } else if (this.uiManager.voiceTrainingState.isRarityTraining) {
                 // Find similar rarities using dynamic set rarities
                 try {
-                    const setRarities = await this.sessionManager.getSetRarities();
+                    // Use the selected training set, not the current session set
+                    const trainingSet = this.uiManager.voiceTrainingState.currentSet;
+                    const setRarities = await this.sessionManager.getSetRarities(trainingSet);
                     const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, setRarities);
                     this.uiManager.showRarityTrainingResult(transcript, suggestions.slice(0, 5));
                 } catch (error) {
