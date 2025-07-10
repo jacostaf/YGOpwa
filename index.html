@@ -74,6 +74,10 @@
                 <span class="tab-icon">📦</span>
                 <span class="tab-label">Pack Ripper</span>
             </button>
+            <button class="tab-btn" data-tab="voice-training" role="tab" aria-selected="false" aria-controls="voice-training-panel">
+                <span class="tab-icon">🎤</span>
+                <span class="tab-label">Voice Training</span>
+            </button>
         </nav>
 
         <!-- Main Content Area -->
@@ -332,6 +336,133 @@
                                 <p>Start a pack ripper session and use voice recognition to add cards.</p>
                             </div>
                             <!-- Cards will be populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Voice Training Tab -->
+            <section id="voice-training-panel" class="tab-panel" role="tabpanel" aria-labelledby="voice-training-tab">
+                <div class="panel-content">
+                    <div class="card section-card">
+                        <h2>Voice Training</h2>
+                        <p>Train the voice recognition system to better understand your pronunciation of card names and rarities.</p>
+                        
+                        <div class="training-sections">
+                            <!-- Card Name Training -->
+                            <div class="training-section">
+                                <h3>Card Name Training</h3>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="training-set-select">Select Card Set</label>
+                                        <select id="training-set-select" name="trainingSet">
+                                            <option value="">Choose a set to train with...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="training-controls" id="card-training-controls" style="display: none;">
+                                    <button id="start-card-training" class="btn btn-primary">
+                                        <span class="btn-icon">🎤</span>
+                                        Start Card Training
+                                    </button>
+                                    <button id="stop-card-training" class="btn btn-secondary" style="display: none;">
+                                        <span class="btn-icon">⏹️</span>
+                                        Stop Training
+                                    </button>
+                                </div>
+                                
+                                <div class="training-feedback" id="card-training-feedback" style="display: none;">
+                                    <div class="listening-indicator">
+                                        <span class="indicator-icon">🎤</span>
+                                        <span class="indicator-text">Listening... Say a card name</span>
+                                    </div>
+                                    
+                                    <div class="recognition-result" id="card-recognition-result" style="display: none;">
+                                        <p>You said: <strong id="recognized-text"></strong></p>
+                                        <div class="card-suggestions" id="card-suggestions">
+                                            <!-- Card suggestions will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Rarity Training -->
+                            <div class="training-section">
+                                <h3>Rarity Training</h3>
+                                <p>Train recognition for Yu-Gi-Oh rarities like "secret rare", "ultra rare", etc.</p>
+                                
+                                <div class="training-controls">
+                                    <button id="start-rarity-training" class="btn btn-primary">
+                                        <span class="btn-icon">🎤</span>
+                                        Start Rarity Training
+                                    </button>
+                                    <button id="stop-rarity-training" class="btn btn-secondary" style="display: none;">
+                                        <span class="btn-icon">⏹️</span>
+                                        Stop Training
+                                    </button>
+                                </div>
+                                
+                                <div class="training-feedback" id="rarity-training-feedback" style="display: none;">
+                                    <div class="listening-indicator">
+                                        <span class="indicator-icon">🎤</span>
+                                        <span class="indicator-text">Listening... Say a rarity</span>
+                                    </div>
+                                    
+                                    <div class="recognition-result" id="rarity-recognition-result" style="display: none;">
+                                        <p>You said: <strong id="recognized-rarity-text"></strong></p>
+                                        <div class="rarity-suggestions" id="rarity-suggestions">
+                                            <!-- Rarity suggestions will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Training Statistics -->
+                            <div class="training-section">
+                                <h3>Training Statistics</h3>
+                                <div class="stats-grid" id="training-stats">
+                                    <div class="stat-item">
+                                        <span class="stat-label">Card Mappings</span>
+                                        <span class="stat-value" id="card-mappings-count">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-label">Rarity Mappings</span>
+                                        <span class="stat-value" id="rarity-mappings-count">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-label">Training Sessions</span>
+                                        <span class="stat-value" id="training-sessions-count">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-label">Last Training</span>
+                                        <span class="stat-value" id="last-training-date">Never</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Manage Training Data -->
+                            <div class="training-section">
+                                <h3>Manage Training Data</h3>
+                                <div class="management-controls">
+                                    <button id="view-mappings" class="btn btn-outline">
+                                        <span class="btn-icon">👁️</span>
+                                        View Mappings
+                                    </button>
+                                    <button id="export-training-data" class="btn btn-outline">
+                                        <span class="btn-icon">📤</span>
+                                        Export Data
+                                    </button>
+                                    <button id="import-training-data" class="btn btn-outline">
+                                        <span class="btn-icon">📥</span>
+                                        Import Data
+                                    </button>
+                                    <button id="clear-training-data" class="btn btn-danger">
+                                        <span class="btn-icon">🗑️</span>
+                                        Clear All Data
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

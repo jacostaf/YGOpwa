@@ -14,6 +14,8 @@
 // Import core modules
 import { VoiceEngine } from './voice/VoiceEngine.js';
 import { PermissionManager } from './voice/PermissionManager.js';
+import { PhoneticMatcher } from './voice/PhoneticMatcher.js';
+import { VoiceTrainer } from './voice/VoiceTrainer.js';
 import { SessionManager } from './session/SessionManager.js';
 import { PriceChecker } from './price/PriceChecker.js';
 import { UIManager } from './ui/UIManager.js';
@@ -34,8 +36,10 @@ class YGORipperApp {
         this.logger = new Logger('YGORipperApp');
         this.storage = new Storage();
         this.permissionManager = new PermissionManager();
+        this.phoneticMatcher = new PhoneticMatcher(this.logger);
+        this.voiceTrainer = null; // Initialized after storage
         this.voiceEngine = null; // Initialized after permissions
-        this.sessionManager = new SessionManager();
+        this.sessionManager = null; // Initialized after voice components
         this.priceChecker = new PriceChecker();
         this.uiManager = new UIManager();
         
@@ -92,15 +96,22 @@ class YGORipperApp {
             // Initialize permission manager
             await this.permissionManager.initialize();
             
-            this.updateLoadingProgress(50, 'Initializing voice engine...');
+            this.updateLoadingProgress(50, 'Initializing voice trainer...');
             
-            // Initialize voice engine with permission manager
-            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
+            // Initialize voice trainer
+            this.voiceTrainer = new VoiceTrainer(this.storage, this.logger);
+            await this.voiceTrainer.initialize();
+            
+            this.updateLoadingProgress(60, 'Initializing voice engine...');
+            
+            // Initialize voice engine with all voice components
+            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger, this.phoneticMatcher, this.voiceTrainer);
             await this.voiceEngine.initialize();
             
-            this.updateLoadingProgress(70, 'Loading session data...');
+            this.updateLoadingProgress(70, 'Initializing session manager...');
             
-            // Initialize session manager
+            // Initialize session manager with voice components
+            this.sessionManager = new SessionManager(this.storage, this.logger, this.phoneticMatcher, this.voiceTrainer);
             await this.sessionManager.initialize(this.storage);
             
             this.updateLoadingProgress(80, 'Setting up price checker...');

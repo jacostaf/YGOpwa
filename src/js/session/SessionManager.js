@@ -12,11 +12,14 @@
 
 import { Logger } from '../utils/Logger.js';
 import { config } from '../utils/config.js';
+import { PhoneticMatcher } from '../voice/PhoneticMatcher.js';
 
 export class SessionManager {
-    constructor(storage = null, logger = null) {
+    constructor(storage = null, logger = null, phoneticMatcher = null, voiceTrainer = null) {
         this.storage = storage;
         this.logger = logger || new Logger('SessionManager');
+        this.phoneticMatcher = phoneticMatcher || new PhoneticMatcher(this.logger);
+        this.voiceTrainer = voiceTrainer;
         
         // API Configuration (matching ygo_ripper.py)
         this.apiUrl = this.getApiUrl();
@@ -39,11 +42,27 @@ export class SessionManager {
         this.setCards = new Map(); // Cache for set-specific card data
         this.searchTerm = '';
         
+        // Standard Yu-Gi-Oh rarities for phonetic matching
+        this.standardRarities = [
+            'quarter century secret rare',
+            'quarter century secret', 
+            'prismatic secret rare',
+            'prismatic secret',
+            'starlight rare',
+            'collector rare',
+            'ghost rare',
+            'secret rare',
+            'ultimate rare',
+            'ultra rare',
+            'super rare',
+            'parallel rare',
+            'short print',
+            'rare',
+            'common'
+        ];
+        
         // Pricing data loading tracking
         this.loadingPriceData = new Set(); // Track cards with pending price requests
-        
-        // Event listeners
-        this.listeners = {
             sessionStart: [],
             sessionStop: [],
             sessionUpdate: [],
@@ -71,7 +90,25 @@ export class SessionManager {
         // Common card names cache for optimization
         this.commonCardNames = new Map();
         
+        // Event listeners
+        this.listeners = {
+            sessionStart: [],
+            sessionStop: [],
+            sessionUpdate: [],
+            cardAdded: [],
+            cardRemoved: [],
+            setChanged: []
+        };
+        
         this.logger.info('SessionManager initialized');
+    }
+
+    /**
+     * Set voice trainer instance
+     */
+    setVoiceTrainer(voiceTrainer) {
+        this.voiceTrainer = voiceTrainer;
+        this.logger.info('Voice trainer instance set for SessionManager');
     }
 
     /**
@@ -1071,7 +1108,7 @@ export class SessionManager {
     }
 
     /**
-     * Extract rarity information from voice text (matching oldIteration.py logic)
+     * Extract rarity information from voice text using phonetic matching
      */
     extractRarityFromVoice(voiceText) {
         if (!this.settings.autoExtractRarity) {
@@ -1081,38 +1118,31 @@ export class SessionManager {
 
         this.logger.debug(`[RARITY EXTRACT] Processing voice text: "${voiceText}"`);
 
-        // Enhanced rarity patterns to catch YGO rarity types (exact match from oldIteration.py)
-        const rarityPatterns = [
-            /quarter century secret rare/i,
-            /quarter century secret/i,
-            /prismatic secret rare/i,
-            /prismatic secret/i,
-            /starlight rare/i,
-            /collector.*?rare/i,
-            /ghost rare/i,
-            /secret rare/i,
-            /ultimate rare/i,
-            /ultra rare/i,
-            /super rare/i,
-            /parallel rare/i,
-            /short print/i,
-            /rare/i,
-            /common/i
-        ];
-
-        for (const pattern of rarityPatterns) {
-            this.logger.debug(`[RARITY EXTRACT] Testing pattern: ${pattern}`);
-            const match = voiceText.match(pattern);
-            if (match) {
-                const rarity = match[0];
-                const cardName = voiceText.replace(pattern, '').trim();
-                this.logger.info(`[RARITY EXTRACT] SUCCESS - Extracted rarity: '${rarity}', remaining card name: '${cardName}'`);
-                return { cardName, rarity };
+        // First check for user-trained rarity mappings
+        if (this.voiceTrainer) {
+            const rarityMapping = this.voiceTrainer.getRarityMapping(voiceText);
+            if (rarityMapping) {
+                const cardName = voiceText.replace(new RegExp(rarityMapping.voiceInput, 'gi'), '').trim();
+                this.logger.info(`[RARITY EXTRACT] Using trained mapping: "${voiceText}" -> "${rarityMapping.rarity}"`);
+                return { 
+                    cardName, 
+                    rarity: rarityMapping.rarity,
+                    confidence: rarityMapping.confidence,
+                    source: 'trained_mapping'
+                };
             }
         }
 
+        // Use phonetic matcher to find similar rarities
+        const rarityResult = this.phoneticMatcher.extractRarityFromText(voiceText, this.standardRarities);
+        
+        if (rarityResult.rarity) {
+            this.logger.info(`[RARITY EXTRACT] PHONETIC SUCCESS - Extracted rarity: '${rarityResult.rarity}', remaining card name: '${rarityResult.cardName}' (confidence: ${rarityResult.confidence.toFixed(2)})`);
+            return rarityResult;
+        }
+
         this.logger.debug(`[RARITY EXTRACT] No rarity patterns matched in: "${voiceText}"`);
-        return { cardName: voiceText, rarity: null };
+        return { cardName: voiceText, rarity: null, confidence: 0 };
     }
 
     /**
