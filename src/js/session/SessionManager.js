@@ -11,6 +11,7 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { config } from '../utils/config.js';
 
 export class SessionManager {
     constructor(storage = null, logger = null) {
@@ -50,7 +51,8 @@ export class SessionManager {
             cardRemoved: [],
             sessionClear: [],
             setsLoaded: [],
-            setsFiltered: []
+            setsFiltered: [],
+            setSwitched: []
         };
         
         // Configuration
@@ -58,9 +60,9 @@ export class SessionManager {
             autoSave: true,
             autoSaveInterval: 30000, // 30 seconds
             maxSessionHistory: 50,
-            cardMatchThreshold: 0.7,
+            cardMatchThreshold: 0.35,
             enableFuzzyMatching: true,
-            apiTimeout: 30000 // 30 second timeout for API calls
+            apiTimeout: 120000 // 30 second timeout for API calls
         };
         
         // Auto-save timer
@@ -90,7 +92,8 @@ export class SessionManager {
     getApiUrl() {
         // realBackendAPI.py backend runs on port 8081
         // Based on the realBackendAPI.py backend API
-        return 'http://127.0.0.1:8081';
+        return config.API_URL || 'http://127.0.0.1:8081';
+
     }
 
     /**
@@ -253,6 +256,8 @@ export class SessionManager {
             
             this.logger.info(`[API DEBUG] Making fetch request with timeout: ${this.config.apiTimeout}ms`);
             
+            
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
@@ -330,7 +335,7 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('[API DEBUG] Request timed out after', this.config.apiTimeout, 'ms');
-                throw new Error('Request timed out. Please check if the backend is running on http://127.0.0.1:8081');
+                throw new Error('Request timed out. Please check if the backend is running');
             }
             
             this.logger.error('[API DEBUG] Failed to fetch card sets from API:', error);
@@ -343,7 +348,7 @@ export class SessionManager {
             // Provide more specific error messages for debugging
             if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
                 this.logger.error('[API DEBUG] Network error detected - backend may not be running or accessible');
-                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on http://127.0.0.1:8081');
+                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on');
             }
             
             if (error.message.includes('ECONNREFUSED')) {
@@ -432,7 +437,9 @@ export class SessionManager {
             if (!data.success) {
                 throw new Error(data.message || 'Backend API returned failure');
             }
-            
+            console.log("\n\n\n\n\nhere data",data,"\n\n")
+            console.log("\n\n\n\n\n here data.data",data.data,"\n\n")
+
             return data.data; // Return the card data portion
             
         } catch (error) {
@@ -539,7 +546,7 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('Set cards request timed out after', this.config.apiTimeout, 'ms');
-                throw new Error(`Request timed out loading cards for set ${setIdentifier}. Please check if the backend is running on http://127.0.0.1:8081`);
+                throw new Error(`Request timed out loading cards for set ${setIdentifier}. Please check if the backend is running on`);
             } else {
                 this.logger.error(`Failed to load cards for set ${setIdentifier}:`, error);
                 throw error;
@@ -548,6 +555,70 @@ export class SessionManager {
     }
 
 
+
+    /**
+     * Switch to a different card set while keeping the current session active
+     * @param {string} newSetId - The ID of the new set to switch to
+     * @returns {Promise<Object>} The updated session object
+     */
+    async switchSet(newSetId) {
+        if (!this.sessionActive || !this.currentSession) {
+            throw new Error('No active session to switch sets');
+        }
+
+        try {
+            this.logger.info(`Switching to set: ${newSetId}`);
+            
+            // Find the new set
+            const newSet = this.cardSets.find(s => s.id === newSetId || s.code === newSetId);
+            if (!newSet) {
+                throw new Error(`Card set not found: ${newSetId}`);
+            }
+
+            // Don't do anything if switching to the same set
+            if (this.currentSession.setId === newSet.id) {
+                this.logger.info('Already using the requested set, no change needed');
+                return this.currentSession;
+            }
+
+            // Store the current session state
+            const currentCards = [...(this.currentSession.cards || [])];
+            const currentStats = { ...(this.currentSession.statistics || {}) };
+            
+            // Update the current set and session properties
+            const oldSetId = this.currentSession.setId;
+            this.currentSet = newSet;
+            this.currentSession.setId = newSet.id;
+            this.currentSession.setName = newSet.name || newSet.set_name || newSet.code;
+            this.currentSession.lastUpdated = new Date().toISOString();
+
+            // Load the new set's cards
+            await this.loadSetCards(newSet.id);
+
+            // Restore the cards and statistics
+            this.currentSession.cards = currentCards;
+            this.currentSession.statistics = currentStats;
+
+            // Save the updated session
+            if (this.config.autoSave) {
+                await this.saveSession();
+            }
+
+            // Emit event for UI updates
+            this.emit('setSwitched', {
+                oldSetId,
+                newSetId: newSet.id,
+                session: this.currentSession
+            });
+
+            this.logger.info(`Successfully switched to set: ${newSet.id} (${newSet.name || newSet.set_name || newSet.code})`);
+            return this.currentSession;
+
+        } catch (error) {
+            this.logger.error('Failed to switch sets:', error);
+            throw error;
+        }
+    }
 
     /**
      * Start a new session
@@ -681,6 +752,12 @@ export class SessionManager {
      * @param {Object} cardData - Card data to add
      * @param {boolean} forceRefreshPricing - Whether to force refresh pricing data even for imported cards
      */
+    /**
+     * Add a card to the current session with enhanced price and image data
+     * @param {Object} cardData - Card data to add
+     * @param {boolean} forceRefreshPricing - Whether to force refresh pricing data even for imported cards
+     * @returns {Object} The added card with initial data
+     */
     async addCard(cardData, forceRefreshPricing = false) {
         if (!this.sessionActive || !this.currentSession) {
             throw new Error('No active session');
@@ -698,113 +775,50 @@ export class SessionManager {
                 this.logger.debug(`Extracted image URLs from card_images for card ${cardData.name || cardData.id}: ${firstImage.image_url}`);
             }
             
-            // First create the basic enhanced card
+            // Create the initial card with loading state
             const enhancedCard = {
                 id: this.generateCardId(),
                 timestamp: new Date().toISOString(),
                 sessionId: this.currentSession.id,
+                // Set loading state for pricing
+                price_status: 'loading',
+                price: 0,
+                tcg_price: '--',
+                tcg_market_price: '--',
+                // Copy over other card data
                 ...cardData
             };
             
-            // Check if this card has valid imported pricing data that should be preserved
-            // Only skip API calls if forceRefreshPricing is false
-            const hasValidImportedPricing = !forceRefreshPricing && (
-                cardData.importedPricing === true || 
-                (cardData.price_status === 'imported') ||
-                (cardData.price_status === 'loaded' && 
-                 (cardData.tcg_price || cardData.tcg_market_price))
-            );
-            
-            this.logger.info(`[ADD CARD DEBUG] Checking pricing for card: ${cardData.name}`);
-            this.logger.info(`[ADD CARD DEBUG] forceRefreshPricing: ${forceRefreshPricing}, importedPricing: ${cardData.importedPricing}, price_status: ${cardData.price_status}, tcg_price: ${cardData.tcg_price}, tcg_market_price: ${cardData.tcg_market_price}`);
-            this.logger.info(`[ADD CARD DEBUG] hasValidImportedPricing: ${hasValidImportedPricing}`);
-            
-            // Track this card for pricing data loading only if we need to fetch pricing
-            if (!hasValidImportedPricing) {
-                this.loadingPriceData.add(enhancedCard.id);
-                this.logger.info(`[ADD CARD DEBUG] Will fetch pricing for card: ${cardData.name} (forceRefresh: ${forceRefreshPricing})`);
-            } else {
-                this.logger.info(`[ADD CARD DEBUG] Will preserve existing pricing for card: ${cardData.name}`);
-            }
-            
-            // Try to fetch enhanced pricing information only if we don't have valid imported pricing
-            if (!hasValidImportedPricing) {
-                try {
-                    const enhancedInfo = await this.fetchEnhancedCardInfo(cardData);
-                    if (enhancedInfo) {
-                        // Merge the enhanced information
-                        Object.assign(enhancedCard, {
-                            // Price information
-                            tcg_price: enhancedInfo.tcg_price,
-                            tcg_market_price: enhancedInfo.tcg_market_price,
-                            price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
-                            
-                            // Enhanced card details
-                            card_name: enhancedInfo.card_name || cardData.name,
-                            card_number: enhancedInfo.card_number || cardData.setInfo?.setCode,
-                            card_rarity: enhancedInfo.card_rarity || cardData.displayRarity || cardData.rarity,
-                            booster_set_name: enhancedInfo.booster_set_name,
-                            card_art_variant: enhancedInfo.card_art_variant,
-                            set_code: enhancedInfo.set_code,
-                            last_price_updt: enhancedInfo.last_price_updt,
-                            
-                            // Image information - use enhanced info if available, otherwise fall back to extracted URLs
-                            image_url: enhancedInfo.image_url || cardData.image_url,
-                            image_url_small: enhancedInfo.image_url_small || cardData.image_url_small,
-                            image_url_cropped: cardData.image_url_cropped, // This is typically not in enhanced info
-                            
-                            // Source information
-                            scrape_success: enhancedInfo.scrape_success,
-                            source_url: enhancedInfo.source_url,
-                            
-                            // Indicate this card has enhanced information
-                            hasEnhancedInfo: true
-                        });
-                        
-                        this.logger.info(`Enhanced card info fetched for: ${cardData.name} - Price: $${enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || 'N/A'}`);
-                    }
-                } catch (enhanceError) {
-                    this.logger.warn('Failed to fetch enhanced card info, using basic data:', enhanceError.message);
-                    // Continue with basic card data
-                    enhancedCard.hasEnhancedInfo = false;
-                } finally {
-                    // Remove from loading tracking regardless of success/failure
-                    this.loadingPriceData.delete(enhancedCard.id);
-                }
-            } else {
-                // Use imported pricing data - ensure it's properly preserved
-                this.logger.info(`[PRICING PRESERVATION] Using imported pricing data for: ${cardData.name} - TCG Low: $${cardData.tcg_price || 'N/A'}, TCG Market: $${cardData.tcg_market_price || 'N/A'}`);
-                
-                // Ensure pricing data is not overwritten
-                enhancedCard.tcg_price = cardData.tcg_price;
-                enhancedCard.tcg_market_price = cardData.tcg_market_price;
-                enhancedCard.price = cardData.price || parseFloat(cardData.tcg_market_price || cardData.tcg_price || '0');
-                enhancedCard.price_status = cardData.price_status || 'imported';
-                enhancedCard.importedPricing = true;
-                
-                // Preserve other important data
-                enhancedCard.card_name = cardData.card_name || cardData.name;
-                enhancedCard.card_rarity = cardData.card_rarity || cardData.rarity;
-                enhancedCard.set_code = cardData.set_code;
-                enhancedCard.card_number = cardData.card_number;
-                enhancedCard.last_price_updt = cardData.last_price_updt;
-                enhancedCard.source_url = cardData.source_url;
-                enhancedCard.scrape_success = cardData.scrape_success;
-                
-                enhancedCard.hasEnhancedInfo = false; // Mark as not enhanced since we're using imported data
-                
-                this.logger.info(`[PRICING PRESERVATION] Pricing data preserved for: ${cardData.name} - TCG Low: $${enhancedCard.tcg_price}, TCG Market: $${enhancedCard.tcg_market_price}`);
-            }
-            
-            // Add to session
+            // Add to session immediately
             this.currentSession.cards.push(enhancedCard);
             
             // Update statistics
             this.updateSessionStatistics();
             
-            // Emit events
+            // Emit events to update UI immediately
             this.emitCardAdded(enhancedCard);
             this.emitSessionUpdate(this.currentSession);
+            
+            // Check if we need to fetch pricing data
+            const hasValidImportedPricing = !forceRefreshPricing && (
+                cardData.importedPricing === true || 
+                (cardData.price_status === 'imported') ||
+                (cardData.price_status === 'loaded' && (cardData.tcg_price || cardData.tcg_market_price))
+            );
+            
+            if (!hasValidImportedPricing) {
+                // Start async price update without blocking
+                this._updateCardPricing(enhancedCard, cardData);
+            } else if (cardData.tcg_price || cardData.tcg_market_price) {
+                // Use existing pricing data immediately
+                this._applyPricingData(enhancedCard, {
+                    tcg_price: cardData.tcg_price,
+                    tcg_market_price: cardData.tcg_market_price,
+                    price: cardData.price || parseFloat(cardData.tcg_market_price || cardData.tcg_price || '0'),
+                    price_status: 'imported',
+                    importedPricing: true
+                });
+            }
             
             this.logger.info('Card added to session:', enhancedCard.name || enhancedCard.card_name || enhancedCard.id);
             return enhancedCard;
@@ -813,6 +827,81 @@ export class SessionManager {
             this.logger.error('Failed to add card to session:', error);
             throw error;
         }
+    }
+    
+    /**
+     * Update card pricing data asynchronously
+     * @private
+     * @param {Object} card - The card to update
+     * @param {Object} cardData - Original card data for reference
+     */
+    async _updateCardPricing(card, cardData) {
+        const cardId = card.id;
+        this.loadingPriceData.add(cardId);
+        
+        try {
+            const enhancedInfo = await this.fetchEnhancedCardInfo(cardData);
+            if (enhancedInfo) {
+                this._applyPricingData(card, {
+                    tcg_price: enhancedInfo.tcg_price,
+                    tcg_market_price: enhancedInfo.tcg_market_price,
+                    price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
+                    price_status: 'loaded',
+                    card_name: enhancedInfo.card_name || cardData.name,
+                    card_number: enhancedInfo.card_number || cardData.setInfo?.setCode,
+                    card_rarity: enhancedInfo.card_rarity || cardData.displayRarity || cardData.rarity,
+                    booster_set_name: enhancedInfo.booster_set_name,
+                    card_art_variant: enhancedInfo.card_art_variant,
+                    set_code: enhancedInfo.set_code,
+                    last_price_updt: enhancedInfo.last_price_updt,
+                    image_url: enhancedInfo.image_url || card.image_url,
+                    image_url_small: enhancedInfo.image_url_small || card.image_url_small,
+                    source_url: enhancedInfo.source_url,
+                    scrape_success: enhancedInfo.scrape_success,
+                    hasEnhancedInfo: true
+                });
+                
+                this.logger.info(`Pricing updated for: ${card.name} - Price: $${enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || 'N/A'}`);
+            } else {
+                this.logger.warn('No pricing data available for card:', card.name || card.id);
+                this._applyPricingData(card, {
+                    price_status: 'error',
+                    tcg_price: 'N/A',
+                    tcg_market_price: 'N/A',
+                    price: 0
+                });
+            }
+        } catch (error) {
+            this.logger.warn('Failed to update card pricing:', error.message);
+            this._applyPricingData(card, {
+                price_status: 'error',
+                tcg_price: 'Error',
+                tcg_market_price: 'Error',
+                price: 0
+            });
+        } finally {
+            this.loadingPriceData.delete(cardId);
+        }
+    }
+    
+    /**
+     * Apply pricing data to a card and emit update events
+     * @private
+     * @param {Object} card - The card to update
+     * @param {Object} pricingData - The pricing data to apply
+     */
+    _applyPricingData(card, pricingData) {
+        if (!card) return;
+        
+        // Update card with new pricing data
+        Object.assign(card, pricingData);
+        
+        // Update session statistics
+        this.updateSessionStatistics();
+        
+        // Emit events to update UI
+        this.emit('cardUpdated', { cardId: card.id, card });
+        this.emitSessionUpdate(this.currentSession);
     }
 
     /**
@@ -1436,7 +1525,7 @@ export class SessionManager {
                             this.logger.debug(`[VARIANT] Rarity matching: "${extractedRarity}" vs "${rarity}" = ${rarityScore}%`);
                             
                             // Skip variants that don't match the extracted rarity well enough
-                            if (rarityScore < 70) {
+                            if (rarityScore < 20) {
                                 this.logger.debug(`[VARIANT] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
                                 continue;
                             }
@@ -2571,7 +2660,9 @@ export class SessionManager {
         return this.sessionActive;
     }
 
-    // Event handling
+    /**
+     * Event handling
+     */
     onSessionStart(callback) {
         this.listeners.sessionStart.push(callback);
     }
@@ -2588,12 +2679,24 @@ export class SessionManager {
         this.listeners.cardAdded.push(callback);
     }
 
+    onCardUpdated(callback) {
+        this.addEventListener('cardUpdated', callback);
+    }
+
     onCardRemoved(callback) {
         this.listeners.cardRemoved.push(callback);
     }
 
     onSessionClear(callback) {
         this.listeners.sessionClear.push(callback);
+    }
+
+    /**
+     * Register a callback for set switched events
+     * @param {Function} callback - The callback function
+     */
+    onSetSwitched(callback) {
+        this.listeners.setSwitched.push(callback);
     }
 
     emitSessionStart(session) {

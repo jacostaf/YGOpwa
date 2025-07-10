@@ -178,6 +178,11 @@ class YGORipperApp {
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
                 autoConfirmThreshold: 85,
+                // Voice recognition settings
+                voiceConfidenceThreshold: 0.5,
+                voiceMaxAlternatives: 5,
+                voiceContinuous: true,
+                voiceInterimResults: true,
                 // Auto-extraction settings (matching oldIteration.py)
                 autoExtractRarity: false,
                 autoExtractArtVariant: false
@@ -237,6 +242,39 @@ class YGORipperApp {
             // Handle tab-specific initialization
             if (tabId === 'pack-ripper') {
                 this.handlePackRipperTabActivated();
+            }
+        });
+        
+        // Listen for card updates from SessionManager
+        this.sessionManager.onCardUpdated((card) => {
+            this.logger.debug('Card updated:', card);
+            // Update the card display in the UI
+            this.uiManager.updateCardDisplay(card);
+            
+            // Also update the session info in case totals changed
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+        });
+
+        // Listen for set switched events from SessionManager
+        this.sessionManager.onSetSwitched(({ oldSetId, newSetId, session }) => {
+            this.logger.debug(`Set switched from ${oldSetId} to ${newSetId}`);
+            // Update the UI with the new set information
+            this.uiManager.updateSessionInfo(session);
+            // Show a toast notification
+            this.uiManager.showToast(`Switched to set: ${session.setName}`, 'success');
+        });
+        
+        // Listen for set switch requests from UI
+        this.uiManager.onSetSwitched(async ({ newSetId }) => {
+            try {
+                if (this.sessionManager.isSessionActive()) {
+                    await this.sessionManager.switchSet(newSetId);
+                } else {
+                    this.uiManager.showToast('No active session to switch sets', 'warning');
+                }
+            } catch (error) {
+                this.logger.error('Failed to switch sets:', error);
+                this.uiManager.showToast(`Failed to switch sets: ${error.message}`, 'error');
             }
         });
 
@@ -806,20 +844,32 @@ class YGORipperApp {
         try {
             this.logger.info('Saving settings:', newSettings);
             
-            // Update application settings
+            // Update current settings
             this.settings = { ...this.settings, ...newSettings };
-            
-            // Update SessionManager settings for auto-extraction
-            this.sessionManager.updateSettings(this.settings);
             
             // Save to storage
             await this.saveSettings();
             
-            this.logger.info('Settings saved successfully');
+            // Update UI based on theme
+            if (newSettings.theme) {
+                document.documentElement.setAttribute('data-theme', newSettings.theme);
+            }
+            
+            // Update voice engine with new settings
+            if (this.voiceEngine) {
+                this.voiceEngine.updateConfig(this.settings);
+            }
+            
+            // Notify other components
+            if (this.sessionManager) {
+                this.sessionManager.updateSettings(this.settings);
+            }
+            
+            this.uiManager.showToast('Settings saved successfully', 'success');
             
         } catch (error) {
             this.logger.error('Failed to save settings:', error);
-            this.uiManager.showToast('Error saving settings: ' + error.message, 'error');
+            this.uiManager.showToast('Failed to save settings', 'error');
         }
     }
 
