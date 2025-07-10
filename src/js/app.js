@@ -1419,9 +1419,15 @@ class YGORipperApp {
                     }
                 }
             } else if (this.uiManager.voiceTrainingState.isRarityTraining) {
-                // Find similar rarities
-                const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, this.sessionManager.standardRarities);
-                this.uiManager.showRarityTrainingResult(transcript, suggestions.slice(0, 5));
+                // Find similar rarities using dynamic set rarities
+                try {
+                    const setRarities = await this.sessionManager.getSetRarities();
+                    const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, setRarities);
+                    this.uiManager.showRarityTrainingResult(transcript, suggestions.slice(0, 5));
+                } catch (error) {
+                    this.logger.error('Error getting set rarities for training:', error);
+                    this.uiManager.showRarityTrainingResult(transcript, []);
+                }
             }
 
         } catch (error) {

@@ -42,37 +42,8 @@ export class SessionManager {
         this.setCards = new Map(); // Cache for set-specific card data
         this.searchTerm = '';
         
-        // Standard Yu-Gi-Oh rarities for phonetic matching
-        this.standardRarities = [
-            'quarter century secret rare',
-            'quarter century secret', 
-            'prismatic secret rare',
-            'prismatic secret',
-            'starlight rare',
-            'collector rare',
-            'ghost rare',
-            'secret rare',
-            'ultimate rare',
-            'ultra rare',
-            'super rare',
-            'parallel rare',
-            'short print',
-            'rare',
-            'common'
-        ];
-        
         // Pricing data loading tracking
         this.loadingPriceData = new Set(); // Track cards with pending price requests
-            sessionStart: [],
-            sessionStop: [],
-            sessionUpdate: [],
-            cardAdded: [],
-            cardRemoved: [],
-            sessionClear: [],
-            setsLoaded: [],
-            setsFiltered: [],
-            setSwitched: []
-        };
         
         // Configuration
         this.config = {
@@ -591,6 +562,73 @@ export class SessionManager {
         }
     }
 
+    /**
+     * Extract unique rarities from the cards in the current set
+     * This replaces the hardcoded standardRarities list with dynamic set-specific rarities
+     * @param {string} setIdentifier - The set identifier to get rarities for (optional, uses current set if not provided)
+     * @returns {Promise<string[]>} Array of unique rarities found in the set
+     */
+    async getSetRarities(setIdentifier = null) {
+        try {
+            // Use current set if no identifier provided
+            const targetSetId = setIdentifier || (this.currentSet ? this.currentSet.id : null);
+            
+            if (!targetSetId) {
+                this.logger.warn('No set specified and no current set available for rarity extraction');
+                return [];
+            }
+
+            // Load the set cards if not already loaded
+            const cards = await this.loadSetCards(targetSetId);
+            
+            if (!cards || cards.length === 0) {
+                this.logger.warn(`No cards found for set: ${targetSetId}`);
+                return [];
+            }
+
+            // Extract unique rarities from all cards in the set
+            const raritySet = new Set();
+            
+            for (const card of cards) {
+                // Each card has a card_sets array with rarity information
+                const cardSets = card.card_sets || [];
+                
+                for (const cardSet of cardSets) {
+                    const rarity = cardSet.set_rarity;
+                    
+                    // Only include valid rarities (same validation as in findCardsInCurrentSet)
+                    if (rarity && 
+                        typeof rarity === 'string' && 
+                        rarity.trim() !== '' && 
+                        rarity.toLowerCase().trim() !== 'unknown' &&
+                        rarity.toLowerCase().trim() !== 'n/a' &&
+                        rarity.toLowerCase().trim() !== 'undefined' &&
+                        rarity.toLowerCase().trim() !== 'null') {
+                        
+                        raritySet.add(rarity.trim());
+                    }
+                }
+            }
+
+            // Convert to array and sort by specificity (longer, more specific names first)
+            const rarities = Array.from(raritySet).sort((a, b) => {
+                // Sort by length descending, then alphabetically
+                if (b.length !== a.length) {
+                    return b.length - a.length;
+                }
+                return a.localeCompare(b);
+            });
+
+            this.logger.info(`Extracted ${rarities.length} unique rarities from set ${targetSetId}:`, rarities);
+
+            return rarities;
+
+        } catch (error) {
+            this.logger.error('Failed to extract set rarities:', error);
+            // Return empty array on error - the calling code should handle gracefully
+            return [];
+        }
+    }
 
 
     /**
@@ -1110,7 +1148,7 @@ export class SessionManager {
     /**
      * Extract rarity information from voice text using phonetic matching
      */
-    extractRarityFromVoice(voiceText) {
+    async extractRarityFromVoice(voiceText) {
         if (!this.settings.autoExtractRarity) {
             this.logger.debug(`[RARITY EXTRACT] Auto-extract rarity disabled, returning original text: "${voiceText}"`);
             return { cardName: voiceText, rarity: null };
@@ -1133,8 +1171,16 @@ export class SessionManager {
             }
         }
 
+        // Get dynamic rarities from current set
+        const setRarities = await this.getSetRarities();
+        
+        if (setRarities.length === 0) {
+            this.logger.warn('[RARITY EXTRACT] No rarities available from current set, cannot perform extraction');
+            return { cardName: voiceText, rarity: null, confidence: 0 };
+        }
+
         // Use phonetic matcher to find similar rarities
-        const rarityResult = this.phoneticMatcher.extractRarityFromText(voiceText, this.standardRarities);
+        const rarityResult = this.phoneticMatcher.extractRarityFromText(voiceText, setRarities);
         
         if (rarityResult.rarity) {
             this.logger.info(`[RARITY EXTRACT] PHONETIC SUCCESS - Extracted rarity: '${rarityResult.rarity}', remaining card name: '${rarityResult.cardName}' (confidence: ${rarityResult.confidence.toFixed(2)})`);
@@ -1196,7 +1242,7 @@ export class SessionManager {
         this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
 
         // Extract rarity information
-        const rarityResult = this.extractRarityFromVoice(processedText);
+        const rarityResult = await this.extractRarityFromVoice(processedText);
         processedText = rarityResult.cardName;
         extractedRarity = rarityResult.rarity;
 
