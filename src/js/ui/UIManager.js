@@ -168,14 +168,16 @@ export class UIManager {
         this.elements.cardTrainingFeedback = document.getElementById('card-training-feedback');
         this.elements.cardRecognitionResult = document.getElementById('card-recognition-result');
         this.elements.recognizedText = document.getElementById('recognized-text');
-        this.elements.cardSuggestions = document.getElementById('card-suggestions');
+        this.elements.cardSearchInput = document.getElementById('card-search-input');
+        this.elements.cardSearchResults = document.getElementById('card-search-results');
         
         this.elements.startRarityTrainingBtn = document.getElementById('start-rarity-training');
         this.elements.stopRarityTrainingBtn = document.getElementById('stop-rarity-training');
         this.elements.rarityTrainingFeedback = document.getElementById('rarity-training-feedback');
         this.elements.rarityRecognitionResult = document.getElementById('rarity-recognition-result');
         this.elements.recognizedRarityText = document.getElementById('recognized-rarity-text');
-        this.elements.raritySuggestions = document.getElementById('rarity-suggestions');
+        this.elements.raritySearchInput = document.getElementById('rarity-search-input');
+        this.elements.raritySearchResults = document.getElementById('rarity-search-results');
         
         this.elements.cardMappingsCount = document.getElementById('card-mappings-count');
         this.elements.rarityMappingsCount = document.getElementById('rarity-mappings-count');
@@ -2784,7 +2786,7 @@ export class UIManager {
     /**
      * Show voice recognition result for card training
      */
-    showCardTrainingResult(transcript, suggestions) {
+    showCardTrainingResult(transcript, setCards) {
         if (this.elements.recognizedText) {
             this.elements.recognizedText.textContent = transcript;
         }
@@ -2793,55 +2795,110 @@ export class UIManager {
             this.elements.cardRecognitionResult.style.display = 'block';
         }
 
-        this.showCardSuggestions(suggestions);
+        // Store the voice input and available cards for search
+        this.voiceTrainingState.lastRecognition = transcript;
+        this.voiceTrainingState.availableCards = setCards || [];
+
+        this.setupCardSearch();
     }
 
     /**
-     * Show card suggestions
+     * Setup card search functionality
      */
-    showCardSuggestions(suggestions) {
-        if (!this.elements.cardSuggestions) return;
+    setupCardSearch() {
+        if (!this.elements.cardSearchInput || !this.elements.cardSearchResults) return;
 
-        this.elements.cardSuggestions.innerHTML = '';
+        // Clear previous search
+        this.elements.cardSearchInput.value = '';
+        this.elements.cardSearchResults.innerHTML = '';
 
-        if (!suggestions || suggestions.length === 0) {
-            this.elements.cardSuggestions.innerHTML = '<p>No similar cards found. Try again.</p>';
+        // Set up search event listener
+        const searchHandler = (e) => {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            this.performCardSearch(searchTerm);
+        };
+
+        // Remove any existing listeners
+        this.elements.cardSearchInput.removeEventListener('input', this.cardSearchHandler);
+        this.cardSearchHandler = searchHandler;
+        this.elements.cardSearchInput.addEventListener('input', this.cardSearchHandler);
+
+        // Focus the search input
+        setTimeout(() => {
+            this.elements.cardSearchInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Perform card search and display results
+     */
+    performCardSearch(searchTerm) {
+        if (!this.elements.cardSearchResults) return;
+
+        const cards = this.voiceTrainingState.availableCards || [];
+        
+        if (!searchTerm) {
+            this.elements.cardSearchResults.innerHTML = '';
             return;
         }
 
-        const suggestionsList = document.createElement('div');
-        suggestionsList.className = 'suggestions-list';
-
-        suggestions.forEach((suggestion, index) => {
-            const suggestionBtn = document.createElement('button');
-            suggestionBtn.className = 'suggestion-btn';
-            suggestionBtn.innerHTML = `
-                <span class="card-name">${suggestion.cardName || suggestion.name}</span>
-                <span class="confidence">Confidence: ${(suggestion.score * 100).toFixed(0)}%</span>
-            `;
-            
-            suggestionBtn.addEventListener('click', () => {
-                this.handleCardSuggestionSelect(suggestion);
-            });
-
-            suggestionsList.appendChild(suggestionBtn);
+        // Filter cards by name (case-insensitive)
+        const filteredCards = cards.filter(card => {
+            const cardName = card.name || card.cardName || '';
+            return cardName.toLowerCase().includes(searchTerm);
         });
 
-        this.elements.cardSuggestions.appendChild(suggestionsList);
+        this.displayCardSearchResults(filteredCards);
     }
 
     /**
-     * Handle card suggestion selection
+     * Display card search results
      */
-    handleCardSuggestionSelect(suggestion) {
+    displayCardSearchResults(cards) {
+        if (!this.elements.cardSearchResults) return;
+
+        this.elements.cardSearchResults.innerHTML = '';
+
+        if (!cards || cards.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.className = 'search-no-results';
+            noResults.textContent = 'No cards found. Try a different search term.';
+            this.elements.cardSearchResults.appendChild(noResults);
+            return;
+        }
+
+        cards.forEach(card => {
+            const resultItem = document.createElement('button');
+            resultItem.className = 'search-result-item';
+            
+            const cardName = card.name || card.cardName || 'Unknown Card';
+            const cardType = card.type || 'Card';
+            
+            resultItem.innerHTML = `
+                <span class="search-result-name">${cardName}</span>
+                <span class="search-result-type">${cardType}</span>
+            `;
+            
+            resultItem.addEventListener('click', () => {
+                this.handleCardSelection(card);
+            });
+
+            this.elements.cardSearchResults.appendChild(resultItem);
+        });
+    }
+
+    /**
+     * Handle card selection from search results
+     */
+    handleCardSelection(card) {
         const voiceInput = this.voiceTrainingState.lastRecognition;
-        const cardName = suggestion.cardName || suggestion.name;
+        const cardName = card.name || card.cardName;
         
         this.emitAddCardMapping({
             voiceInput,
             cardName,
             setCode: this.voiceTrainingState.currentSet,
-            confidence: suggestion.score
+            confidence: 1.0 // Manual selection = 100% confidence
         });
 
         this.showToast(`Added mapping: "${voiceInput}" → "${cardName}"`, 'success');
@@ -2860,7 +2917,7 @@ export class UIManager {
     /**
      * Show voice recognition result for rarity training
      */
-    showRarityTrainingResult(transcript, suggestions) {
+    showRarityTrainingResult(transcript, availableRarities) {
         if (this.elements.recognizedRarityText) {
             this.elements.recognizedRarityText.textContent = transcript;
         }
@@ -2869,56 +2926,111 @@ export class UIManager {
             this.elements.rarityRecognitionResult.style.display = 'block';
         }
 
-        this.showRaritySuggestions(suggestions);
+        // Store the voice input and available rarities for search
+        this.voiceTrainingState.lastRecognition = transcript;
+        this.voiceTrainingState.availableRarities = availableRarities || [];
+
+        this.setupRaritySearch();
     }
 
     /**
-     * Show rarity suggestions
+     * Setup rarity search functionality
      */
-    showRaritySuggestions(suggestions) {
-        if (!this.elements.raritySuggestions) return;
+    setupRaritySearch() {
+        if (!this.elements.raritySearchInput || !this.elements.raritySearchResults) return;
 
-        this.elements.raritySuggestions.innerHTML = '';
+        // Clear previous search
+        this.elements.raritySearchInput.value = '';
+        this.elements.raritySearchResults.innerHTML = '';
 
-        if (!suggestions || suggestions.length === 0) {
-            this.elements.raritySuggestions.innerHTML = '<p>No similar rarities found. Try again.</p>';
+        // Set up search event listener
+        const searchHandler = (e) => {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            this.performRaritySearch(searchTerm);
+        };
+
+        // Remove any existing listeners
+        this.elements.raritySearchInput.removeEventListener('input', this.raritySearchHandler);
+        this.raritySearchHandler = searchHandler;
+        this.elements.raritySearchInput.addEventListener('input', this.raritySearchHandler);
+
+        // Focus the search input
+        setTimeout(() => {
+            this.elements.raritySearchInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Perform rarity search and display results
+     */
+    performRaritySearch(searchTerm) {
+        if (!this.elements.raritySearchResults) return;
+
+        const rarities = this.voiceTrainingState.availableRarities || [];
+        
+        if (!searchTerm) {
+            this.elements.raritySearchResults.innerHTML = '';
             return;
         }
 
-        const suggestionsList = document.createElement('div');
-        suggestionsList.className = 'suggestions-list';
-
-        suggestions.forEach((suggestion, index) => {
-            const suggestionBtn = document.createElement('button');
-            suggestionBtn.className = 'suggestion-btn';
-            suggestionBtn.innerHTML = `
-                <span class="rarity-name">${suggestion.rarity}</span>
-                <span class="confidence">Confidence: ${(suggestion.score * 100).toFixed(0)}%</span>
-            `;
-            
-            suggestionBtn.addEventListener('click', () => {
-                this.handleRaritySuggestionSelect(suggestion);
-            });
-
-            suggestionsList.appendChild(suggestionBtn);
+        // Filter rarities by name (case-insensitive)
+        const filteredRarities = rarities.filter(rarity => {
+            const rarityName = typeof rarity === 'string' ? rarity : rarity.rarity || '';
+            return rarityName.toLowerCase().includes(searchTerm);
         });
 
-        this.elements.raritySuggestions.appendChild(suggestionsList);
+        this.displayRaritySearchResults(filteredRarities);
     }
 
     /**
-     * Handle rarity suggestion selection
+     * Display rarity search results
      */
-    handleRaritySuggestionSelect(suggestion) {
+    displayRaritySearchResults(rarities) {
+        if (!this.elements.raritySearchResults) return;
+
+        this.elements.raritySearchResults.innerHTML = '';
+
+        if (!rarities || rarities.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.className = 'search-no-results';
+            noResults.textContent = 'No rarities found. Try a different search term.';
+            this.elements.raritySearchResults.appendChild(noResults);
+            return;
+        }
+
+        rarities.forEach(rarity => {
+            const resultItem = document.createElement('button');
+            resultItem.className = 'search-result-item';
+            
+            const rarityName = typeof rarity === 'string' ? rarity : rarity.rarity || 'Unknown Rarity';
+            
+            resultItem.innerHTML = `
+                <span class="search-result-name">${rarityName}</span>
+                <span class="search-result-type">Rarity</span>
+            `;
+            
+            resultItem.addEventListener('click', () => {
+                this.handleRaritySelection(rarity);
+            });
+
+            this.elements.raritySearchResults.appendChild(resultItem);
+        });
+    }
+
+    /**
+     * Handle rarity selection from search results
+     */
+    handleRaritySelection(rarity) {
         const voiceInput = this.voiceTrainingState.lastRecognition;
+        const rarityName = typeof rarity === 'string' ? rarity : rarity.rarity;
         
         this.emitAddRarityMapping({
             voiceInput,
-            rarity: suggestion.rarity,
-            confidence: suggestion.score
+            rarity: rarityName,
+            confidence: 1.0 // Manual selection = 100% confidence
         });
 
-        this.showToast(`Added mapping: "${voiceInput}" → "${suggestion.rarity}"`, 'success');
+        this.showToast(`Added mapping: "${voiceInput}" → "${rarityName}"`, 'success');
         this.hideRarityTrainingResult();
     }
 
