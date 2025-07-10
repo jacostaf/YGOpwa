@@ -195,9 +195,10 @@ export class PhoneticMatcher {
     /**
      * Find similar rarities, especially checking end of input
      */
-    findSimilarRarities(input, rarityList) {
+    findSimilarRarities(input, rarityList, minScore = null) {
         if (!input || !rarityList || rarityList.length === 0) return [];
         
+        const threshold = minScore !== null ? minScore : this.config.rarity.minScore;
         const results = [];
         const inputLower = input.toLowerCase().trim();
         
@@ -234,7 +235,7 @@ export class PhoneticMatcher {
                 const similarity = this.calculateSimilarity(text, rarityLower);
                 const adjustedScore = Math.min(similarity + bonus, 1.0);
                 
-                if (adjustedScore >= this.config.rarity.minScore) {
+                if (adjustedScore >= threshold) {
                     if (!bestMatch || adjustedScore > bestMatch.score) {
                         bestMatch = {
                             rarity,
@@ -253,7 +254,7 @@ export class PhoneticMatcher {
             
             // Full input fuzzy matching
             const fullSimilarity = this.calculateSimilarity(inputLower, rarityLower);
-            if (fullSimilarity >= this.config.rarity.minScore) {
+            if (fullSimilarity >= threshold) {
                 results.push({
                     rarity,
                     score: fullSimilarity,
@@ -270,9 +271,10 @@ export class PhoneticMatcher {
     /**
      * Find similar card names
      */
-    findSimilarCardNames(input, cardList) {
+    findSimilarCardNames(input, cardList, minScore = null) {
         if (!input || !cardList || cardList.length === 0) return [];
         
+        const threshold = minScore !== null ? minScore : this.config.phonetic.minScore;
         const results = [];
         const inputClean = this.cleanText(input);
         
@@ -285,7 +287,7 @@ export class PhoneticMatcher {
             // Calculate similarity
             const similarity = this.calculateSimilarity(inputClean, cardNameClean);
             
-            if (similarity >= this.config.phonetic.minScore) {
+            if (similarity >= threshold) {
                 results.push({
                     card,
                     cardName,

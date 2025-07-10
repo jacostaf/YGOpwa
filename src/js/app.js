@@ -1425,8 +1425,22 @@ class YGORipperApp {
                 if (currentSet && this.sessionManager) {
                     const setCards = await this.sessionManager.getCardsForSet(currentSet);
                     if (setCards && setCards.length > 0) {
-                        // Find similar cards using phonetic matching
-                        const suggestions = this.phoneticMatcher.findSimilarCardNames(transcript, setCards);
+                        // Find similar cards using very low threshold for training (0.1)
+                        let suggestions = this.phoneticMatcher.findSimilarCardNames(transcript, setCards, 0.1);
+                        
+                        // If no matches found even with low threshold, provide fallback options
+                        if (suggestions.length === 0) {
+                            this.logger.info('No matches found even with low threshold, providing fallback options');
+                            // Show first 10 cards from the set as fallback options
+                            const fallbackCards = setCards.slice(0, 10).map(card => ({
+                                card,
+                                cardName: typeof card === 'string' ? card : card.name,
+                                score: 0.1, // Low score to indicate these are fallback options
+                                phoneticCode: ''
+                            }));
+                            suggestions = fallbackCards;
+                        }
+                        
                         this.uiManager.showCardTrainingResult(transcript, suggestions.slice(0, 5));
                     } else {
                         this.uiManager.showCardTrainingResult(transcript, []);
@@ -1466,8 +1480,22 @@ class YGORipperApp {
                         ];
                     }
                     
-                    const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, setRarities);
-                    this.uiManager.showRarityTrainingResult(transcript, suggestions.slice(0, 5));
+                    const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, setRarities, 0.1);
+                    
+                    // If no matches found even with low threshold, provide fallback options
+                    let finalSuggestions = suggestions;
+                    if (suggestions.length === 0) {
+                        this.logger.info('No rarity matches found even with low threshold, providing all rarities as fallback');
+                        // Show all available rarities as fallback options
+                        finalSuggestions = setRarities.map(rarity => ({
+                            rarity,
+                            score: 0.1, // Low score to indicate these are fallback options
+                            matchType: 'fallback',
+                            extractedText: transcript
+                        }));
+                    }
+                    
+                    this.uiManager.showRarityTrainingResult(transcript, finalSuggestions.slice(0, 8));
                 } catch (error) {
                     this.logger.error('Error getting set rarities for training:', error);
                     // Use default rarities as fallback
@@ -1490,8 +1518,22 @@ class YGORipperApp {
                         'rare',
                         'common'
                     ];
-                    const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, defaultRarities);
-                    this.uiManager.showRarityTrainingResult(transcript, suggestions.slice(0, 5));
+                    const suggestions = this.phoneticMatcher.findSimilarRarities(transcript, defaultRarities, 0.1);
+                    
+                    // If no matches found even with low threshold, provide fallback options
+                    let finalSuggestions = suggestions;
+                    if (suggestions.length === 0) {
+                        this.logger.info('No default rarity matches found, providing all rarities as fallback');
+                        // Show all available rarities as fallback options
+                        finalSuggestions = defaultRarities.map(rarity => ({
+                            rarity,
+                            score: 0.1, // Low score to indicate these are fallback options
+                            matchType: 'fallback',
+                            extractedText: transcript
+                        }));
+                    }
+                    
+                    this.uiManager.showRarityTrainingResult(transcript, finalSuggestions.slice(0, 8));
                 }
             }
 
