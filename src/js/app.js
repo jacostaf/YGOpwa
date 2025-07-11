@@ -99,7 +99,7 @@ class YGORipperApp {
             this.updateLoadingProgress(50, 'Initializing voice trainer...');
             
             // Initialize voice trainer
-            this.voiceTrainer = new VoiceTrainer(this.storage, this.logger);
+            this.voiceTrainer = new VoiceTrainer(this.storage, this.logger, this.phoneticMatcher);
             await this.voiceTrainer.initialize();
             
             this.updateLoadingProgress(60, 'Initializing voice engine...');

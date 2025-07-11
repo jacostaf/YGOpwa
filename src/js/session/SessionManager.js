@@ -1169,6 +1169,20 @@ export class SessionManager {
                     confidence: rarityMapping.confidence,
                     source: 'trained_mapping'
                 };
+            } else {
+                // Try phonetic matching with trained rarity mappings
+                const phoneticRarityMappings = this.voiceTrainer.findPhoneticRarityMappings(voiceText, 3, 0.6);
+                if (phoneticRarityMappings.length > 0) {
+                    const bestRarityMapping = phoneticRarityMappings[0];
+                    const cardName = voiceText.replace(new RegExp(bestRarityMapping.voiceInput, 'gi'), '').trim();
+                    this.logger.info(`[RARITY EXTRACT] Using phonetic trained rarity mapping: "${voiceText}" -> "${bestRarityMapping.rarity}" (phonetic similarity: ${bestRarityMapping.similarity.toFixed(2)})`);
+                    return { 
+                        cardName, 
+                        rarity: bestRarityMapping.rarity,
+                        confidence: bestRarityMapping.similarity,
+                        source: 'phonetic_trained_mapping'
+                    };
+                }
             }
         }
 
@@ -1275,6 +1289,22 @@ export class SessionManager {
                     if (bestMapping.similarity > 0.8) {
                         finalCardName = bestMapping.cardName;
                         this.logger.info(`[VOICE PROCESSING] Using similar trained card mapping: "${processedText}" -> "${finalCardName}" (similarity: ${bestMapping.similarity.toFixed(2)})`);
+                    } else {
+                        // Try phonetic matching with trained mappings
+                        const phoneticMappings = this.voiceTrainer.findPhoneticCardMappings(processedText, 3, 0.6);
+                        if (phoneticMappings.length > 0) {
+                            const bestPhoneticMapping = phoneticMappings[0];
+                            finalCardName = bestPhoneticMapping.cardName;
+                            this.logger.info(`[VOICE PROCESSING] Using phonetic trained card mapping: "${processedText}" -> "${finalCardName}" (phonetic similarity: ${bestPhoneticMapping.similarity.toFixed(2)})`);
+                        }
+                    }
+                } else {
+                    // Try phonetic matching with trained mappings
+                    const phoneticMappings = this.voiceTrainer.findPhoneticCardMappings(processedText, 3, 0.6);
+                    if (phoneticMappings.length > 0) {
+                        const bestPhoneticMapping = phoneticMappings[0];
+                        finalCardName = bestPhoneticMapping.cardName;
+                        this.logger.info(`[VOICE PROCESSING] Using phonetic trained card mapping: "${processedText}" -> "${finalCardName}" (phonetic similarity: ${bestPhoneticMapping.similarity.toFixed(2)})`);
                     }
                 }
             }

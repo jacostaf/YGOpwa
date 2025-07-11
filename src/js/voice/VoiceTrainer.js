@@ -14,11 +14,13 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { PhoneticMatcher } from './PhoneticMatcher.js';
 
 export class VoiceTrainer {
-    constructor(storage, logger = null) {
+    constructor(storage, logger = null, phoneticMatcher = null) {
         this.logger = logger || new Logger('VoiceTrainer');
         this.storage = storage;
+        this.phoneticMatcher = phoneticMatcher || new PhoneticMatcher(this.logger);
         
         // Training data structure
         this.data = {
@@ -252,6 +254,60 @@ export class VoiceTrainer {
                 results.push({
                     ...mapping,
                     similarity
+                });
+            }
+        }
+        
+        return results
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, maxResults);
+    }
+
+    /**
+     * Find card mappings using phonetic matching
+     */
+    findPhoneticCardMappings(voiceInput, maxResults = 5, minThreshold = 0.6) {
+        const normalizedVoiceInput = this.normalizeVoiceInput(voiceInput);
+        const results = [];
+        
+        for (const [key, mapping] of this.data.cardMappings) {
+            const phoneticSimilarity = this.phoneticMatcher.calculatePhoneticSimilarity(
+                normalizedVoiceInput, 
+                mapping.voiceInput
+            );
+            
+            if (phoneticSimilarity >= minThreshold) {
+                results.push({
+                    ...mapping,
+                    similarity: phoneticSimilarity,
+                    matchType: 'phonetic'
+                });
+            }
+        }
+        
+        return results
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, maxResults);
+    }
+
+    /**
+     * Find rarity mappings using phonetic matching
+     */
+    findPhoneticRarityMappings(voiceInput, maxResults = 5, minThreshold = 0.6) {
+        const normalizedVoiceInput = this.normalizeVoiceInput(voiceInput);
+        const results = [];
+        
+        for (const [key, mapping] of this.data.rarityMappings) {
+            const phoneticSimilarity = this.phoneticMatcher.calculatePhoneticSimilarity(
+                normalizedVoiceInput, 
+                mapping.voiceInput
+            );
+            
+            if (phoneticSimilarity >= minThreshold) {
+                results.push({
+                    ...mapping,
+                    similarity: phoneticSimilarity,
+                    matchType: 'phonetic'
                 });
             }
         }
