@@ -12,11 +12,14 @@
 
 import { Logger } from '../utils/Logger.js';
 import { config } from '../utils/config.js';
+import { PhoneticMatcher } from '../voice/PhoneticMatcher.js';
 
 export class SessionManager {
-    constructor(storage = null, logger = null) {
+    constructor(storage = null, logger = null, phoneticMatcher = null, voiceTrainer = null) {
         this.storage = storage;
         this.logger = logger || new Logger('SessionManager');
+        this.phoneticMatcher = phoneticMatcher || new PhoneticMatcher(this.logger);
+        this.voiceTrainer = voiceTrainer;
         
         // API Configuration (matching ygo_ripper.py)
         this.apiUrl = this.getApiUrl();
@@ -42,19 +45,6 @@ export class SessionManager {
         // Pricing data loading tracking
         this.loadingPriceData = new Set(); // Track cards with pending price requests
         
-        // Event listeners
-        this.listeners = {
-            sessionStart: [],
-            sessionStop: [],
-            sessionUpdate: [],
-            cardAdded: [],
-            cardRemoved: [],
-            sessionClear: [],
-            setsLoaded: [],
-            setsFiltered: [],
-            setSwitched: []
-        };
-        
         // Configuration
         this.config = {
             autoSave: true,
@@ -71,7 +61,26 @@ export class SessionManager {
         // Common card names cache for optimization
         this.commonCardNames = new Map();
         
+        // Event listeners
+        this.listeners = {
+            sessionStart: [],
+            sessionStop: [],
+            sessionUpdate: [],
+            cardAdded: [],
+            cardRemoved: [],
+            sessionClear: [],
+            setSwitched: []
+        };
+        
         this.logger.info('SessionManager initialized');
+    }
+
+    /**
+     * Set voice trainer instance
+     */
+    setVoiceTrainer(voiceTrainer) {
+        this.voiceTrainer = voiceTrainer;
+        this.logger.info('Voice trainer instance set for SessionManager');
     }
 
     /**
@@ -554,6 +563,73 @@ export class SessionManager {
         }
     }
 
+    /**
+     * Extract unique rarities from the cards in the current set
+     * This replaces the hardcoded standardRarities list with dynamic set-specific rarities
+     * @param {string} setIdentifier - The set identifier to get rarities for (optional, uses current set if not provided)
+     * @returns {Promise<string[]>} Array of unique rarities found in the set
+     */
+    async getSetRarities(setIdentifier = null) {
+        try {
+            // Use current set if no identifier provided
+            const targetSetId = setIdentifier || (this.currentSet ? this.currentSet.id : null);
+            
+            if (!targetSetId) {
+                this.logger.warn('No set specified and no current set available for rarity extraction');
+                return [];
+            }
+
+            // Load the set cards if not already loaded
+            const cards = await this.loadSetCards(targetSetId);
+            
+            if (!cards || cards.length === 0) {
+                this.logger.warn(`No cards found for set: ${targetSetId}`);
+                return [];
+            }
+
+            // Extract unique rarities from all cards in the set
+            const raritySet = new Set();
+            
+            for (const card of cards) {
+                // Each card has a card_sets array with rarity information
+                const cardSets = card.card_sets || [];
+                
+                for (const cardSet of cardSets) {
+                    const rarity = cardSet.set_rarity;
+                    
+                    // Only include valid rarities (same validation as in findCardsInCurrentSet)
+                    if (rarity && 
+                        typeof rarity === 'string' && 
+                        rarity.trim() !== '' && 
+                        rarity.toLowerCase().trim() !== 'unknown' &&
+                        rarity.toLowerCase().trim() !== 'n/a' &&
+                        rarity.toLowerCase().trim() !== 'undefined' &&
+                        rarity.toLowerCase().trim() !== 'null') {
+                        
+                        raritySet.add(rarity.trim());
+                    }
+                }
+            }
+
+            // Convert to array and sort by specificity (longer, more specific names first)
+            const rarities = Array.from(raritySet).sort((a, b) => {
+                // Sort by length descending, then alphabetically
+                if (b.length !== a.length) {
+                    return b.length - a.length;
+                }
+                return a.localeCompare(b);
+            });
+
+            this.logger.info(`Extracted ${rarities.length} unique rarities from set ${targetSetId}:`, rarities);
+
+            return rarities;
+
+        } catch (error) {
+            this.logger.error('Failed to extract set rarities:', error);
+            // Return empty array on error - the calling code should handle gracefully
+            return [];
+        }
+    }
 
 
     /**
@@ -1071,9 +1147,9 @@ export class SessionManager {
     }
 
     /**
-     * Extract rarity information from voice text (matching oldIteration.py logic)
+     * Extract rarity information from voice text using phonetic matching
      */
-    extractRarityFromVoice(voiceText) {
+    async extractRarityFromVoice(voiceText) {
         if (!this.settings.autoExtractRarity) {
             this.logger.debug(`[RARITY EXTRACT] Auto-extract rarity disabled, returning original text: "${voiceText}"`);
             return { cardName: voiceText, rarity: null };
@@ -1081,38 +1157,53 @@ export class SessionManager {
 
         this.logger.debug(`[RARITY EXTRACT] Processing voice text: "${voiceText}"`);
 
-        // Enhanced rarity patterns to catch YGO rarity types (exact match from oldIteration.py)
-        const rarityPatterns = [
-            /quarter century secret rare/i,
-            /quarter century secret/i,
-            /prismatic secret rare/i,
-            /prismatic secret/i,
-            /starlight rare/i,
-            /collector.*?rare/i,
-            /ghost rare/i,
-            /secret rare/i,
-            /ultimate rare/i,
-            /ultra rare/i,
-            /super rare/i,
-            /parallel rare/i,
-            /short print/i,
-            /rare/i,
-            /common/i
-        ];
-
-        for (const pattern of rarityPatterns) {
-            this.logger.debug(`[RARITY EXTRACT] Testing pattern: ${pattern}`);
-            const match = voiceText.match(pattern);
-            if (match) {
-                const rarity = match[0];
-                const cardName = voiceText.replace(pattern, '').trim();
-                this.logger.info(`[RARITY EXTRACT] SUCCESS - Extracted rarity: '${rarity}', remaining card name: '${cardName}'`);
-                return { cardName, rarity };
+        // First check for user-trained rarity mappings
+        if (this.voiceTrainer) {
+            const rarityMapping = this.voiceTrainer.getRarityMapping(voiceText);
+            if (rarityMapping) {
+                const cardName = voiceText.replace(new RegExp(rarityMapping.voiceInput, 'gi'), '').trim();
+                this.logger.info(`[RARITY EXTRACT] Using trained mapping: "${voiceText}" -> "${rarityMapping.rarity}"`);
+                return { 
+                    cardName, 
+                    rarity: rarityMapping.rarity,
+                    confidence: rarityMapping.confidence,
+                    source: 'trained_mapping'
+                };
+            } else {
+                // Try phonetic matching with trained rarity mappings
+                const phoneticRarityMappings = this.voiceTrainer.findPhoneticRarityMappings(voiceText, 3, 0.6);
+                if (phoneticRarityMappings.length > 0) {
+                    const bestRarityMapping = phoneticRarityMappings[0];
+                    const cardName = voiceText.replace(new RegExp(bestRarityMapping.voiceInput, 'gi'), '').trim();
+                    this.logger.info(`[RARITY EXTRACT] Using phonetic trained rarity mapping: "${voiceText}" -> "${bestRarityMapping.rarity}" (phonetic similarity: ${bestRarityMapping.similarity.toFixed(2)})`);
+                    return { 
+                        cardName, 
+                        rarity: bestRarityMapping.rarity,
+                        confidence: bestRarityMapping.similarity,
+                        source: 'phonetic_trained_mapping'
+                    };
+                }
             }
         }
 
+        // Get dynamic rarities from current set
+        const setRarities = await this.getSetRarities();
+        
+        if (setRarities.length === 0) {
+            this.logger.warn('[RARITY EXTRACT] No rarities available from current set, cannot perform extraction');
+            return { cardName: voiceText, rarity: null, confidence: 0 };
+        }
+
+        // Use phonetic matcher to find similar rarities
+        const rarityResult = this.phoneticMatcher.extractRarityFromText(voiceText, setRarities);
+        
+        if (rarityResult.rarity) {
+            this.logger.info(`[RARITY EXTRACT] PHONETIC SUCCESS - Extracted rarity: '${rarityResult.rarity}', remaining card name: '${rarityResult.cardName}' (confidence: ${rarityResult.confidence.toFixed(2)})`);
+            return rarityResult;
+        }
+
         this.logger.debug(`[RARITY EXTRACT] No rarity patterns matched in: "${voiceText}"`);
-        return { cardName: voiceText, rarity: null };
+        return { cardName: voiceText, rarity: null, confidence: 0 };
     }
 
     /**
@@ -1166,7 +1257,7 @@ export class SessionManager {
         this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
 
         // Extract rarity information
-        const rarityResult = this.extractRarityFromVoice(processedText);
+        const rarityResult = await this.extractRarityFromVoice(processedText);
         processedText = rarityResult.cardName;
         extractedRarity = rarityResult.rarity;
 
@@ -1181,7 +1272,45 @@ export class SessionManager {
             this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using full transcript as card name: "${processedText}"`);
         }
 
-        const cleanTranscript = processedText.toLowerCase().trim();
+        // Check for user-trained card name mappings
+        let finalCardName = processedText;
+        if (this.voiceTrainer) {
+            const setCode = this.currentSet?.code;
+            this.logger.debug(`[VOICE PROCESSING] Looking for card mapping: "${processedText}" with setCode: "${setCode}"`);
+            const cardMapping = this.voiceTrainer.getCardMapping(processedText, setCode);
+            if (cardMapping) {
+                finalCardName = cardMapping.cardName;
+                this.logger.info(`[VOICE PROCESSING] Using trained card mapping: "${processedText}" -> "${finalCardName}"`);
+            } else {
+                // Try fuzzy matching with similar trained mappings
+                const similarMappings = this.voiceTrainer.findSimilarCardMappings(processedText, 3);
+                if (similarMappings.length > 0) {
+                    const bestMapping = similarMappings[0];
+                    if (bestMapping.similarity > 0.8) {
+                        finalCardName = bestMapping.cardName;
+                        this.logger.info(`[VOICE PROCESSING] Using similar trained card mapping: "${processedText}" -> "${finalCardName}" (similarity: ${bestMapping.similarity.toFixed(2)})`);
+                    } else {
+                        // Try phonetic matching with trained mappings
+                        const phoneticMappings = this.voiceTrainer.findPhoneticCardMappings(processedText, 3, 0.6);
+                        if (phoneticMappings.length > 0) {
+                            const bestPhoneticMapping = phoneticMappings[0];
+                            finalCardName = bestPhoneticMapping.cardName;
+                            this.logger.info(`[VOICE PROCESSING] Using phonetic trained card mapping: "${processedText}" -> "${finalCardName}" (phonetic similarity: ${bestPhoneticMapping.similarity.toFixed(2)})`);
+                        }
+                    }
+                } else {
+                    // Try phonetic matching with trained mappings
+                    const phoneticMappings = this.voiceTrainer.findPhoneticCardMappings(processedText, 3, 0.6);
+                    if (phoneticMappings.length > 0) {
+                        const bestPhoneticMapping = phoneticMappings[0];
+                        finalCardName = bestPhoneticMapping.cardName;
+                        this.logger.info(`[VOICE PROCESSING] Using phonetic trained card mapping: "${processedText}" -> "${finalCardName}" (phonetic similarity: ${bestPhoneticMapping.similarity.toFixed(2)})`);
+                    }
+                }
+            }
+        }
+
+        const cleanTranscript = finalCardName.toLowerCase().trim();
         
         try {
             // Use unified matching approach like oldIteration.py - only set-specific matching with proper variant creation
@@ -2624,6 +2753,70 @@ export class SessionManager {
     // Getter methods
     getCardSets() {
         return [...this.cardSets];
+    }
+
+    /**
+     * Get information about a specific set
+     */
+    getSetInfo(setCode) {
+        if (!setCode) {
+            return null;
+        }
+        
+        const set = this.cardSets.find(s => 
+            s.code === setCode || 
+            s.set_code === setCode ||
+            s.id === setCode ||
+            s.name === setCode
+        );
+        
+        return set ? {
+            id: set.id,
+            code: set.code || set.set_code,
+            name: set.name || set.set_name,
+            setName: set.set_name || set.name,
+            cardCount: set.num_of_cards || set.cardCount || 0,
+            releaseDate: set.release_date || set.releaseDate
+        } : null;
+    }
+
+    /**
+     * Get cards for a specific set (used for voice training)
+     */
+    async getCardsForSet(setCode) {
+        if (!setCode) {
+            this.logger.warn('No set code provided for getCardsForSet');
+            return [];
+        }
+        
+        try {
+            // Load the set cards (this will use cache if already loaded)
+            const cards = await this.loadSetCards(setCode);
+            
+            if (!cards || cards.length === 0) {
+                this.logger.warn(`No cards found for set: ${setCode}`);
+                return [];
+            }
+            
+            // Return the cards with proper structure for voice training
+            return cards.map(card => ({
+                id: card.id,
+                name: card.name,
+                cardName: card.name, // For compatibility
+                type: card.type,
+                atk: card.atk,
+                def: card.def,
+                level: card.level,
+                race: card.race,
+                attribute: card.attribute,
+                archetype: card.archetype,
+                card_sets: card.card_sets || []
+            }));
+            
+        } catch (error) {
+            this.logger.error(`Error loading cards for set ${setCode}:`, error);
+            return [];
+        }
     }
 
     getCurrentSession() {

@@ -14,6 +14,8 @@
 // Import core modules
 import { VoiceEngine } from './voice/VoiceEngine.js';
 import { PermissionManager } from './voice/PermissionManager.js';
+import { PhoneticMatcher } from './voice/PhoneticMatcher.js';
+import { VoiceTrainer } from './voice/VoiceTrainer.js';
 import { SessionManager } from './session/SessionManager.js';
 import { PriceChecker } from './price/PriceChecker.js';
 import { UIManager } from './ui/UIManager.js';
@@ -34,8 +36,10 @@ class YGORipperApp {
         this.logger = new Logger('YGORipperApp');
         this.storage = new Storage();
         this.permissionManager = new PermissionManager();
+        this.phoneticMatcher = new PhoneticMatcher(this.logger);
+        this.voiceTrainer = null; // Initialized after storage
         this.voiceEngine = null; // Initialized after permissions
-        this.sessionManager = new SessionManager();
+        this.sessionManager = null; // Initialized after voice components
         this.priceChecker = new PriceChecker();
         this.uiManager = new UIManager();
         
@@ -92,15 +96,22 @@ class YGORipperApp {
             // Initialize permission manager
             await this.permissionManager.initialize();
             
-            this.updateLoadingProgress(50, 'Initializing voice engine...');
+            this.updateLoadingProgress(50, 'Initializing voice trainer...');
             
-            // Initialize voice engine with permission manager
-            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
+            // Initialize voice trainer
+            this.voiceTrainer = new VoiceTrainer(this.storage, this.logger, this.phoneticMatcher);
+            await this.voiceTrainer.initialize();
+            
+            this.updateLoadingProgress(60, 'Initializing voice engine...');
+            
+            // Initialize voice engine with all voice components
+            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger, this.phoneticMatcher, this.voiceTrainer);
             await this.voiceEngine.initialize();
             
-            this.updateLoadingProgress(70, 'Loading session data...');
+            this.updateLoadingProgress(70, 'Initializing session manager...');
             
-            // Initialize session manager
+            // Initialize session manager with voice components
+            this.sessionManager = new SessionManager(this.storage, this.logger, this.phoneticMatcher, this.voiceTrainer);
             await this.sessionManager.initialize(this.storage);
             
             this.updateLoadingProgress(80, 'Setting up price checker...');
@@ -219,6 +230,9 @@ class YGORipperApp {
             if (this.settings.sessionAutoSave) {
                 await this.sessionManager.loadLastSession();
             }
+
+            // Initialize voice training UI
+            await this.initializeVoiceTrainingUI();
             
             // Update UI with loaded data (will be handled by the event listeners)
             // The setsLoaded event will trigger handleSetsLoaded which updates the UI
@@ -315,6 +329,47 @@ class YGORipperApp {
 
         this.uiManager.onVoiceTest(() => {
             this.handleVoiceTest();
+        });
+
+        // Voice training events  
+        this.uiManager.onCardTrainingStart((data) => {
+            this.handleCardTrainingStart(data);
+        });
+
+        this.uiManager.onCardTrainingStop(() => {
+            this.handleCardTrainingStop();
+        });
+
+        this.uiManager.onRarityTrainingStart(() => {
+            this.handleRarityTrainingStart();
+        });
+
+        this.uiManager.onRarityTrainingStop(() => {
+            this.handleRarityTrainingStop();
+        });
+
+        this.uiManager.onAddCardMapping((data) => {
+            this.handleAddCardMapping(data);
+        });
+
+        this.uiManager.onAddRarityMapping((data) => {
+            this.handleAddRarityMapping(data);
+        });
+
+        this.uiManager.onViewMappings(() => {
+            this.handleViewMappings();
+        });
+
+        this.uiManager.onExportTrainingData(() => {
+            this.handleExportTrainingData();
+        });
+
+        this.uiManager.onImportTrainingData((data) => {
+            this.handleImportTrainingData(data);
+        });
+
+        this.uiManager.onClearTrainingData(() => {
+            this.handleClearTrainingData();
         });
 
         this.uiManager.onQuantityAdjust((cardId, adjustment) => {
@@ -888,6 +943,12 @@ class YGORipperApp {
         try {
             this.logger.info('Voice recognition result:', result);
             
+            // Check if we're in training mode
+            if (this.voiceEngine.isTrainingMode) {
+                await this.handleTrainingVoiceResult(result);
+                return;
+            }
+            
             if (!this.sessionManager.isSessionActive()) {
                 this.logger.warn('Voice result received but no active session');
                 return;
@@ -1090,6 +1151,17 @@ class YGORipperApp {
                 this.logger.warn('Failed to initialize voice engine on tab activation:', error);
             });
         }
+        
+        // Disable training mode when switching to pack ripper tab
+        if (this.voiceEngine && this.voiceEngine.isTrainingMode) {
+            this.logger.info('Disabling voice training mode when switching to pack ripper tab');
+            this.voiceEngine.setTrainingMode(false);
+            
+            // Stop any ongoing voice recognition from training mode
+            if (this.voiceEngine.isListening) {
+                this.voiceEngine.stopListening();
+            }
+        }
     }
 
     /**
@@ -1106,6 +1178,9 @@ class YGORipperApp {
             
             // Update UI with the loaded sets and comprehensive data
             this.uiManager.updateCardSets(sets, searchTerm, totalSets || sets.length);
+            
+            // Also populate training set select with the same sets
+            this.uiManager.populateTrainingSetSelect(sets);
             
             // Show appropriate success messages
             if (searchTerm) {
@@ -1129,6 +1204,9 @@ class YGORipperApp {
         
         // Update UI with filtered sets
         this.uiManager.updateCardSets(sets, searchTerm, totalSets);
+        
+        // Also populate training set select with the same filtered sets
+        this.uiManager.populateTrainingSetSelect(sets);
         
         // Provide user feedback for search results
         if (searchTerm) {
@@ -1215,6 +1293,403 @@ class YGORipperApp {
      */
     static getInstance() {
         return window.ygoApp;
+    }
+
+    // Voice Training Handlers
+
+    /**
+     * Handle start card training
+     */
+    async handleCardTrainingStart(data) {
+        try {
+            this.logger.info('Starting card training for set:', data.setCode);
+            
+            if (!this.voiceEngine || !this.voiceEngine.isAvailable()) {
+                throw new Error('Voice recognition not available');
+            }
+
+            // Start training session in voice trainer
+            if (this.voiceTrainer) {
+                const setInfo = this.sessionManager.getSetInfo(data.setCode);
+                this.voiceTrainer.startTrainingSession(data.setCode, setInfo?.setName || data.setCode);
+            }
+
+            // Set voice engine to training mode
+            this.voiceEngine.setTrainingMode(true);
+            
+            // Start listening
+            await this.voiceEngine.startListening();
+            
+            this.uiManager.showToast('Card training started - say a card name', 'info');
+            
+        } catch (error) {
+            this.logger.error('Failed to start card training:', error);
+            this.uiManager.showToast('Failed to start card training: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle stop card training
+     */
+    async handleCardTrainingStop() {
+        try {
+            this.logger.info('Stopping card training');
+            
+            // Stop voice recognition
+            if (this.voiceEngine && this.voiceEngine.isListening) {
+                this.voiceEngine.stopListening();
+            }
+
+            // Disable training mode
+            if (this.voiceEngine) {
+                this.voiceEngine.setTrainingMode(false);
+            }
+
+            // End training session
+            if (this.voiceTrainer) {
+                const session = await this.voiceTrainer.endTrainingSession();
+                if (session) {
+                    this.uiManager.showToast(`Training session completed with ${session.accuracy.toFixed(1)}% accuracy`, 'success');
+                }
+            }
+
+            // Update training stats
+            this.updateTrainingStatsDisplay();
+            
+        } catch (error) {
+            this.logger.error('Failed to stop card training:', error);
+            this.uiManager.showToast('Error stopping card training: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle start rarity training
+     */
+    async handleRarityTrainingStart() {
+        try {
+            this.logger.info('Starting rarity training');
+            
+            if (!this.voiceEngine || !this.voiceEngine.isAvailable()) {
+                throw new Error('Voice recognition not available');
+            }
+
+            // Set voice engine to training mode
+            this.voiceEngine.setTrainingMode(true);
+            
+            // Start listening
+            await this.voiceEngine.startListening();
+            
+            this.uiManager.showToast('Rarity training started - say a rarity like "secret rare"', 'info');
+            
+        } catch (error) {
+            this.logger.error('Failed to start rarity training:', error);
+            this.uiManager.showToast('Failed to start rarity training: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle stop rarity training
+     */
+    async handleRarityTrainingStop() {
+        try {
+            this.logger.info('Stopping rarity training');
+            
+            // Stop voice recognition
+            if (this.voiceEngine && this.voiceEngine.isListening) {
+                this.voiceEngine.stopListening();
+            }
+
+            // Disable training mode
+            if (this.voiceEngine) {
+                this.voiceEngine.setTrainingMode(false);
+            }
+
+            // Update training stats
+            this.updateTrainingStatsDisplay();
+            
+            this.uiManager.showToast('Rarity training stopped', 'info');
+            
+        } catch (error) {
+            this.logger.error('Failed to stop rarity training:', error);
+            this.uiManager.showToast('Error stopping rarity training: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle voice result during training
+     */
+    async handleTrainingVoiceResult(result) {
+        try {
+            const transcript = result.transcript;
+            
+            this.logger.info('Training voice result:', transcript);
+            
+            // Check for complete recognition failure
+            if (result.isCompleteFailure) {
+                this.logger.warn('Complete voice recognition failure detected');
+                this.uiManager.showToast('Voice recognition failed to detect any words. You can manually type what you said.', 'warning');
+            }
+            
+            // Update UI with recognition result
+            this.uiManager.updateVoiceTrainingState(transcript);
+
+            if (this.uiManager.voiceTrainingState.isCardTraining) {
+                // Get cards from current set
+                const currentSet = this.uiManager.voiceTrainingState.currentSet;
+                if (currentSet && this.sessionManager) {
+                    const setCards = await this.sessionManager.getCardsForSet(currentSet);
+                    // Show the voice recognition result and card search interface
+                    this.uiManager.showCardTrainingResult(transcript, setCards, result.isCompleteFailure);
+                } else {
+                    this.uiManager.showCardTrainingResult(transcript, [], result.isCompleteFailure);
+                    this.uiManager.showToast('No set selected for card training', 'warning');
+                }
+            } else if (this.uiManager.voiceTrainingState.isRarityTraining) {
+                // Get available rarities
+                try {
+                    let setRarities = [];
+                    
+                    // Use the selected training set, or fall back to a default set of rarities
+                    const trainingSet = this.uiManager.voiceTrainingState.currentSet;
+                    if (trainingSet) {
+                        setRarities = await this.sessionManager.getSetRarities(trainingSet);
+                    }
+                    
+                    // If no set is selected or no rarities found, use default rarities
+                    if (!setRarities || setRarities.length === 0) {
+                        setRarities = [
+                            'quarter century secret rare',
+                            'quarter century secret',
+                            'prismatic collectors rare',
+                            'prismatic ultimate rare',
+                            'platinum secret rare',
+                            'starlight rare',
+                            'collector rare',
+                            'collectors rare',
+                            'ghost rare',
+                            'secret rare',
+                            'ultimate rare',
+                            'ultra rare',
+                            'super rare',
+                            'parallel rare',
+                            'short print',
+                            'rare',
+                            'common'
+                        ];
+                    }
+                    
+                    // Show the voice recognition result and rarity search interface
+                    this.uiManager.showRarityTrainingResult(transcript, setRarities, result.isCompleteFailure);
+                } catch (error) {
+                    this.logger.error('Error getting rarities for training:', error);
+                    // Use default rarities as fallback
+                    const defaultRarities = [
+                        'quarter century secret rare',
+                        'quarter century secret',
+                        'prismatic collectors rare',
+                        'prismatic ultimate rare',
+                        'platinum secret rare',
+                        'starlight rare',
+                        'collector rare',
+                        'collectors rare',
+                        'ghost rare',
+                        'secret rare',
+                        'ultimate rare',
+                        'ultra rare',
+                        'super rare',
+                        'parallel rare',
+                        'short print',
+                        'rare',
+                        'common'
+                    ];
+                    
+                    this.uiManager.showRarityTrainingResult(transcript, defaultRarities, result.isCompleteFailure);
+                }
+            }
+
+        } catch (error) {
+            this.logger.error('Error processing training voice result:', error);
+            this.uiManager.showToast('Error processing voice input: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle adding card mapping
+     */
+    async handleAddCardMapping(data) {
+        try {
+            this.logger.info('Adding card mapping:', data);
+            
+            if (!this.voiceTrainer) {
+                throw new Error('Voice trainer not initialized');
+            }
+
+            await this.voiceTrainer.addCardMapping(
+                data.voiceInput,
+                data.cardName,
+                data.setCode,
+                data.confidence
+            );
+
+            // Update training stats
+            this.updateTrainingStatsDisplay();
+            
+        } catch (error) {
+            this.logger.error('Failed to add card mapping:', error);
+            this.uiManager.showToast('Failed to add card mapping: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle adding rarity mapping
+     */
+    async handleAddRarityMapping(data) {
+        try {
+            this.logger.info('Adding rarity mapping:', data);
+            
+            if (!this.voiceTrainer) {
+                throw new Error('Voice trainer not initialized');
+            }
+
+            await this.voiceTrainer.addRarityMapping(
+                data.voiceInput,
+                data.rarity,
+                data.confidence
+            );
+
+            // Update training stats
+            this.updateTrainingStatsDisplay();
+            
+        } catch (error) {
+            this.logger.error('Failed to add rarity mapping:', error);
+            this.uiManager.showToast('Failed to add rarity mapping: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle view mappings
+     */
+    async handleViewMappings() {
+        try {
+            if (!this.voiceTrainer) {
+                throw new Error('Voice trainer not initialized');
+            }
+
+            const cardMappings = this.voiceTrainer.getAllCardMappings();
+            const rarityMappings = this.voiceTrainer.getAllRarityMappings();
+            
+            // Show mappings in a modal or display area
+            this.uiManager.showMappingsModal(cardMappings, rarityMappings);
+            
+        } catch (error) {
+            this.logger.error('Failed to view mappings:', error);
+            this.uiManager.showToast('Failed to view mappings: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle export training data
+     */
+    handleExportTrainingData() {
+        try {
+            if (!this.voiceTrainer) {
+                throw new Error('Voice trainer not initialized');
+            }
+
+            const exportData = this.voiceTrainer.exportTrainingData();
+            
+            // Create download
+            const blob = new Blob([exportData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ygo-voice-training-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.uiManager.showToast('Training data exported successfully', 'success');
+            
+        } catch (error) {
+            this.logger.error('Failed to export training data:', error);
+            this.uiManager.showToast('Failed to export training data: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle import training data
+     */
+    async handleImportTrainingData(jsonData) {
+        try {
+            if (!this.voiceTrainer) {
+                throw new Error('Voice trainer not initialized');
+            }
+
+            await this.voiceTrainer.importTrainingData(jsonData, true); // Merge with existing data
+            
+            // Update training stats
+            this.updateTrainingStatsDisplay();
+            
+            this.uiManager.showToast('Training data imported successfully', 'success');
+            
+        } catch (error) {
+            this.logger.error('Failed to import training data:', error);
+            this.uiManager.showToast('Failed to import training data: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Handle clear training data
+     */
+    async handleClearTrainingData() {
+        try {
+            if (!this.voiceTrainer) {
+                throw new Error('Voice trainer not initialized');
+            }
+
+            await this.voiceTrainer.clearAllData();
+            
+            // Update training stats
+            this.updateTrainingStatsDisplay();
+            
+            this.uiManager.showToast('All training data cleared', 'info');
+            
+        } catch (error) {
+            this.logger.error('Failed to clear training data:', error);
+            this.uiManager.showToast('Failed to clear training data: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Update training statistics display
+     */
+    updateTrainingStatsDisplay() {
+        if (this.voiceTrainer) {
+            const stats = this.voiceTrainer.getStatistics();
+            this.uiManager.updateTrainingStats(stats);
+        }
+    }
+
+    /**
+     * Initialize voice training UI
+     */
+    async initializeVoiceTrainingUI() {
+        try {
+            // Populate set select for training
+            if (this.sessionManager) {
+                const sets = this.sessionManager.getAvailableSets();
+                if (sets && sets.length > 0) {
+                    this.uiManager.populateTrainingSetSelect(sets);
+                }
+            }
+
+            // Update training stats
+            this.updateTrainingStatsDisplay();
+            
+        } catch (error) {
+            this.logger.error('Failed to initialize voice training UI:', error);
+        }
     }
 
     /**

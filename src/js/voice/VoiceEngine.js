@@ -13,11 +13,14 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { PhoneticMatcher } from './PhoneticMatcher.js';
 
 export class VoiceEngine {
-    constructor(permissionManager, logger = null) {
+    constructor(permissionManager, logger = null, phoneticMatcher = null, voiceTrainer = null) {
         this.permissionManager = permissionManager;
         this.logger = logger || new Logger('VoiceEngine');
+        this.phoneticMatcher = phoneticMatcher || new PhoneticMatcher(this.logger);
+        this.voiceTrainer = voiceTrainer;
         
         // Recognition engines
         this.engines = new Map();
@@ -41,7 +44,8 @@ export class VoiceEngine {
             retryDelay: 1000,
             // Yu-Gi-Oh specific settings
             cardNameOptimization: true,
-            confidenceThreshold: 0.7
+            confidenceThreshold: 0.7,
+            trainingConfidenceThreshold: 0.1 // Much lower threshold for training mode
         };
         
         // Event listeners
@@ -60,9 +64,9 @@ export class VoiceEngine {
         // Platform detection
         this.platform = this.detectPlatform();
         
-        // Yu-Gi-Oh specific optimizations
-        this.cardNamePatterns = new Map();
-        this.commonCardTerms = [];
+        // Training and phonetic matching integration
+        this.trainedMappings = new Map();
+        this.isTrainingMode = false;
         
         this.logger.info('VoiceEngine initialized for platform:', this.platform);
     }
@@ -71,15 +75,27 @@ export class VoiceEngine {
      * Initialize the voice engine
      */
     /**
-     * Update engine configuration
-     * @param {Object} settings - Settings to update
+     * Set voice trainer instance
      */
+    setVoiceTrainer(voiceTrainer) {
+        this.voiceTrainer = voiceTrainer;
+        this.logger.info('Voice trainer instance set');
+    }
+
+    /**
+     * Enable/disable training mode
+     */
+    setTrainingMode(enabled) {
+        this.isTrainingMode = enabled;
+        this.logger.info(`Training mode ${enabled ? 'enabled' : 'disabled'}`);
+    }
     updateConfig(settings = {}) {
         if (!settings) return;
         
         // Map settings to our internal config
         const configUpdates = {
             confidenceThreshold: settings.voiceConfidenceThreshold,
+            trainingConfidenceThreshold: settings.voiceTrainingConfidenceThreshold,
             maxAlternatives: settings.voiceMaxAlternatives,
             continuous: settings.voiceContinuous,
             interimResults: settings.voiceInterimResults,
@@ -488,13 +504,61 @@ export class VoiceEngine {
                 confidence: alt.confidence || 0
             }));
             
-            // Filter by confidence threshold
+            // Filter by confidence threshold (use lower threshold for training mode)
+            const threshold = this.isTrainingMode ? 
+                this.config.trainingConfidenceThreshold : 
+                this.config.confidenceThreshold;
+            
             const validAlternatives = alternatives.filter(alt => 
-                alt.confidence >= this.config.confidenceThreshold
+                alt.confidence >= threshold
             );
             
             if (validAlternatives.length === 0) {
                 this.logger.warn('No high-confidence recognition results');
+                
+                // In training mode, still process the best result even if confidence is low
+                if (this.isTrainingMode && alternatives.length > 0) {
+                    const bestLowConfidenceResult = alternatives[0];
+                    this.logger.info(`Training mode: processing low confidence result: "${bestLowConfidenceResult.transcript}" (${bestLowConfidenceResult.confidence})`);
+                    
+                    // Apply Yu-Gi-Oh specific optimizations
+                    const optimizedResult = this.optimizeCardNameRecognition(bestLowConfidenceResult);
+                    
+                    const result = {
+                        transcript: optimizedResult.transcript,
+                        confidence: optimizedResult.confidence,
+                        alternatives: alternatives,
+                        engine: this.currentEngine?.name || 'unknown',
+                        timestamp: new Date().toISOString(),
+                        isFinal: true,
+                        isLowConfidence: true
+                    };
+                    
+                    this.lastResult = result;
+                    this.emitResult(result);
+                    return;
+                }
+                
+                // In training mode, handle complete recognition failure (no words recognized)
+                if (this.isTrainingMode) {
+                    this.logger.warn('Complete voice recognition failure: no words recognized');
+                    
+                    const result = {
+                        transcript: '',
+                        confidence: 0,
+                        alternatives: [],
+                        engine: this.currentEngine?.name || 'unknown',
+                        timestamp: new Date().toISOString(),
+                        isFinal: true,
+                        isCompleteFailure: true,
+                        isLowConfidence: true
+                    };
+                    
+                    this.lastResult = result;
+                    this.emitResult(result);
+                    return;
+                }
+                
                 return;
             }
             
@@ -633,57 +697,22 @@ export class VoiceEngine {
         
         this.logger.info('Loading Yu-Gi-Oh card name optimizations...');
         
-        // Common Yu-Gi-Oh terms and their phonetic variations
-        this.commonCardTerms = [
-            // Card types and common mispronunciations
-            { pattern: /dragun/gi, replacement: 'Dragon' },
-            { pattern: /maj?i[sc]h?i[ea]n/gi, replacement: 'Magician' },
-            { pattern: /warri[oa]r/gi, replacement: 'Warrior' },
-            { pattern: /element[a-z]*/gi, replacement: 'Elemental' },
-            { pattern: /synch?ro/gi, replacement: 'Synchro' },
-            { pattern: /ex[cs]ee?z/gi, replacement: 'XYZ' },
-            { pattern: /linku?/gi, replacement: 'Link' },
-            { pattern: /pendulum/gi, replacement: 'Pendulum' },
-            
-            // Specific problematic cards
-            { pattern: /mulch?army\s*me[ao]wls?/gi, replacement: 'Mulcharmy Meowls' },
-            { pattern: /futsu\s*no\s*mitama\s*no\s*mitsurugi/gi, replacement: 'Futsu no Mitama no Mitsurugi' },
-            { pattern: /blue\s*[ie]y?e[ds]?\s*white\s*drag[ou]n/gi, replacement: 'Blue-Eyes White Dragon' },
-            { pattern: /dark\s*mag?i[sc]h?i[ea]n/gi, replacement: 'Dark Magician' },
-            { pattern: /red\s*-?\s*ey?e[ds]?\s*black\s*drag[ou]n/gi, replacement: 'Red-Eyes Black Dragon' },
-            { pattern: /time\s*wiz[ae]rd/gi, replacement: 'Time Wizard' },
-            { pattern: /pot\s*of\s*greed/gi, replacement: 'Pot of Greed' },
-            { pattern: /mirror\s*force/gi, replacement: 'Mirror Force' },
-            { pattern: /ryu[ -]?jin/gi, replacement: 'Raigeki' },
-            { pattern: /har[ip]e[iy]e?/gi, replacement: 'Harpie' },
-            { 
-                pattern: /toon\s*([^\s]*)/gi, 
-                replacement: (match, p1) => 'Toon ' + p1 
-            },
-            
-            // Japanese card name patterns
-            { pattern: /shin?d[ou]\s*in?sh[ou]k[au]n/gi, replacement: 'Shin Do Inshoukan' },
-            { pattern: /y[ou]?[ -]?g[ie]?[ -]?[ou]h?[ou]?/gi, replacement: 'Yu-Gi-Oh' },
-            { pattern: /m[ae]k[ou]?sh[aei]/gi, replacement: 'Mekk-Knight' },
-            { pattern: /salamangreat/gi, replacement: 'Salamangreat' },
-            
-            // Common prefixes and suffixes
-            { pattern: /\b(?:the|a|an)\s+/gi, replacement: '' }, // Remove articles
-            { pattern: /(?:monster|card|spell|trap)\b/gi, replacement: '' }, // Remove common generic terms
-            { pattern: /\s{2,}/g, replacement: ' ' }, // Clean up extra spaces
-            { pattern: /^\s+|\s+$/g, replacement: '' } // Trim spaces
-        ];
+        // Initialize phonetic matcher with proper configuration
+        this.phoneticMatcher.updateConfig({
+            phonetic: { minScore: 0.5 },
+            fuzzy: { minScore: 0.6 }
+        });
         
         // Configure recognition settings for better fantasy name recognition
         this.config.confidenceThreshold = 0.5; // Lower threshold for better acceptance
         this.config.maxAlternatives = 5; // Consider more alternatives
         this.config.continuous = true; // Better for multi-word card names
         
-        this.logger.info(`Loaded ${this.commonCardTerms.length} card name optimizations`);
+        this.logger.info('Phonetic matching optimizations loaded');
     }
 
     /**
-     * Optimize card name recognition
+     * Optimize card name recognition using phonetic matching and user training
      */
     optimizeCardNameRecognition(result) {
         if (!this.config.cardNameOptimization) {
@@ -692,21 +721,28 @@ export class VoiceEngine {
         
         let optimizedTranscript = result.transcript;
         
-        // Apply pattern replacements
-        for (const term of this.commonCardTerms) {
-            optimizedTranscript = optimizedTranscript.replace(term.pattern, term.replacement);
+        // First check for user-trained mappings
+        if (this.voiceTrainer) {
+            const cardMapping = this.voiceTrainer.getCardMapping(optimizedTranscript);
+            if (cardMapping) {
+                this.logger.info(`Using trained card mapping: "${optimizedTranscript}" -> "${cardMapping.cardName}"`);
+                return {
+                    transcript: cardMapping.cardName,
+                    confidence: Math.max(result.confidence, cardMapping.confidence),
+                    originalTranscript: result.transcript,
+                    source: 'trained_mapping'
+                };
+            }
         }
         
-        // Clean up common issues
-        optimizedTranscript = optimizedTranscript
-            .replace(/\s+/g, ' ') // Multiple spaces
-            .replace(/[^\w\s-]/g, '') // Special characters except hyphens
-            .trim();
+        // Use phonetic matcher for basic cleanup
+        const cleanedTranscript = this.phoneticMatcher.cleanText(optimizedTranscript);
         
         return {
-            transcript: optimizedTranscript,
+            transcript: cleanedTranscript,
             confidence: result.confidence,
-            originalTranscript: result.transcript
+            originalTranscript: result.transcript,
+            source: 'phonetic_cleanup'
         };
     }
 

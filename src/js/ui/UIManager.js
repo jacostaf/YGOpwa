@@ -33,9 +33,23 @@ export class UIManager {
             voiceStart: [],
             voiceStop: [],
             voiceTest: [],
+            voiceTrainingStart: [],
+            voiceTrainingStop: [],
+            cardTrainingStart: [],
+            cardTrainingStop: [],
+            rarityTrainingStart: [],
+            rarityTrainingStop: [],
+            addCardMapping: [],
+            addRarityMapping: [],
+            removeMapping: [],
+            viewMappings: [],
+            exportTrainingData: [],
+            importTrainingData: [],
+            clearTrainingData: [],
             quantityAdjust: [],
             cardRemove: [],
             pricingRefresh: [],
+            cardUpdated: [],
             settingsSave: [],
             settingsShow: [],
             setSwitched: []
@@ -49,6 +63,15 @@ export class UIManager {
         this.isConsolidatedView = false;
         this.cardSize = 120;
         this.currentPopup = null;
+        
+        // Voice training state
+        this.voiceTrainingState = {
+            isCardTraining: false,
+            isRarityTraining: false,
+            currentSet: null,
+            lastRecognition: null,
+            suggestions: []
+        };
         
         // Configuration
         this.config = {
@@ -138,6 +161,35 @@ export class UIManager {
         this.elements.startVoiceBtn = document.getElementById('start-voice-btn');
         this.elements.stopVoiceBtn = document.getElementById('stop-voice-btn');
         this.elements.testVoiceBtn = document.getElementById('test-voice-btn');
+        
+        // Voice training elements
+        this.elements.trainingSetSelect = document.getElementById('training-set-select');
+        this.elements.cardTrainingControls = document.getElementById('card-training-controls');
+        this.elements.startCardTrainingBtn = document.getElementById('start-card-training');
+        this.elements.stopCardTrainingBtn = document.getElementById('stop-card-training');
+        this.elements.cardTrainingFeedback = document.getElementById('card-training-feedback');
+        this.elements.cardRecognitionResult = document.getElementById('card-recognition-result');
+        this.elements.recognizedText = document.getElementById('recognized-text');
+        this.elements.cardSearchInput = document.getElementById('card-search-input');
+        this.elements.cardSearchResults = document.getElementById('card-search-results');
+        
+        this.elements.startRarityTrainingBtn = document.getElementById('start-rarity-training');
+        this.elements.stopRarityTrainingBtn = document.getElementById('stop-rarity-training');
+        this.elements.rarityTrainingFeedback = document.getElementById('rarity-training-feedback');
+        this.elements.rarityRecognitionResult = document.getElementById('rarity-recognition-result');
+        this.elements.recognizedRarityText = document.getElementById('recognized-rarity-text');
+        this.elements.raritySearchInput = document.getElementById('rarity-search-input');
+        this.elements.raritySearchResults = document.getElementById('rarity-search-results');
+        
+        this.elements.cardMappingsCount = document.getElementById('card-mappings-count');
+        this.elements.rarityMappingsCount = document.getElementById('rarity-mappings-count');
+        this.elements.trainingSessionsCount = document.getElementById('training-sessions-count');
+        this.elements.lastTrainingDate = document.getElementById('last-training-date');
+        
+        this.elements.viewMappingsBtn = document.getElementById('view-mappings');
+        this.elements.exportTrainingDataBtn = document.getElementById('export-training-data');
+        this.elements.importTrainingDataBtn = document.getElementById('import-training-data');
+        this.elements.clearTrainingDataBtn = document.getElementById('clear-training-data');
         
         // Floating voice submenu elements
         this.elements.floatingVoiceSubmenu = document.getElementById('floating-voice-submenu');
@@ -266,6 +318,61 @@ export class UIManager {
         if (this.elements.testVoiceBtn) {
             this.elements.testVoiceBtn.addEventListener('click', () => {
                 this.emitVoiceTest();
+            });
+        }
+
+        // Voice training controls
+        if (this.elements.trainingSetSelect) {
+            this.elements.trainingSetSelect.addEventListener('change', () => {
+                this.handleTrainingSetChange();
+            });
+        }
+
+        if (this.elements.startCardTrainingBtn) {
+            this.elements.startCardTrainingBtn.addEventListener('click', () => {
+                this.handleStartCardTraining();
+            });
+        }
+
+        if (this.elements.stopCardTrainingBtn) {
+            this.elements.stopCardTrainingBtn.addEventListener('click', () => {
+                this.handleStopCardTraining();
+            });
+        }
+
+        if (this.elements.startRarityTrainingBtn) {
+            this.elements.startRarityTrainingBtn.addEventListener('click', () => {
+                this.handleStartRarityTraining();
+            });
+        }
+
+        if (this.elements.stopRarityTrainingBtn) {
+            this.elements.stopRarityTrainingBtn.addEventListener('click', () => {
+                this.handleStopRarityTraining();
+            });
+        }
+
+        if (this.elements.viewMappingsBtn) {
+            this.elements.viewMappingsBtn.addEventListener('click', () => {
+                this.handleViewMappings();
+            });
+        }
+
+        if (this.elements.exportTrainingDataBtn) {
+            this.elements.exportTrainingDataBtn.addEventListener('click', () => {
+                this.handleExportTrainingData();
+            });
+        }
+
+        if (this.elements.importTrainingDataBtn) {
+            this.elements.importTrainingDataBtn.addEventListener('click', () => {
+                this.handleImportTrainingData();
+            });
+        }
+
+        if (this.elements.clearTrainingDataBtn) {
+            this.elements.clearTrainingDataBtn.addEventListener('click', () => {
+                this.handleClearTrainingData();
             });
         }
 
@@ -1784,6 +1891,77 @@ export class UIManager {
     }
 
     /**
+     * Show mappings modal
+     */
+    showMappingsModal(cardMappings, rarityMappings) {
+        const content = this.generateMappingsHTML(cardMappings, rarityMappings);
+        const modal = this.createModal('Voice Recognition Mappings', content);
+        this.showModal(modal);
+    }
+
+    /**
+     * Generate mappings HTML
+     */
+    generateMappingsHTML(cardMappings, rarityMappings) {
+        return `
+            <div class="mappings-container">
+                <div class="mappings-section">
+                    <h4>Card Name Mappings (${cardMappings.length})</h4>
+                    <div class="mappings-list">
+                        ${cardMappings.length > 0 ? 
+                            cardMappings.map(mapping => `
+                                <div class="mapping-item">
+                                    <div class="mapping-voice">
+                                        <span class="mapping-label">Voice:</span>
+                                        <span class="mapping-value">"${mapping.voiceInput}"</span>
+                                    </div>
+                                    <div class="mapping-arrow">→</div>
+                                    <div class="mapping-target">
+                                        <span class="mapping-label">Card:</span>
+                                        <span class="mapping-value">${mapping.cardName}</span>
+                                        ${mapping.setCode ? `<span class="mapping-set">(${mapping.setCode})</span>` : ''}
+                                    </div>
+                                    <div class="mapping-stats">
+                                        <span class="mapping-confidence">Confidence: ${(mapping.confidence * 100).toFixed(1)}%</span>
+                                        <span class="mapping-usage">Used: ${mapping.useCount || 0} times</span>
+                                    </div>
+                                </div>
+                            `).join('') 
+                            : '<div class="mapping-empty">No card mappings found. Start training to create some!</div>'
+                        }
+                    </div>
+                </div>
+                
+                <div class="mappings-section">
+                    <h4>Rarity Mappings (${rarityMappings.length})</h4>
+                    <div class="mappings-list">
+                        ${rarityMappings.length > 0 ? 
+                            rarityMappings.map(mapping => `
+                                <div class="mapping-item">
+                                    <div class="mapping-voice">
+                                        <span class="mapping-label">Voice:</span>
+                                        <span class="mapping-value">"${mapping.voiceInput}"</span>
+                                    </div>
+                                    <div class="mapping-arrow">→</div>
+                                    <div class="mapping-target">
+                                        <span class="mapping-label">Rarity:</span>
+                                        <span class="mapping-value">${mapping.rarity}</span>
+                                    </div>
+                                    <div class="mapping-stats">
+                                        <span class="mapping-confidence">Confidence: ${(mapping.confidence * 100).toFixed(1)}%</span>
+                                        <span class="mapping-usage">Used: ${mapping.useCount || 0} times</span>
+                                    </div>
+                                </div>
+                            `).join('') 
+                            : '<div class="mapping-empty">No rarity mappings found. Start training to create some!</div>'
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
      * Show help modal
      */
     showHelp() {
@@ -2316,6 +2494,47 @@ export class UIManager {
         this.eventListeners.voiceTest.push(callback);
     }
 
+    // Voice training event listeners
+    onCardTrainingStart(callback) {
+        this.eventListeners.cardTrainingStart.push(callback);
+    }
+
+    onCardTrainingStop(callback) {
+        this.eventListeners.cardTrainingStop.push(callback);
+    }
+
+    onRarityTrainingStart(callback) {
+        this.eventListeners.rarityTrainingStart.push(callback);
+    }
+
+    onRarityTrainingStop(callback) {
+        this.eventListeners.rarityTrainingStop.push(callback);
+    }
+
+    onAddCardMapping(callback) {
+        this.eventListeners.addCardMapping.push(callback);
+    }
+
+    onAddRarityMapping(callback) {
+        this.eventListeners.addRarityMapping.push(callback);
+    }
+
+    onViewMappings(callback) {
+        this.eventListeners.viewMappings.push(callback);
+    }
+
+    onExportTrainingData(callback) {
+        this.eventListeners.exportTrainingData.push(callback);
+    }
+
+    onImportTrainingData(callback) {
+        this.eventListeners.importTrainingData.push(callback);
+    }
+
+    onClearTrainingData(callback) {
+        this.eventListeners.clearTrainingData.push(callback);
+    }
+
     onQuantityAdjust(callback) {
         this.eventListeners.quantityAdjust.push(callback);
     }
@@ -2535,6 +2754,683 @@ export class UIManager {
             } catch (error) {
                 this.logger.error('Error in set switched callback:', error);
             }
+        });
+    }
+
+    // Voice Training Methods
+
+    /**
+     * Handle training set change
+     */
+    handleTrainingSetChange() {
+        const selectedSet = this.elements.trainingSetSelect.value;
+        if (selectedSet) {
+            this.voiceTrainingState.currentSet = selectedSet;
+            this.elements.cardTrainingControls.style.display = 'block';
+            this.logger.info(`Training set selected: ${selectedSet}`);
+        } else {
+            this.voiceTrainingState.currentSet = null;
+            this.elements.cardTrainingControls.style.display = 'none';
+        }
+    }
+
+    /**
+     * Handle start card training
+     */
+    handleStartCardTraining() {
+        if (!this.voiceTrainingState.currentSet) {
+            this.showToast('Please select a card set first', 'warning');
+            return;
+        }
+
+        this.voiceTrainingState.isCardTraining = true;
+        this.updateTrainingUI();
+        
+        this.emitCardTrainingStart({
+            setCode: this.voiceTrainingState.currentSet
+        });
+        
+        this.logger.info('Card training started');
+    }
+
+    /**
+     * Handle stop card training
+     */
+    handleStopCardTraining() {
+        this.voiceTrainingState.isCardTraining = false;
+        this.updateTrainingUI();
+        
+        this.emitCardTrainingStop();
+        
+        this.logger.info('Card training stopped');
+    }
+
+    /**
+     * Handle start rarity training
+     */
+    handleStartRarityTraining() {
+        this.voiceTrainingState.isRarityTraining = true;
+        this.updateTrainingUI();
+        
+        this.emitRarityTrainingStart();
+        
+        this.logger.info('Rarity training started');
+    }
+
+    /**
+     * Handle stop rarity training
+     */
+    handleStopRarityTraining() {
+        this.voiceTrainingState.isRarityTraining = false;
+        this.updateTrainingUI();
+        
+        this.emitRarityTrainingStop();
+        
+        this.logger.info('Rarity training stopped');
+    }
+
+    /**
+     * Update training UI based on current state
+     */
+    updateTrainingUI() {
+        // Card training controls
+        if (this.elements.startCardTrainingBtn && this.elements.stopCardTrainingBtn) {
+            this.elements.startCardTrainingBtn.style.display = 
+                this.voiceTrainingState.isCardTraining ? 'none' : 'block';
+            this.elements.stopCardTrainingBtn.style.display = 
+                this.voiceTrainingState.isCardTraining ? 'block' : 'none';
+        }
+
+        if (this.elements.cardTrainingFeedback) {
+            this.elements.cardTrainingFeedback.style.display = 
+                this.voiceTrainingState.isCardTraining ? 'block' : 'none';
+        }
+
+        // Rarity training controls
+        if (this.elements.startRarityTrainingBtn && this.elements.stopRarityTrainingBtn) {
+            this.elements.startRarityTrainingBtn.style.display = 
+                this.voiceTrainingState.isRarityTraining ? 'none' : 'block';
+            this.elements.stopRarityTrainingBtn.style.display = 
+                this.voiceTrainingState.isRarityTraining ? 'block' : 'none';
+        }
+
+        if (this.elements.rarityTrainingFeedback) {
+            this.elements.rarityTrainingFeedback.style.display = 
+                this.voiceTrainingState.isRarityTraining ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * Show voice recognition result for card training
+     */
+    showCardTrainingResult(transcript, setCards, isCompleteFailure = false) {
+        if (this.elements.recognizedText) {
+            if (isCompleteFailure) {
+                this.elements.recognizedText.textContent = '(No words recognized - voice recognition failed)';
+                this.elements.recognizedText.style.color = '#ff6b6b';
+                this.elements.recognizedText.style.fontStyle = 'italic';
+            } else {
+                this.elements.recognizedText.textContent = transcript;
+                this.elements.recognizedText.style.color = '';
+                this.elements.recognizedText.style.fontStyle = '';
+            }
+        }
+
+        if (this.elements.cardRecognitionResult) {
+            this.elements.cardRecognitionResult.style.display = 'block';
+        }
+
+        // Store the voice input and available cards for search
+        this.voiceTrainingState.lastRecognition = transcript;
+        this.voiceTrainingState.availableCards = setCards || [];
+        this.voiceTrainingState.isCompleteFailure = isCompleteFailure;
+
+        this.setupCardSearch(isCompleteFailure);
+    }
+
+    /**
+     * Setup card search functionality
+     */
+    setupCardSearch(isCompleteFailure = false) {
+        if (!this.elements.cardSearchInput || !this.elements.cardSearchResults) return;
+
+        // Clear previous search
+        this.elements.cardSearchInput.value = '';
+        this.elements.cardSearchResults.innerHTML = '';
+
+        // Update placeholder text based on recognition status
+        if (this.elements.cardSearchInput) {
+            if (isCompleteFailure) {
+                this.elements.cardSearchInput.placeholder = 'Type the card name you tried to say...';
+                this.elements.cardSearchInput.style.borderColor = '#ff6b6b';
+                
+                // Show helpful message
+                const helpText = document.createElement('div');
+                helpText.style.cssText = `
+                    margin-bottom: 10px;
+                    padding: 8px 12px;
+                    background: #2c1810;
+                    border: 1px solid #ff6b6b;
+                    border-radius: 6px;
+                    color: #ff6b6b;
+                    font-size: 12px;
+                    text-align: center;
+                `;
+                helpText.innerHTML = '🎤 Voice recognition couldn\'t detect any words. Please type what you said to continue training.';
+                
+                // Insert help text before search input
+                if (this.elements.cardSearchInput.parentNode) {
+                    this.elements.cardSearchInput.parentNode.insertBefore(helpText, this.elements.cardSearchInput);
+                }
+            } else {
+                this.elements.cardSearchInput.placeholder = 'Search for the intended card name...';
+                this.elements.cardSearchInput.style.borderColor = '';
+            }
+        }
+
+        // Set up search event listener
+        const searchHandler = (e) => {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            this.performCardSearch(searchTerm);
+        };
+
+        // Remove any existing listeners
+        this.elements.cardSearchInput.removeEventListener('input', this.cardSearchHandler);
+        this.cardSearchHandler = searchHandler;
+        this.elements.cardSearchInput.addEventListener('input', this.cardSearchHandler);
+
+        // Focus the search input
+        setTimeout(() => {
+            this.elements.cardSearchInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Perform card search and display results
+     */
+    performCardSearch(searchTerm) {
+        if (!this.elements.cardSearchResults) return;
+
+        const cards = this.voiceTrainingState.availableCards || [];
+        
+        if (!searchTerm) {
+            this.elements.cardSearchResults.innerHTML = '';
+            return;
+        }
+
+        // Filter cards by name (case-insensitive)
+        const filteredCards = cards.filter(card => {
+            const cardName = card.name || card.cardName || '';
+            return cardName.toLowerCase().includes(searchTerm);
+        });
+
+        this.displayCardSearchResults(filteredCards);
+    }
+
+    /**
+     * Display card search results
+     */
+    displayCardSearchResults(cards) {
+        if (!this.elements.cardSearchResults) return;
+
+        this.elements.cardSearchResults.innerHTML = '';
+
+        if (!cards || cards.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.className = 'search-no-results';
+            noResults.textContent = 'No cards found. Try a different search term.';
+            this.elements.cardSearchResults.appendChild(noResults);
+            return;
+        }
+
+        cards.forEach(card => {
+            const resultItem = document.createElement('button');
+            resultItem.className = 'search-result-item';
+            
+            const cardName = card.name || card.cardName || 'Unknown Card';
+            const cardType = card.type || 'Card';
+            
+            resultItem.innerHTML = `
+                <span class="search-result-name">${cardName}</span>
+                <span class="search-result-type">${cardType}</span>
+            `;
+            
+            resultItem.addEventListener('click', () => {
+                this.handleCardSelection(card);
+            });
+
+            this.elements.cardSearchResults.appendChild(resultItem);
+        });
+    }
+
+    /**
+     * Handle card selection from search results
+     */
+    handleCardSelection(card) {
+        let voiceInput = this.voiceTrainingState.lastRecognition;
+        
+        // If voice recognition completely failed, use what the user typed in the search box
+        if (this.voiceTrainingState.isCompleteFailure || !voiceInput || voiceInput.trim() === '') {
+            voiceInput = this.elements.cardSearchInput?.value?.trim() || '';
+            if (!voiceInput) {
+                this.showToast('Please type what you said in the search box to create the mapping', 'warning');
+                return;
+            }
+        }
+        
+        const cardName = card.name || card.cardName;
+        
+        this.emitAddCardMapping({
+            voiceInput,
+            cardName,
+            setCode: this.voiceTrainingState.currentSet,
+            confidence: 1.0 // Manual selection = 100% confidence
+        });
+
+        this.showToast(`Added mapping: "${voiceInput}" → "${cardName}"`, 'success');
+        this.hideCardTrainingResult();
+    }
+
+    /**
+     * Hide card training result
+     */
+    hideCardTrainingResult() {
+        if (this.elements.cardRecognitionResult) {
+            this.elements.cardRecognitionResult.style.display = 'none';
+        }
+        
+        // Clean up any help text and reset styles
+        if (this.elements.cardSearchInput) {
+            this.elements.cardSearchInput.style.borderColor = '';
+            this.elements.cardSearchInput.placeholder = 'Search for the intended card name...';
+            
+            // Remove any help text
+            const helpText = this.elements.cardSearchInput.parentNode?.querySelector('div');
+            if (helpText && helpText.innerHTML.includes('Voice recognition couldn\'t detect any words')) {
+                helpText.remove();
+            }
+        }
+        
+        // Reset the recognition text style
+        if (this.elements.recognizedText) {
+            this.elements.recognizedText.style.color = '';
+            this.elements.recognizedText.style.fontStyle = '';
+        }
+        
+        // Reset state
+        this.voiceTrainingState.isCompleteFailure = false;
+    }
+
+    /**
+     * Show voice recognition result for rarity training
+     */
+    showRarityTrainingResult(transcript, availableRarities, isCompleteFailure = false) {
+        if (this.elements.recognizedRarityText) {
+            if (isCompleteFailure) {
+                this.elements.recognizedRarityText.textContent = '(No words recognized - voice recognition failed)';
+                this.elements.recognizedRarityText.style.color = '#ff6b6b';
+                this.elements.recognizedRarityText.style.fontStyle = 'italic';
+            } else {
+                this.elements.recognizedRarityText.textContent = transcript;
+                this.elements.recognizedRarityText.style.color = '';
+                this.elements.recognizedRarityText.style.fontStyle = '';
+            }
+        }
+
+        if (this.elements.rarityRecognitionResult) {
+            this.elements.rarityRecognitionResult.style.display = 'block';
+        }
+
+        // Store the voice input and available rarities for search
+        this.voiceTrainingState.lastRecognition = transcript;
+        this.voiceTrainingState.availableRarities = availableRarities || [];
+        this.voiceTrainingState.isCompleteFailure = isCompleteFailure;
+
+        this.setupRaritySearch(isCompleteFailure);
+    }
+
+    /**
+     * Setup rarity search functionality
+     */
+    setupRaritySearch(isCompleteFailure = false) {
+        if (!this.elements.raritySearchInput || !this.elements.raritySearchResults) return;
+
+        // Clear previous search
+        this.elements.raritySearchInput.value = '';
+        this.elements.raritySearchResults.innerHTML = '';
+
+        // Update placeholder text based on recognition status
+        if (this.elements.raritySearchInput) {
+            if (isCompleteFailure) {
+                this.elements.raritySearchInput.placeholder = 'Type the rarity you tried to say...';
+                this.elements.raritySearchInput.style.borderColor = '#ff6b6b';
+                
+                // Show helpful message
+                const helpText = document.createElement('div');
+                helpText.style.cssText = `
+                    margin-bottom: 10px;
+                    padding: 8px 12px;
+                    background: #2c1810;
+                    border: 1px solid #ff6b6b;
+                    border-radius: 6px;
+                    color: #ff6b6b;
+                    font-size: 12px;
+                    text-align: center;
+                `;
+                helpText.innerHTML = '🎤 Voice recognition couldn\'t detect any words. Please type what you said to continue training.';
+                
+                // Insert help text before search input
+                if (this.elements.raritySearchInput.parentNode) {
+                    this.elements.raritySearchInput.parentNode.insertBefore(helpText, this.elements.raritySearchInput);
+                }
+            } else {
+                this.elements.raritySearchInput.placeholder = 'Search for the intended rarity...';
+                this.elements.raritySearchInput.style.borderColor = '';
+            }
+        }
+
+        // Set up search event listener
+        const searchHandler = (e) => {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            this.performRaritySearch(searchTerm);
+        };
+
+        // Remove any existing listeners
+        this.elements.raritySearchInput.removeEventListener('input', this.raritySearchHandler);
+        this.raritySearchHandler = searchHandler;
+        this.elements.raritySearchInput.addEventListener('input', this.raritySearchHandler);
+
+        // Focus the search input
+        setTimeout(() => {
+            this.elements.raritySearchInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Perform rarity search and display results
+     */
+    performRaritySearch(searchTerm) {
+        if (!this.elements.raritySearchResults) return;
+
+        const rarities = this.voiceTrainingState.availableRarities || [];
+        
+        if (!searchTerm) {
+            this.elements.raritySearchResults.innerHTML = '';
+            return;
+        }
+
+        // Filter rarities by name (case-insensitive)
+        const filteredRarities = rarities.filter(rarity => {
+            const rarityName = typeof rarity === 'string' ? rarity : rarity.rarity || '';
+            return rarityName.toLowerCase().includes(searchTerm);
+        });
+
+        this.displayRaritySearchResults(filteredRarities);
+    }
+
+    /**
+     * Display rarity search results
+     */
+    displayRaritySearchResults(rarities) {
+        if (!this.elements.raritySearchResults) return;
+
+        this.elements.raritySearchResults.innerHTML = '';
+
+        if (!rarities || rarities.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.className = 'search-no-results';
+            noResults.textContent = 'No rarities found. Try a different search term.';
+            this.elements.raritySearchResults.appendChild(noResults);
+            return;
+        }
+
+        rarities.forEach(rarity => {
+            const resultItem = document.createElement('button');
+            resultItem.className = 'search-result-item';
+            
+            const rarityName = typeof rarity === 'string' ? rarity : rarity.rarity || 'Unknown Rarity';
+            
+            resultItem.innerHTML = `
+                <span class="search-result-name">${rarityName}</span>
+                <span class="search-result-type">Rarity</span>
+            `;
+            
+            resultItem.addEventListener('click', () => {
+                this.handleRaritySelection(rarity);
+            });
+
+            this.elements.raritySearchResults.appendChild(resultItem);
+        });
+    }
+
+    /**
+     * Handle rarity selection from search results
+     */
+    handleRaritySelection(rarity) {
+        let voiceInput = this.voiceTrainingState.lastRecognition;
+        
+        // If voice recognition completely failed, use what the user typed in the search box
+        if (this.voiceTrainingState.isCompleteFailure || !voiceInput || voiceInput.trim() === '') {
+            voiceInput = this.elements.raritySearchInput?.value?.trim() || '';
+            if (!voiceInput) {
+                this.showToast('Please type what you said in the search box to create the mapping', 'warning');
+                return;
+            }
+        }
+        
+        const rarityName = typeof rarity === 'string' ? rarity : rarity.rarity;
+        
+        this.emitAddRarityMapping({
+            voiceInput,
+            rarity: rarityName,
+            confidence: 1.0 // Manual selection = 100% confidence
+        });
+
+        this.showToast(`Added mapping: "${voiceInput}" → "${rarityName}"`, 'success');
+        this.hideRarityTrainingResult();
+    }
+
+    /**
+     * Hide rarity training result
+     */
+    hideRarityTrainingResult() {
+        if (this.elements.rarityRecognitionResult) {
+            this.elements.rarityRecognitionResult.style.display = 'none';
+        }
+        
+        // Clean up any help text and reset styles
+        if (this.elements.raritySearchInput) {
+            this.elements.raritySearchInput.style.borderColor = '';
+            this.elements.raritySearchInput.placeholder = 'Search for the intended rarity...';
+            
+            // Remove any help text
+            const helpText = this.elements.raritySearchInput.parentNode?.querySelector('div');
+            if (helpText && helpText.innerHTML.includes('Voice recognition couldn\'t detect any words')) {
+                helpText.remove();
+            }
+        }
+        
+        // Reset the recognition text style
+        if (this.elements.recognizedRarityText) {
+            this.elements.recognizedRarityText.style.color = '';
+            this.elements.recognizedRarityText.style.fontStyle = '';
+        }
+        
+        // Reset state
+        this.voiceTrainingState.isCompleteFailure = false;
+    }
+
+    /**
+     * Update training statistics display
+     */
+    updateTrainingStats(stats) {
+        if (this.elements.cardMappingsCount) {
+            this.elements.cardMappingsCount.textContent = stats.cardMappings || 0;
+        }
+        if (this.elements.rarityMappingsCount) {
+            this.elements.rarityMappingsCount.textContent = stats.rarityMappings || 0;
+        }
+        if (this.elements.trainingSessionsCount) {
+            this.elements.trainingSessionsCount.textContent = stats.totalTrainingSessions || 0;
+        }
+        if (this.elements.lastTrainingDate) {
+            const date = stats.lastTrainingDate ? 
+                new Date(stats.lastTrainingDate).toLocaleDateString() : 'Never';
+            this.elements.lastTrainingDate.textContent = date;
+        }
+    }
+
+    /**
+     * Handle view mappings
+     */
+    handleViewMappings() {
+        this.emitViewMappings();
+    }
+
+    /**
+     * Handle export training data
+     */
+    handleExportTrainingData() {
+        this.emitExportTrainingData();
+    }
+
+    /**
+     * Handle import training data
+     */
+    handleImportTrainingData() {
+        // Create file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = e.target.result;
+                        this.emitImportTrainingData(data);
+                    } catch (error) {
+                        this.showToast('Failed to read training data file', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+        fileInput.click();
+    }
+
+    /**
+     * Handle clear training data
+     */
+    handleClearTrainingData() {
+        if (confirm('Are you sure you want to clear all training data? This cannot be undone.')) {
+            this.emitClearTrainingData();
+        }
+    }
+
+    // Event emitters for voice training
+
+    emitCardTrainingStart(data) {
+        this.eventListeners.cardTrainingStart.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in card training start callback:', error);
+            }
+        });
+    }
+
+    emitCardTrainingStop() {
+        this.eventListeners.cardTrainingStop.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in card training stop callback:', error);
+            }
+        });
+    }
+
+    emitRarityTrainingStart() {
+        this.eventListeners.rarityTrainingStart.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in rarity training start callback:', error);
+            }
+        });
+    }
+
+    emitRarityTrainingStop() {
+        this.eventListeners.rarityTrainingStop.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in rarity training stop callback:', error);
+            }
+        });
+    }
+
+    emitAddCardMapping(data) {
+        this.eventListeners.addCardMapping.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in add card mapping callback:', error);
+            }
+        });
+    }
+
+    emitAddRarityMapping(data) {
+        this.eventListeners.addRarityMapping.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in add rarity mapping callback:', error);
+            }
+        });
+    }
+
+    emitViewMappings() {
+        this.eventListeners.viewMappings.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in view mappings callback:', error);
+            }
+        });
+    }
+
+    emitExportTrainingData() {
+        this.eventListeners.exportTrainingData.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in export training data callback:', error);
+            }
+        });
+    }
+
+    emitImportTrainingData(data) {
+        this.eventListeners.importTrainingData.forEach(callback => {
+            try { callback(data); } catch (error) {
+                this.logger.error('Error in import training data callback:', error);
+            }
+        });
+    }
+
+    emitClearTrainingData() {
+        this.eventListeners.clearTrainingData.forEach(callback => {
+            try { callback(); } catch (error) {
+                this.logger.error('Error in clear training data callback:', error);
+            }
+        });
+    }
+
+    /**
+     * Update voice training state
+     */
+    updateVoiceTrainingState(transcript) {
+        this.voiceTrainingState.lastRecognition = transcript;
+    }
+
+    /**
+     * Populate training set select
+     */
+    populateTrainingSetSelect(sets) {
+        if (!this.elements.trainingSetSelect) return;
+
+        this.elements.trainingSetSelect.innerHTML = '<option value="">Choose a set to train with...</option>';
+        
+        sets.forEach(set => {
+            const option = document.createElement('option');
+            option.value = set.setCode || set.code;
+            option.textContent = `${set.setName || set.name} (${set.setCode || set.code})`;
+            this.elements.trainingSetSelect.appendChild(option);
         });
     }
 }

@@ -9,7 +9,7 @@
  * - Performance optimizations
  */
 
-const CACHE_NAME = 'ygo-ripper-v2.1.0';
+const CACHE_NAME = 'ygo-ripper-v2.1.1';
 const RUNTIME_CACHE = 'ygo-ripper-runtime';
 
 // Resources to cache for offline use
@@ -22,6 +22,8 @@ const CACHE_URLS = [
   '/src/css/responsive.css',
   '/src/js/app.js',
   '/src/js/voice/VoiceEngine.js',
+  '/src/js/voice/VoiceTrainer.js',
+  '/src/js/voice/PhoneticMatcher.js',
   '/src/js/voice/PermissionManager.js',
   '/src/js/session/SessionManager.js',
   '/src/js/price/PriceChecker.js',
