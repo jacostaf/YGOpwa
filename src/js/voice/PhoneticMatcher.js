@@ -162,14 +162,16 @@ export class PhoneticMatcher {
     }
 
     /**
-     * Calculate combined similarity score
+     * Calculate combined similarity score with enhanced fuzzy matching
      */
     calculateSimilarity(input, target, options = {}) {
         const {
             usePhonetic = true,
             useFuzzy = true,
-            phoneticWeight = 0.6,
-            fuzzyWeight = 0.4
+            phoneticWeight = 0.5,
+            fuzzyWeight = 0.5,
+            exactMatchBonus = 0.2,
+            wordBoundaryBonus = 0.1
         } = options;
         
         if (!input || !target) return 0;
@@ -177,19 +179,160 @@ export class PhoneticMatcher {
         const inputClean = this.cleanText(input);
         const targetClean = this.cleanText(target);
         
-        let score = 0;
-        
-        if (useFuzzy) {
-            const fuzzyScore = this.calculateFuzzySimilarity(inputClean, targetClean);
-            score += fuzzyScore * fuzzyWeight;
+        // Exact match (case-insensitive)
+        if (inputClean.toLowerCase() === targetClean.toLowerCase()) {
+            return 1.0 + exactMatchBonus; // Bonus for exact match
         }
         
+        let score = 0;
+        let totalWeight = 0;
+        
+        // Fuzzy matching
+        if (useFuzzy) {
+            const fuzzyScore = this.calculateFuzzySimilarity(inputClean, targetClean);
+            
+            // Check for word boundary matches (whole word matches)
+            const inputWords = inputClean.split(/\s+/);
+            const targetWords = targetClean.split(/\s+/);
+            
+            // Check if any input word exactly matches any target word
+            const wordMatches = inputWords.filter(word => 
+                targetWords.some(tWord => tWord === word)
+            );
+            
+            // Add bonus for word matches
+            const wordMatchBonus = wordMatches.length > 0 ? 
+                wordBoundaryBonus * (wordMatches.length / inputWords.length) : 0;
+            
+            score += (fuzzyScore + wordMatchBonus) * fuzzyWeight;
+            totalWeight += fuzzyWeight;
+        }
+        
+        // Phonetic matching
         if (usePhonetic) {
             const phoneticScore = this.calculatePhoneticSimilarity(inputClean, targetClean);
             score += phoneticScore * phoneticWeight;
+            totalWeight += phoneticWeight;
         }
         
-        return Math.min(score, 1);
+        // Normalize score
+        const normalizedScore = totalWeight > 0 ? score / totalWeight : 0;
+        
+        // Apply length-based penalty for very short inputs
+        const minLength = Math.min(inputClean.length, targetClean.length);
+        const lengthPenalty = minLength < 3 ? 0.8 : 1.0;
+        
+        return Math.min(normalizedScore * lengthPenalty, 1.0);
+    }
+    
+    /**
+     * Find the best match for user input against a list of targets
+     * @param {string} input - User input to match against
+     * @param {Array} targets - Array of target strings or objects with a 'name' property
+     * @param {Object} options - Matching options
+     * @returns {Object} Best match with score and details
+     */
+    findBestMatch(input, targets, options = {}) {
+        if (!input || !targets || !targets.length) {
+            return { bestMatch: null, score: 0, matches: [] };
+        }
+        
+        const {
+            minScore = this.config.phonetic.minScore,
+            includeAllMatches = false,
+            caseSensitive = false
+        } = options;
+        
+        const inputClean = this.cleanText(input);
+        const matches = [];
+        
+        // First pass: look for exact matches
+        for (const target of targets) {
+            const targetStr = typeof target === 'string' ? target : target.name || '';
+            const targetClean = this.cleanText(targetStr);
+            
+            // Skip empty targets
+            if (!targetClean) continue;
+            
+            // Check for exact match (case-insensitive)
+            if (inputClean === targetClean) {
+                return {
+                    bestMatch: target,
+                    score: 1.0,
+                    matchType: 'exact',
+                    target: targetStr,
+                    matches: [{ target: targetStr, score: 1.0, matchType: 'exact' }]
+                };
+            }
+            
+            // Check for partial exact match (input is part of target or vice versa)
+            if (inputClean.includes(targetClean) || targetClean.includes(inputClean)) {
+                const score = Math.min(
+                    inputClean.length / Math.max(inputClean.length, targetClean.length),
+                    targetClean.length / Math.max(inputClean.length, targetClean.length)
+                ) * 0.9; // Slightly less than exact match
+                
+                matches.push({
+                    target: targetStr,
+                    score: Math.max(score, minScore),
+                    matchType: 'partial',
+                    original: target
+                });
+                continue;
+            }
+        }
+        
+        // If we found exact or partial matches, return the best one
+        if (matches.length > 0) {
+            matches.sort((a, b) => b.score - a.score);
+            return {
+                bestMatch: matches[0].original,
+                score: matches[0].score,
+                matchType: matches[0].matchType,
+                target: matches[0].target,
+                matches: includeAllMatches ? matches : [matches[0]]
+            };
+        }
+        
+        // Second pass: fuzzy matching
+        for (const target of targets) {
+            const targetStr = typeof target === 'string' ? target : target.name || '';
+            const targetClean = this.cleanText(targetStr);
+            
+            // Skip empty targets
+            if (!targetClean) continue;
+            
+            // Calculate similarity
+            const similarity = this.calculateSimilarity(inputClean, targetClean, {
+                usePhonetic: true,
+                useFuzzy: true,
+                phoneticWeight: 0.4,
+                fuzzyWeight: 0.6
+            });
+            
+            if (similarity >= minScore) {
+                matches.push({
+                    target: targetStr,
+                    score: similarity,
+                    matchType: 'fuzzy',
+                    original: target
+                });
+            }
+        }
+        
+        // Sort by score descending
+        matches.sort((a, b) => b.score - a.score);
+        
+        // Return the best match or null if no matches found
+        const bestMatch = matches.length > 0 ? matches[0] : null;
+        
+        return {
+            bestMatch: bestMatch ? bestMatch.original : null,
+            score: bestMatch ? bestMatch.score : 0,
+            matchType: bestMatch ? bestMatch.matchType : 'none',
+            target: bestMatch ? bestMatch.target : null,
+            matches: includeAllMatches ? matches : (bestMatch ? [bestMatch] : [])
+        };
     }
 
     /**
