@@ -1151,6 +1151,17 @@ class YGORipperApp {
                 this.logger.warn('Failed to initialize voice engine on tab activation:', error);
             });
         }
+        
+        // Disable training mode when switching to pack ripper tab
+        if (this.voiceEngine && this.voiceEngine.isTrainingMode) {
+            this.logger.info('Disabling voice training mode when switching to pack ripper tab');
+            this.voiceEngine.setTrainingMode(false);
+            
+            // Stop any ongoing voice recognition from training mode
+            if (this.voiceEngine.isListening) {
+                this.voiceEngine.stopListening();
+            }
+        }
     }
 
     /**
