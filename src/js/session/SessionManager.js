@@ -1258,7 +1258,28 @@ export class SessionManager {
             this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using full transcript as card name: "${processedText}"`);
         }
 
-        const cleanTranscript = processedText.toLowerCase().trim();
+        // Check for user-trained card name mappings
+        let finalCardName = processedText;
+        if (this.voiceTrainer) {
+            const setCode = this.currentSet?.setCode;
+            const cardMapping = this.voiceTrainer.getCardMapping(processedText, setCode);
+            if (cardMapping) {
+                finalCardName = cardMapping.cardName;
+                this.logger.info(`[VOICE PROCESSING] Using trained card mapping: "${processedText}" -> "${finalCardName}"`);
+            } else {
+                // Try fuzzy matching with similar trained mappings
+                const similarMappings = this.voiceTrainer.findSimilarCardMappings(processedText, 3);
+                if (similarMappings.length > 0) {
+                    const bestMapping = similarMappings[0];
+                    if (bestMapping.similarity > 0.8) {
+                        finalCardName = bestMapping.cardName;
+                        this.logger.info(`[VOICE PROCESSING] Using similar trained card mapping: "${processedText}" -> "${finalCardName}" (similarity: ${bestMapping.similarity.toFixed(2)})`);
+                    }
+                }
+            }
+        }
+
+        const cleanTranscript = finalCardName.toLowerCase().trim();
         
         try {
             // Use unified matching approach like oldIteration.py - only set-specific matching with proper variant creation
