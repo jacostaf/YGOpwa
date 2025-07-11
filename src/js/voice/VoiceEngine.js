@@ -44,7 +44,8 @@ export class VoiceEngine {
             retryDelay: 1000,
             // Yu-Gi-Oh specific settings
             cardNameOptimization: true,
-            confidenceThreshold: 0.7
+            confidenceThreshold: 0.7,
+            trainingConfidenceThreshold: 0.1 // Much lower threshold for training mode
         };
         
         // Event listeners
@@ -94,6 +95,7 @@ export class VoiceEngine {
         // Map settings to our internal config
         const configUpdates = {
             confidenceThreshold: settings.voiceConfidenceThreshold,
+            trainingConfidenceThreshold: settings.voiceTrainingConfidenceThreshold,
             maxAlternatives: settings.voiceMaxAlternatives,
             continuous: settings.voiceContinuous,
             interimResults: settings.voiceInterimResults,
@@ -502,9 +504,13 @@ export class VoiceEngine {
                 confidence: alt.confidence || 0
             }));
             
-            // Filter by confidence threshold
+            // Filter by confidence threshold (use lower threshold for training mode)
+            const threshold = this.isTrainingMode ? 
+                this.config.trainingConfidenceThreshold : 
+                this.config.confidenceThreshold;
+            
             const validAlternatives = alternatives.filter(alt => 
-                alt.confidence >= this.config.confidenceThreshold
+                alt.confidence >= threshold
             );
             
             if (validAlternatives.length === 0) {
