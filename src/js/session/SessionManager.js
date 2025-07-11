@@ -1261,7 +1261,8 @@ export class SessionManager {
         // Check for user-trained card name mappings
         let finalCardName = processedText;
         if (this.voiceTrainer) {
-            const setCode = this.currentSet?.setCode;
+            const setCode = this.currentSet?.code;
+            this.logger.debug(`[VOICE PROCESSING] Looking for card mapping: "${processedText}" with setCode: "${setCode}"`);
             const cardMapping = this.voiceTrainer.getCardMapping(processedText, setCode);
             if (cardMapping) {
                 finalCardName = cardMapping.cardName;
