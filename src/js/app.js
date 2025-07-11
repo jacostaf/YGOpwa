@@ -1424,6 +1424,12 @@ class YGORipperApp {
             
             this.logger.info('Training voice result:', transcript);
             
+            // Check for complete recognition failure
+            if (result.isCompleteFailure) {
+                this.logger.warn('Complete voice recognition failure detected');
+                this.uiManager.showToast('Voice recognition failed to detect any words. You can manually type what you said.', 'warning');
+            }
+            
             // Update UI with recognition result
             this.uiManager.updateVoiceTrainingState(transcript);
 
@@ -1433,9 +1439,9 @@ class YGORipperApp {
                 if (currentSet && this.sessionManager) {
                     const setCards = await this.sessionManager.getCardsForSet(currentSet);
                     // Show the voice recognition result and card search interface
-                    this.uiManager.showCardTrainingResult(transcript, setCards);
+                    this.uiManager.showCardTrainingResult(transcript, setCards, result.isCompleteFailure);
                 } else {
-                    this.uiManager.showCardTrainingResult(transcript, []);
+                    this.uiManager.showCardTrainingResult(transcript, [], result.isCompleteFailure);
                     this.uiManager.showToast('No set selected for card training', 'warning');
                 }
             } else if (this.uiManager.voiceTrainingState.isRarityTraining) {
@@ -1473,7 +1479,7 @@ class YGORipperApp {
                     }
                     
                     // Show the voice recognition result and rarity search interface
-                    this.uiManager.showRarityTrainingResult(transcript, setRarities);
+                    this.uiManager.showRarityTrainingResult(transcript, setRarities, result.isCompleteFailure);
                 } catch (error) {
                     this.logger.error('Error getting rarities for training:', error);
                     // Use default rarities as fallback
@@ -1497,7 +1503,7 @@ class YGORipperApp {
                         'common'
                     ];
                     
-                    this.uiManager.showRarityTrainingResult(transcript, defaultRarities);
+                    this.uiManager.showRarityTrainingResult(transcript, defaultRarities, result.isCompleteFailure);
                 }
             }
 

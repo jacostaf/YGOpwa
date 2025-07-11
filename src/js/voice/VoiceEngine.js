@@ -533,6 +533,26 @@ export class VoiceEngine {
                     return;
                 }
                 
+                // In training mode, handle complete recognition failure (no words recognized)
+                if (this.isTrainingMode) {
+                    this.logger.warn('Complete voice recognition failure: no words recognized');
+                    
+                    const result = {
+                        transcript: '',
+                        confidence: 0,
+                        alternatives: [],
+                        engine: this.currentEngine?.name || 'unknown',
+                        timestamp: new Date().toISOString(),
+                        isFinal: true,
+                        isCompleteFailure: true,
+                        isLowConfidence: true
+                    };
+                    
+                    this.lastResult = result;
+                    this.emitResult(result);
+                    return;
+                }
+                
                 return;
             }
             

@@ -2863,9 +2863,17 @@ export class UIManager {
     /**
      * Show voice recognition result for card training
      */
-    showCardTrainingResult(transcript, setCards) {
+    showCardTrainingResult(transcript, setCards, isCompleteFailure = false) {
         if (this.elements.recognizedText) {
-            this.elements.recognizedText.textContent = transcript;
+            if (isCompleteFailure) {
+                this.elements.recognizedText.textContent = '(No words recognized - voice recognition failed)';
+                this.elements.recognizedText.style.color = '#ff6b6b';
+                this.elements.recognizedText.style.fontStyle = 'italic';
+            } else {
+                this.elements.recognizedText.textContent = transcript;
+                this.elements.recognizedText.style.color = '';
+                this.elements.recognizedText.style.fontStyle = '';
+            }
         }
 
         if (this.elements.cardRecognitionResult) {
@@ -2875,19 +2883,50 @@ export class UIManager {
         // Store the voice input and available cards for search
         this.voiceTrainingState.lastRecognition = transcript;
         this.voiceTrainingState.availableCards = setCards || [];
+        this.voiceTrainingState.isCompleteFailure = isCompleteFailure;
 
-        this.setupCardSearch();
+        this.setupCardSearch(isCompleteFailure);
     }
 
     /**
      * Setup card search functionality
      */
-    setupCardSearch() {
+    setupCardSearch(isCompleteFailure = false) {
         if (!this.elements.cardSearchInput || !this.elements.cardSearchResults) return;
 
         // Clear previous search
         this.elements.cardSearchInput.value = '';
         this.elements.cardSearchResults.innerHTML = '';
+
+        // Update placeholder text based on recognition status
+        if (this.elements.cardSearchInput) {
+            if (isCompleteFailure) {
+                this.elements.cardSearchInput.placeholder = 'Type the card name you tried to say...';
+                this.elements.cardSearchInput.style.borderColor = '#ff6b6b';
+                
+                // Show helpful message
+                const helpText = document.createElement('div');
+                helpText.style.cssText = `
+                    margin-bottom: 10px;
+                    padding: 8px 12px;
+                    background: #2c1810;
+                    border: 1px solid #ff6b6b;
+                    border-radius: 6px;
+                    color: #ff6b6b;
+                    font-size: 12px;
+                    text-align: center;
+                `;
+                helpText.innerHTML = '🎤 Voice recognition couldn\'t detect any words. Please type what you said to continue training.';
+                
+                // Insert help text before search input
+                if (this.elements.cardSearchInput.parentNode) {
+                    this.elements.cardSearchInput.parentNode.insertBefore(helpText, this.elements.cardSearchInput);
+                }
+            } else {
+                this.elements.cardSearchInput.placeholder = 'Search for the intended card name...';
+                this.elements.cardSearchInput.style.borderColor = '';
+            }
+        }
 
         // Set up search event listener
         const searchHandler = (e) => {
@@ -2968,7 +3007,17 @@ export class UIManager {
      * Handle card selection from search results
      */
     handleCardSelection(card) {
-        const voiceInput = this.voiceTrainingState.lastRecognition;
+        let voiceInput = this.voiceTrainingState.lastRecognition;
+        
+        // If voice recognition completely failed, use what the user typed in the search box
+        if (this.voiceTrainingState.isCompleteFailure || !voiceInput || voiceInput.trim() === '') {
+            voiceInput = this.elements.cardSearchInput?.value?.trim() || '';
+            if (!voiceInput) {
+                this.showToast('Please type what you said in the search box to create the mapping', 'warning');
+                return;
+            }
+        }
+        
         const cardName = card.name || card.cardName;
         
         this.emitAddCardMapping({
@@ -2989,14 +3038,43 @@ export class UIManager {
         if (this.elements.cardRecognitionResult) {
             this.elements.cardRecognitionResult.style.display = 'none';
         }
+        
+        // Clean up any help text and reset styles
+        if (this.elements.cardSearchInput) {
+            this.elements.cardSearchInput.style.borderColor = '';
+            this.elements.cardSearchInput.placeholder = 'Search for the intended card name...';
+            
+            // Remove any help text
+            const helpText = this.elements.cardSearchInput.parentNode?.querySelector('div');
+            if (helpText && helpText.innerHTML.includes('Voice recognition couldn\'t detect any words')) {
+                helpText.remove();
+            }
+        }
+        
+        // Reset the recognition text style
+        if (this.elements.recognizedText) {
+            this.elements.recognizedText.style.color = '';
+            this.elements.recognizedText.style.fontStyle = '';
+        }
+        
+        // Reset state
+        this.voiceTrainingState.isCompleteFailure = false;
     }
 
     /**
      * Show voice recognition result for rarity training
      */
-    showRarityTrainingResult(transcript, availableRarities) {
+    showRarityTrainingResult(transcript, availableRarities, isCompleteFailure = false) {
         if (this.elements.recognizedRarityText) {
-            this.elements.recognizedRarityText.textContent = transcript;
+            if (isCompleteFailure) {
+                this.elements.recognizedRarityText.textContent = '(No words recognized - voice recognition failed)';
+                this.elements.recognizedRarityText.style.color = '#ff6b6b';
+                this.elements.recognizedRarityText.style.fontStyle = 'italic';
+            } else {
+                this.elements.recognizedRarityText.textContent = transcript;
+                this.elements.recognizedRarityText.style.color = '';
+                this.elements.recognizedRarityText.style.fontStyle = '';
+            }
         }
 
         if (this.elements.rarityRecognitionResult) {
@@ -3006,19 +3084,50 @@ export class UIManager {
         // Store the voice input and available rarities for search
         this.voiceTrainingState.lastRecognition = transcript;
         this.voiceTrainingState.availableRarities = availableRarities || [];
+        this.voiceTrainingState.isCompleteFailure = isCompleteFailure;
 
-        this.setupRaritySearch();
+        this.setupRaritySearch(isCompleteFailure);
     }
 
     /**
      * Setup rarity search functionality
      */
-    setupRaritySearch() {
+    setupRaritySearch(isCompleteFailure = false) {
         if (!this.elements.raritySearchInput || !this.elements.raritySearchResults) return;
 
         // Clear previous search
         this.elements.raritySearchInput.value = '';
         this.elements.raritySearchResults.innerHTML = '';
+
+        // Update placeholder text based on recognition status
+        if (this.elements.raritySearchInput) {
+            if (isCompleteFailure) {
+                this.elements.raritySearchInput.placeholder = 'Type the rarity you tried to say...';
+                this.elements.raritySearchInput.style.borderColor = '#ff6b6b';
+                
+                // Show helpful message
+                const helpText = document.createElement('div');
+                helpText.style.cssText = `
+                    margin-bottom: 10px;
+                    padding: 8px 12px;
+                    background: #2c1810;
+                    border: 1px solid #ff6b6b;
+                    border-radius: 6px;
+                    color: #ff6b6b;
+                    font-size: 12px;
+                    text-align: center;
+                `;
+                helpText.innerHTML = '🎤 Voice recognition couldn\'t detect any words. Please type what you said to continue training.';
+                
+                // Insert help text before search input
+                if (this.elements.raritySearchInput.parentNode) {
+                    this.elements.raritySearchInput.parentNode.insertBefore(helpText, this.elements.raritySearchInput);
+                }
+            } else {
+                this.elements.raritySearchInput.placeholder = 'Search for the intended rarity...';
+                this.elements.raritySearchInput.style.borderColor = '';
+            }
+        }
 
         // Set up search event listener
         const searchHandler = (e) => {
@@ -3098,7 +3207,17 @@ export class UIManager {
      * Handle rarity selection from search results
      */
     handleRaritySelection(rarity) {
-        const voiceInput = this.voiceTrainingState.lastRecognition;
+        let voiceInput = this.voiceTrainingState.lastRecognition;
+        
+        // If voice recognition completely failed, use what the user typed in the search box
+        if (this.voiceTrainingState.isCompleteFailure || !voiceInput || voiceInput.trim() === '') {
+            voiceInput = this.elements.raritySearchInput?.value?.trim() || '';
+            if (!voiceInput) {
+                this.showToast('Please type what you said in the search box to create the mapping', 'warning');
+                return;
+            }
+        }
+        
         const rarityName = typeof rarity === 'string' ? rarity : rarity.rarity;
         
         this.emitAddRarityMapping({
@@ -3118,6 +3237,27 @@ export class UIManager {
         if (this.elements.rarityRecognitionResult) {
             this.elements.rarityRecognitionResult.style.display = 'none';
         }
+        
+        // Clean up any help text and reset styles
+        if (this.elements.raritySearchInput) {
+            this.elements.raritySearchInput.style.borderColor = '';
+            this.elements.raritySearchInput.placeholder = 'Search for the intended rarity...';
+            
+            // Remove any help text
+            const helpText = this.elements.raritySearchInput.parentNode?.querySelector('div');
+            if (helpText && helpText.innerHTML.includes('Voice recognition couldn\'t detect any words')) {
+                helpText.remove();
+            }
+        }
+        
+        // Reset the recognition text style
+        if (this.elements.recognizedRarityText) {
+            this.elements.recognizedRarityText.style.color = '';
+            this.elements.recognizedRarityText.style.fontStyle = '';
+        }
+        
+        // Reset state
+        this.voiceTrainingState.isCompleteFailure = false;
     }
 
     /**
