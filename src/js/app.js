@@ -64,61 +64,115 @@ class YGORipperApp {
     }
 
     /**
-     * Perform the actual initialization steps
+     * Perform the actual initialization steps with enhanced error handling
      * @private
      */
     async _performInitialization() {
         try {
             this.logger.info('Initializing YGO Ripper UI v2...');
+            console.log('=== YGO RIPPER DEBUG: Starting initialization ===');
             
             // Update loading progress
             this.updateLoadingProgress(10, 'Loading settings...');
+            console.log('DEBUG: Loading settings...');
             
             // Load settings and configuration
             await this.loadSettings();
+            console.log('DEBUG: Settings loaded successfully');
             
             this.updateLoadingProgress(20, 'Initializing storage...');
+            console.log('DEBUG: Initializing storage...');
             
             // Initialize storage
             await this.storage.initialize();
+            console.log('DEBUG: Storage initialized successfully');
             
             this.updateLoadingProgress(30, 'Setting up UI...');
+            console.log('DEBUG: Setting up UI Manager...');
             
             // Initialize UI Manager
-            await this.uiManager.initialize(this);
+            try {
+                await this.uiManager.initialize(this);
+                console.log('DEBUG: UI Manager initialized successfully');
+            } catch (error) {
+                console.error('DEBUG: UI Manager failed to initialize:', error);
+                throw new Error(`UI Manager initialization failed: ${error.message}`);
+            }
             
             this.updateLoadingProgress(40, 'Checking permissions...');
+            console.log('DEBUG: Checking permissions...');
             
             // Initialize permission manager
-            await this.permissionManager.initialize();
+            try {
+                await this.permissionManager.initialize();
+                console.log('DEBUG: Permission Manager initialized successfully');
+            } catch (error) {
+                console.error('DEBUG: Permission Manager failed:', error);
+                // Don't throw - permissions can be handled later
+                console.log('DEBUG: Continuing without permissions...');
+            }
             
             this.updateLoadingProgress(50, 'Initializing voice engine...');
+            console.log('DEBUG: Initializing voice engine...');
             
             // Initialize voice engine with permission manager
-            this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
-            await this.voiceEngine.initialize();
+            try {
+                this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
+                await this.voiceEngine.initialize();
+                console.log('DEBUG: Voice Engine initialized successfully');
+            } catch (error) {
+                console.error('DEBUG: Voice Engine failed:', error);
+                // Don't throw - voice is optional
+                console.log('DEBUG: Continuing without voice recognition...');
+            }
             
             this.updateLoadingProgress(70, 'Loading session data...');
+            console.log('DEBUG: Loading session data...');
             
             // Initialize session manager
-            await this.sessionManager.initialize(this.storage);
+            try {
+                await this.sessionManager.initialize(this.storage);
+                console.log('DEBUG: Session Manager initialized successfully');
+            } catch (error) {
+                console.error('DEBUG: Session Manager failed:', error);
+                throw new Error(`Session Manager initialization failed: ${error.message}`);
+            }
             
             this.updateLoadingProgress(80, 'Setting up price checker...');
+            console.log('DEBUG: Setting up price checker...');
             
             // Initialize price checker
-            await this.priceChecker.initialize();
+            try {
+                await this.priceChecker.initialize();
+                console.log('DEBUG: Price Checker initialized successfully');
+            } catch (error) {
+                console.error('DEBUG: Price Checker failed:', error);
+                // Don't throw - price checker can work without full initialization
+                console.log('DEBUG: Continuing with limited price checking...');
+            }
             
             this.updateLoadingProgress(90, 'Setting up event handlers...');
+            console.log('DEBUG: Setting up event handlers...');
             
             // Set up event handlers
             this.setupEventHandlers();
+            console.log('DEBUG: Event handlers set up successfully');
             
             this.updateLoadingProgress(95, 'Loading initial data...');
+            console.log('DEBUG: Loading initial data...');
             
             // Load initial data
-            await this.loadInitialData();
+            try {
+                await this.loadInitialData();
+                console.log('DEBUG: Initial data loaded successfully');
+            } catch (error) {
+                console.error('DEBUG: Initial data loading failed:', error);
+                // Don't throw - app can work without initial data
+                console.log('DEBUG: Continuing without initial data...');
+            }
             
             this.updateLoadingProgress(100, 'Ready!');
+            console.log('DEBUG: Initialization complete!');
             
             // Mark as initialized
             this.isInitialized = true;
@@ -127,11 +181,30 @@ class YGORipperApp {
             this.showApp();
             
             this.logger.info('Application initialized successfully');
-            this.uiManager.showToast('YGO Ripper UI v2 is ready!', 'success');
+            console.log('=== YGO RIPPER DEBUG: Initialization successful ===');
+            
+            // Show success message if UI is available
+            if (this.uiManager && this.uiManager.showToast) {
+                this.uiManager.showToast('YGO Ripper UI v2 is ready!', 'success');
+            }
             
         } catch (error) {
+            console.error('=== YGO RIPPER DEBUG: Initialization FAILED ===');
+            console.error('Error details:', error);
+            console.error('Stack trace:', error.stack);
+            
             this.logger.error('Failed to initialize application:', error);
             this.showInitializationError(error);
+            
+            // Try to show error in UI if possible
+            try {
+                if (this.uiManager && this.uiManager.showToast) {
+                    this.uiManager.showToast(`Initialization failed: ${error.message}`, 'error');
+                }
+            } catch (uiError) {
+                console.error('Could not show error in UI:', uiError);
+            }
+            
             throw error;
         }
     }

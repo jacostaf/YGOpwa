@@ -1,0 +1,146 @@
+import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+import YGORipperApp from '../app.js';
+
+jest.mock('../voice/VoiceEngine.js');
+jest.mock('../voice/PermissionManager.js');
+jest.mock('../session/SessionManager.js');
+jest.mock('../price/PriceChecker.js');
+jest.mock('../ui/UIManager.js');
+
+describe('Integration Tests', () => {
+    let app;
+    let mockDOM;
+
+    beforeEach(() => {
+        mockDOM = {
+            querySelector: jest.fn().mockReturnValue({
+                innerHTML: '',
+                addEventListener: jest.fn(),
+                style: {},
+                classList: {
+                    add: jest.fn(),
+                    remove: jest.fn(),
+                    contains: jest.fn()
+                }
+            }),
+            getElementById: jest.fn().mockReturnValue({
+                innerHTML: '',
+                addEventListener: jest.fn(),
+                style: {},
+                value: ''
+            }),
+            createElement: jest.fn().mockReturnValue({
+                innerHTML: '',
+                addEventListener: jest.fn(),
+                style: {},
+                classList: {
+                    add: jest.fn(),
+                    remove: jest.fn()
+                }
+            })
+        };
+
+        global.document = mockDOM;
+        global.window = {
+            addEventListener: jest.fn(),
+            ygoApp: null
+        };
+
+        const localStorageMock = {
+            getItem: jest.fn().mockReturnValue('{}'),
+            setItem: jest.fn(),
+            removeItem: jest.fn()
+        };
+        global.localStorage = localStorageMock;
+
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ success: true, data: [] })
+        });
+
+        app = new YGORipperApp();
+    });
+
+    afterEach(() => {
+        if (app && app.cleanup) {
+            app.cleanup();
+        }
+        jest.clearAllMocks();
+    });
+
+    test('should create application instance', () => {
+        expect(app).toBeDefined();
+        expect(app.version).toBe('2.1.0');
+        expect(app.name).toBe('YGO Ripper UI v2');
+    });
+
+    test('should have required components', () => {
+        expect(app.logger).toBeDefined();
+        expect(app.storage).toBeDefined();
+        expect(app.permissionManager).toBeDefined();
+        expect(app.sessionManager).toBeDefined();
+        expect(app.priceChecker).toBeDefined();
+        expect(app.uiManager).toBeDefined();
+    });
+
+    test('should load default settings', async () => {
+        await app.loadSettings();
+        expect(app.settings).toBeDefined();
+        expect(app.settings.theme).toBe('dark');
+        expect(app.settings.autoConfirm).toBe(false);
+        expect(app.settings.autoConfirmThreshold).toBe(85);
+    });
+
+    test('should save settings correctly', async () => {
+        await app.loadSettings();
+        const newSettings = {
+            theme: 'light',
+            autoConfirm: true,
+            autoConfirmThreshold: 90
+        };
+        await app.handleSettingsSave(newSettings);
+        expect(app.settings.theme).toBe('light');
+        expect(app.settings.autoConfirm).toBe(true);
+        expect(app.settings.autoConfirmThreshold).toBe(90);
+    });
+
+    test('should handle voice result processing', async () => {
+        app.sessionManager.isSessionActive = jest.fn().mockReturnValue(true);
+        app.sessionManager.processVoiceInput = jest.fn().mockResolvedValue([
+            { name: 'Blue-Eyes White Dragon', confidence: 0.95 }
+        ]);
+        app.sessionManager.addCard = jest.fn().mockResolvedValue();
+        app.sessionManager.getCurrentSessionInfo = jest.fn().mockReturnValue({
+            cards: [{ name: 'Blue-Eyes White Dragon', quantity: 1 }]
+        });
+        app.uiManager.updateSessionInfo = jest.fn();
+        app.uiManager.showToast = jest.fn();
+        app.settings.autoConfirm = true;
+        app.settings.autoConfirmThreshold = 80;
+
+        const voiceResult = {
+            transcript: 'Blue-Eyes White Dragon',
+            confidence: 0.95
+        };
+
+        await app.handleVoiceResult(voiceResult);
+
+        expect(app.sessionManager.addCard).toHaveBeenCalledWith({
+            name: 'Blue-Eyes White Dragon',
+            confidence: 0.95,
+            quantity: 1
+        });
+        expect(app.uiManager.showToast).toHaveBeenCalledWith(
+            expect.stringContaining('Auto-confirmed'),
+            'success'
+        );
+    });
+
+    test('should provide application information', () => {
+        const info = app.getInfo();
+        expect(info.name).toBe('YGO Ripper UI v2');
+        expect(info.version).toBe('2.1.0');
+        expect(info).toHaveProperty('components');
+        expect(info.components).toHaveProperty('sessionManager');
+    });
+});

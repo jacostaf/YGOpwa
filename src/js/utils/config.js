@@ -1,23 +1,50 @@
+/**
+ * Configuration for YGO Ripper UI v2
+ * 
+ * Centralized configuration management for the frontend application
+ */
 
-// Configuration for YGO Ripper UI
-// This works across all platforms (Mac, Windows, iOS, Android, etc.)
 export const config = {
-    // API URL - change this to switch between local and production
-    API_URL: 'https://ygopyguy.onrender.com',
+    // API Configuration - Update this to match your backend server
+    API_URL: 'http://localhost:8082',
     
-    // You can also set it to local for development:
-    //API_URL: 'http://127.0.0.1:8081',
+    // Price Checker Configuration
+    PRICE_CHECK: {
+        timeout: 30000, // 30 seconds
+        retryAttempts: 3,
+        retryDelay: 1000,
+        enableCache: true,
+        defaultCondition: 'near-mint'
+    },
     
-    // Other configuration options
-    APP_VERSION: '2.1.0',
-    APP_NAME: 'YGO Ripper UI v2',
+    // Voice Recognition Configuration
+    VOICE: {
+        timeout: 5000,
+        language: 'en-US',
+        confidenceThreshold: 0.5,
+        maxAlternatives: 5,
+        continuous: true,
+        interimResults: true
+    },
     
-    // Timeouts and limits
-    API_TIMEOUT: 120000,
-    CACHE_TTL: 3600000, // 1 hour
-    MAX_CACHE_SIZE: 1000
+    // Session Management Configuration
+    SESSION: {
+        autoSave: true,
+        autoSaveInterval: 30000, // 30 seconds
+        maxSessionHistory: 10
+    },
+    
+    // UI Configuration
+    UI: {
+        theme: 'dark',
+        toastDuration: 3000,
+        loadingTimeout: 30000
+    },
+    
+    // Debug Configuration
+    DEBUG: {
+        enabled: false,
+        logLevel: 'info'
+    }
 };
-
-// Legacy export for compatibility
-export const API_URL = config.API_URL;
 

@@ -11,12 +11,20 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { getResourceManager, createErrorBoundary } from '../utils/ResourceManager.js';
 import { config } from '../utils/config.js';
 
 export class SessionManager {
     constructor(storage = null, logger = null) {
         this.storage = storage;
         this.logger = logger || new Logger('SessionManager');
+        
+        // Resource management
+        this.resourceManager = getResourceManager();
+        this.componentId = 'SessionManager';
+        
+        // Register with resource manager
+        this.resourceManager.registerComponent(this.componentId, this);
         
         // API Configuration (matching ygo_ripper.py)
         this.apiUrl = this.getApiUrl();
@@ -49,6 +57,7 @@ export class SessionManager {
             sessionUpdate: [],
             cardAdded: [],
             cardRemoved: [],
+            cardUpdated: [],
             sessionClear: [],
             setsLoaded: [],
             setsFiltered: [],
@@ -62,7 +71,7 @@ export class SessionManager {
             maxSessionHistory: 50,
             cardMatchThreshold: 0.35,
             enableFuzzyMatching: true,
-            apiTimeout: 120000 // 30 second timeout for API calls
+            apiTimeout: 120000 // 120 second timeout for API calls
         };
         
         // Auto-save timer
@@ -71,7 +80,55 @@ export class SessionManager {
         // Common card names cache for optimization
         this.commonCardNames = new Map();
         
+        // Setup cleanup callbacks
+        this.resourceManager.registerCleanupCallback('session_cleanup', () => {
+            this.performCleanup();
+        });
+        
         this.logger.info('SessionManager initialized');
+    }
+
+    /**
+     * Initialize session manager
+     */
+    async initialize(storage) {
+        try {
+            if (storage) {
+                this.storage = storage;
+            }
+            
+            // Load session history from storage
+            await this.loadSessionHistory();
+            
+            this.logger.info('SessionManager initialized successfully');
+            return true;
+        } catch (error) {
+            this.logger.error('Failed to initialize SessionManager:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Load session history from storage
+     */
+    async loadSessionHistory() {
+        if (!this.storage) return;
+        
+        try {
+            const history = await this.storage.get('sessionHistory');
+            this.sessionHistory = Array.isArray(history) ? history : [];
+            
+            // Limit history size
+            if (this.sessionHistory.length > this.config.maxSessionHistory) {
+                this.sessionHistory = this.sessionHistory.slice(0, this.config.maxSessionHistory);
+                await this.storage.set('sessionHistory', this.sessionHistory);
+            }
+            
+            this.logger.debug(`Loaded ${this.sessionHistory.length} sessions from history`);
+        } catch (error) {
+            this.logger.warn('Failed to load session history:', error);
+            this.sessionHistory = [];
+        }
     }
 
     /**
@@ -189,7 +246,7 @@ export class SessionManager {
             }
             
             // Notify listeners with comprehensive data
-            this.emit('setsLoaded', { 
+            this.emitSetsLoaded({ 
                 sets, 
                 searchTerm: this.searchTerm,
                 totalSets: totalCount,
@@ -217,7 +274,7 @@ export class SessionManager {
             this.filteredCardSets = [];
             
             // Notify listeners of the error
-            this.emit('setsLoaded', { 
+            this.emitSetsLoaded({ 
                 sets: [], 
                 searchTerm: this.searchTerm,
                 error: errorMessage,
@@ -393,7 +450,7 @@ export class SessionManager {
         
         this.logger.info(`Client-side filtered to ${this.filteredCardSets.length} sets matching "${this.searchTerm}" (from ${this.cardSets.length} total)`);
         
-        this.emit('setsFiltered', { 
+        this.emitSetsFiltered({ 
             sets: this.filteredCardSets, 
             searchTerm: this.searchTerm,
             totalSets: this.cardSets.length,
@@ -605,7 +662,7 @@ export class SessionManager {
             }
 
             // Emit event for UI updates
-            this.emit('setSwitched', {
+            this.emitSetSwitched({
                 oldSetId,
                 newSetId: newSet.id,
                 session: this.currentSession
@@ -900,7 +957,7 @@ export class SessionManager {
         this.updateSessionStatistics();
         
         // Emit events to update UI
-        this.emit('cardUpdated', { cardId: card.id, card });
+        this.emitCardUpdated({ cardId: card.id, card });
         this.emitSessionUpdate(this.currentSession);
     }
 
@@ -2548,155 +2605,205 @@ export class SessionManager {
     }
 
     /**
-     * Start auto-save
+     * Start auto-save timer
      */
     startAutoSave() {
-        if (this.autoSaveTimer) {
-            clearInterval(this.autoSaveTimer);
+        this.stopAutoSave(); // Clear any existing timer
+        
+        if (this.config.autoSave) {
+            this.autoSaveTimer = this.resourceManager.setInterval(() => {
+                this.performAutoSave();
+            }, this.config.autoSaveInterval, 'session_autosave');
+            
+            this.logger.debug('Auto-save started');
         }
-        
-        this.autoSaveTimer = setInterval(async () => {
-            if (this.sessionActive) {
-                await this.saveSession();
-            }
-        }, this.config.autoSaveInterval);
-        
-        this.logger.debug('Auto-save started');
     }
 
     /**
-     * Stop auto-save
+     * Stop auto-save timer
      */
     stopAutoSave() {
         if (this.autoSaveTimer) {
-            clearInterval(this.autoSaveTimer);
+            this.resourceManager.clearInterval(this.autoSaveTimer);
             this.autoSaveTimer = null;
+            this.logger.debug('Auto-save stopped');
         }
-        
-        this.logger.debug('Auto-save stopped');
-    }
-
-    // Utility methods
-    generateSessionId() {
-        return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    generateCardId() {
-        return `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
     /**
-     * Get information about cards with imported pricing data
-     * @returns {Object} - Statistics about imported cards
+     * Perform auto-save with error handling
      */
-    getImportedCardsInfo() {
-        if (!this.currentSession || !this.currentSession.cards) {
-            return {
-                totalCards: 0,
-                importedCards: 0,
-                cardsWithPricing: 0,
-                importedCardsWithPricing: 0
-            };
+    async performAutoSave() {
+        try {
+            if (this.sessionActive && this.currentSession) {
+                await this.saveSession();
+                this.logger.debug('Auto-save completed');
+            }
+        } catch (error) {
+            this.logger.error('Auto-save failed:', error);
         }
-        
-        const totalCards = this.currentSession.cards.length;
-        const importedCards = this.currentSession.cards.filter(card => 
-            card.importedPricing === true || 
-            card.price_status === 'imported' || 
-            card.price_status === 'loaded'
-        );
-        const cardsWithPricing = this.currentSession.cards.filter(card => 
-            card.tcg_price || card.tcg_market_price
-        );
-        const importedCardsWithPricing = importedCards.filter(card => 
-            card.tcg_price || card.tcg_market_price
-        );
-        
-        return {
-            totalCards,
-            importedCards: importedCards.length,
-            cardsWithPricing: cardsWithPricing.length,
-            importedCardsWithPricing: importedCardsWithPricing.length,
-            hasImportedCards: importedCards.length > 0
-        };
     }
 
-    // Getter methods
-    getCardSets() {
-        return [...this.cardSets];
+    /**
+     * Event listener registration methods (EventEmitter-style)
+     */
+    onCardUpdated(callback) {
+        this.listeners.cardUpdated.push(callback);
     }
 
-    getCurrentSession() {
-        return this.currentSession;
+    onSetSwitched(callback) {
+        this.listeners.setSwitched.push(callback);
+    }
+
+    addEventListener(eventType, callback) {
+        if (this.listeners[eventType]) {
+            this.listeners[eventType].push(callback);
+        } else {
+            this.logger.warn(`Unknown event type: ${eventType}`);
+        }
+    }
+
+    removeEventListener(eventType, callback) {
+        if (this.listeners[eventType]) {
+            const index = this.listeners[eventType].indexOf(callback);
+            if (index > -1) {
+                this.listeners[eventType].splice(index, 1);
+            }
+        }
+    }
+
+    // Additional helper methods for session state
+    isSessionActive() {
+        return this.sessionActive;
     }
 
     getCurrentSessionInfo() {
         if (!this.currentSession) {
             return {
                 isActive: false,
-                setName: 'None',
                 cardCount: 0,
-                status: 'No active session',
+                setName: null,
                 statistics: {
+                    totalCards: 0,
                     tcgLowTotal: 0,
-                    tcgMarketTotal: 0
-                }
+                    tcgMarketTotal: 0,
+                    rarityBreakdown: {}
+                },
+                cards: []
             };
         }
-        
+
         return {
             isActive: this.sessionActive,
+            cardCount: this.currentSession.cards?.length || 0,
             setName: this.currentSession.setName,
-            cardCount: this.currentSession.cards.length,
-            status: this.sessionActive ? 'Active' : 'Stopped',
-            sessionId: this.currentSession.id,
-            startTime: this.currentSession.startTime,
-            cards: this.currentSession.cards,
-            statistics: this.currentSession.statistics
+            setId: this.currentSession.setId,
+            statistics: this.currentSession.statistics || {
+                totalCards: 0,
+                tcgLowTotal: 0,
+                tcgMarketTotal: 0,
+                rarityBreakdown: {}
+            },
+            cards: this.currentSession.cards || []
         };
     }
 
-    isSessionActive() {
-        return this.sessionActive;
+    generateSessionId() {
+        return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    generateCardId() {
+        return 'card_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    getImportedCardsInfo() {
+        if (!this.currentSession || !this.currentSession.cards) {
+            return {
+                hasImportedCards: false,
+                importedCards: 0,
+                totalCards: 0
+            };
+        }
+
+        const importedCards = this.currentSession.cards.filter(card => 
+            card.importedPricing === true || 
+            card.price_status === 'imported' || 
+            card.price_status === 'loaded'
+        );
+
+        return {
+            hasImportedCards: importedCards.length > 0,
+            importedCards: importedCards.length,
+            totalCards: this.currentSession.cards.length
+        };
+    }
+
+    validateImportedPricingData() {
+        if (!this.currentSession || !this.currentSession.cards) {
+            return;
+        }
+
+        let validPricingCount = 0;
+        let invalidPricingCount = 0;
+
+        this.currentSession.cards.forEach((card, index) => {
+            if (card.tcg_price || card.tcg_market_price) {
+                validPricingCount++;
+                this.logger.debug(`[PRICING VALIDATION] Card ${index + 1} "${card.name}" has valid pricing: TCG Low: $${card.tcg_price || 'N/A'}, TCG Market: $${card.tcg_market_price || 'N/A'}`);
+            } else {
+                invalidPricingCount++;
+                this.logger.debug(`[PRICING VALIDATION] Card ${index + 1} "${card.name}" missing pricing data`);
+            }
+        });
+
+        this.logger.info(`[PRICING VALIDATION] Summary: ${validPricingCount} cards with pricing, ${invalidPricingCount} cards without pricing`);
     }
 
     /**
-     * Event handling
+     * Enhanced event emission with error boundaries
      */
-    onSessionStart(callback) {
-        this.listeners.sessionStart.push(callback);
+    emitSetsLoaded(data) {
+        this.listeners.setsLoaded.forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                this.logger.error('Error in sets loaded callback:', error);
+                this.resourceManager.handleError('event', error);
+            }
+        });
     }
 
-    onSessionStop(callback) {
-        this.listeners.sessionStop.push(callback);
+    emitSetsFiltered(data) {
+        this.listeners.setsFiltered.forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                this.logger.error('Error in sets filtered callback:', error);
+                this.resourceManager.handleError('event', error);
+            }
+        });
     }
 
-    onSessionUpdate(callback) {
-        this.listeners.sessionUpdate.push(callback);
+    emitSetSwitched(data) {
+        this.listeners.setSwitched.forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                this.logger.error('Error in set switched callback:', error);
+                this.resourceManager.handleError('event', error);
+            }
+        });
     }
 
-    onCardAdded(callback) {
-        this.listeners.cardAdded.push(callback);
-    }
-
-    onCardUpdated(callback) {
-        this.addEventListener('cardUpdated', callback);
-    }
-
-    onCardRemoved(callback) {
-        this.listeners.cardRemoved.push(callback);
-    }
-
-    onSessionClear(callback) {
-        this.listeners.sessionClear.push(callback);
-    }
-
-    /**
-     * Register a callback for set switched events
-     * @param {Function} callback - The callback function
-     */
-    onSetSwitched(callback) {
-        this.listeners.setSwitched.push(callback);
+    emitCardUpdated(data) {
+        this.listeners.cardUpdated.forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                this.logger.error('Error in card updated callback:', error);
+                this.resourceManager.handleError('event', error);
+            }
+        });
     }
 
     emitSessionStart(session) {
@@ -2705,6 +2812,7 @@ export class SessionManager {
                 callback(session);
             } catch (error) {
                 this.logger.error('Error in session start callback:', error);
+                this.resourceManager.handleError('event', error);
             }
         });
     }
@@ -2715,6 +2823,7 @@ export class SessionManager {
                 callback(session);
             } catch (error) {
                 this.logger.error('Error in session stop callback:', error);
+                this.resourceManager.handleError('event', error);
             }
         });
     }
@@ -2725,6 +2834,7 @@ export class SessionManager {
                 callback(session);
             } catch (error) {
                 this.logger.error('Error in session update callback:', error);
+                this.resourceManager.handleError('event', error);
             }
         });
     }
@@ -2735,6 +2845,7 @@ export class SessionManager {
                 callback(card);
             } catch (error) {
                 this.logger.error('Error in card added callback:', error);
+                this.resourceManager.handleError('event', error);
             }
         });
     }
@@ -2745,6 +2856,7 @@ export class SessionManager {
                 callback(card);
             } catch (error) {
                 this.logger.error('Error in card removed callback:', error);
+                this.resourceManager.handleError('event', error);
             }
         });
     }
@@ -2755,97 +2867,112 @@ export class SessionManager {
                 callback();
             } catch (error) {
                 this.logger.error('Error in session clear callback:', error);
+                this.resourceManager.handleError('event', error);
             }
         });
     }
 
     /**
-     * General event emitter method
+     * Clear old sessions to prevent memory buildup
      */
-    emit(eventName, data) {
-        if (this.listeners[eventName]) {
-            this.listeners[eventName].forEach(callback => {
-                try {
-                    callback(data);
-                } catch (error) {
-                    this.logger.error(`Error in ${eventName} callback:`, error);
+    clearOldSessions() {
+        try {
+            const oldSize = this.sessionHistory.length;
+            
+            // Keep only the last 20 sessions
+            this.sessionHistory = this.sessionHistory.slice(0, 20);
+            
+            // Clear old set cards cache
+            if (this.setCards.size > 10) {
+                const keys = Array.from(this.setCards.keys());
+                // Keep only the 5 most recently used sets
+                for (let i = 5; i < keys.length; i++) {
+                    this.setCards.delete(keys[i]);
                 }
+            }
+            
+            // Clear common card names cache if it gets too large
+            if (this.commonCardNames.size > 1000) {
+                this.commonCardNames.clear();
+            }
+            
+            if (oldSize !== this.sessionHistory.length) {
+                this.logger.debug(`Cleared old sessions: ${oldSize} -> ${this.sessionHistory.length}`);
+            }
+        } catch (error) {
+            this.logger.error('Failed to clear old sessions:', error);
+        }
+    }
+
+    /**
+     * Enhanced error handling for API requests
+     */
+    async makeApiRequest(endpoint, options = {}) {
+        const url = `${this.apiUrl}${endpoint}`;
+        const controller = new AbortController();
+        
+        // Set timeout
+        const timeoutId = this.resourceManager.setTimeout(() => {
+            controller.abort();
+        }, this.config.apiTimeout);
+        
+        try {
+            const response = await this.resourceManager.trackFetch(
+                fetch(url, {
+                    ...options,
+                    signal: controller.signal
+                }),
+                url
+            );
+            
+            this.resourceManager.clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            this.resourceManager.clearTimeout(timeoutId);
+            
+            if (error.name === 'AbortError') {
+                throw new Error(`Request timeout: ${endpoint}`);
+            }
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Perform cleanup
+     */
+    performCleanup() {
+        try {
+            // Stop auto-save
+            this.stopAutoSave();
+            
+            // Clear caches
+            this.setCards.clear();
+            this.commonCardNames.clear();
+            this.loadingPriceData.clear();
+            
+            // Clear event listeners
+            Object.keys(this.listeners).forEach(key => {
+                this.listeners[key] = [];
             });
-        }
-    }
-
-    /**
-     * Add event listener
-     */
-    addEventListener(eventName, callback) {
-        if (!this.listeners[eventName]) {
-            this.listeners[eventName] = [];
-        }
-        this.listeners[eventName].push(callback);
-    }
-
-    /**
-     * Remove event listener
-     */
-    removeEventListener(eventName, callback) {
-        if (this.listeners[eventName]) {
-            const index = this.listeners[eventName].indexOf(callback);
-            if (index > -1) {
-                this.listeners[eventName].splice(index, 1);
-            }
-        }
-    }
-
-    /**
-     * Debug method to validate pricing data integrity for imported sessions
-     * This helps identify if pricing data is being lost or overwritten
-     */
-    validateImportedPricingData() {
-        if (!this.currentSession || !this.currentSession.cards) {
-            this.logger.warn('No session or cards to validate');
-            return;
-        }
-        
-        const report = {
-            totalCards: this.currentSession.cards.length,
-            cardsWithPricing: 0,
-            cardsWithImportedPricing: 0,
-            cardsWithContaminatedSetNames: 0,
-            pricingMismatches: []
-        };
-        
-        this.currentSession.cards.forEach((card, index) => {
-            // Check pricing data
-            if (card.tcg_price || card.tcg_market_price) {
-                report.cardsWithPricing++;
-                
-                if (card.importedPricing === true || card.price_status === 'imported' || card.price_status === 'loaded') {
-                    report.cardsWithImportedPricing++;
-                }
-            }
             
-            // Check for contaminated set names
-            if (card.booster_set_name && card.booster_set_name.includes('?')) {
-                report.cardsWithContaminatedSetNames++;
-                this.logger.warn(`Card ${index + 1} "${card.name}" has contaminated booster_set_name: "${card.booster_set_name}"`);
-            }
-            
-            // Log detailed pricing info for first few cards
-            if (index < 3) {
-                this.logger.info(`Card ${index + 1} "${card.name}" pricing details:`, {
-                    tcg_price: card.tcg_price,
-                    tcg_market_price: card.tcg_market_price,
-                    price: card.price,
-                    price_status: card.price_status,
-                    importedPricing: card.importedPricing,
-                    booster_set_name: card.booster_set_name,
-                    target_set_name: card.target_set_name,
-                    set_code: card.set_code
-                });
-            }
-        });
-        
-        this.logger.info('Import pricing validation report:', report);
-        return report;
+            this.logger.debug('SessionManager cleanup completed');
+        } catch (error) {
+            this.logger.error('SessionManager cleanup failed:', error);
+        }
+    }
+
+    /**
+     * Destroy session manager
+     */
+    destroy() {
+        this.performCleanup();
+        this.resourceManager.unregisterComponent(this.componentId);
+        this.logger.info('SessionManager destroyed');
     }
 }

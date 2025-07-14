@@ -1,0 +1,135 @@
+import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+import { VoiceEngine } from '../voice/VoiceEngine.js';
+
+jest.mock('../utils/Logger.js');
+
+describe('VoiceEngine', () => {
+    let voiceEngine;
+    let mockPermissionManager;
+    let mockLogger;
+    let mockSpeechRecognition;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+
+        mockSpeechRecognition = {
+            start: jest.fn(),
+            stop: jest.fn(),
+            abort: jest.fn(),
+            continuous: false,
+            interimResults: false,
+            lang: 'en-US',
+            maxAlternatives: 3,
+            onstart: null,
+            onend: null,
+            onresult: null,
+            onerror: null
+        };
+
+        global.window = {
+            webkitSpeechRecognition: jest.fn(() => mockSpeechRecognition),
+            isSecureContext: true,
+            addEventListener: jest.fn()
+        };
+
+        global.navigator = {
+            mediaDevices: {
+                getUserMedia: jest.fn().mockResolvedValue({
+                    getTracks: () => [{
+                        stop: jest.fn()
+                    }]
+                })
+            },
+            userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        };
+
+        mockPermissionManager = {
+            initialize: jest.fn().mockResolvedValue(),
+            requestMicrophone: jest.fn().mockResolvedValue({ state: 'granted' }),
+            hasPermission: jest.fn().mockReturnValue(true),
+            getPermissionInstructions: jest.fn().mockReturnValue('Enable microphone permissions')
+        };
+
+        mockLogger = {
+            info: jest.fn(),
+            error: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn()
+        };
+
+        voiceEngine = new VoiceEngine(mockPermissionManager, mockLogger);
+    });
+
+    afterEach(() => {
+        if (voiceEngine) {
+            voiceEngine.destroy();
+        }
+        jest.restoreAllMocks();
+    });
+
+    test('should create instance with required dependencies', () => {
+        expect(voiceEngine).toBeInstanceOf(VoiceEngine);
+        expect(voiceEngine.permissionManager).toBe(mockPermissionManager);
+        expect(voiceEngine.logger).toBe(mockLogger);
+        expect(voiceEngine.isInitialized).toBe(false);
+        expect(voiceEngine.isListening).toBe(false);
+    });
+
+    test('should initialize successfully', async () => {
+        const result = await voiceEngine.initialize();
+        expect(result).toBe(true);
+        expect(voiceEngine.isInitialized).toBe(true);
+        expect(mockPermissionManager.initialize).toHaveBeenCalled();
+        expect(mockPermissionManager.requestMicrophone).toHaveBeenCalled();
+    });
+
+    test('should start listening', async () => {
+        await voiceEngine.initialize();
+        const startPromise = voiceEngine.startListening();
+        mockSpeechRecognition.onstart();
+        await startPromise;
+        expect(mockSpeechRecognition.start).toHaveBeenCalled();
+        expect(voiceEngine.isListening).toBe(true);
+    });
+
+    test('should stop listening', async () => {
+        await voiceEngine.initialize();
+        await voiceEngine.startListening();
+        mockSpeechRecognition.onstart();
+        voiceEngine.stopListening();
+        expect(mockSpeechRecognition.stop).toHaveBeenCalled();
+        expect(voiceEngine.isListening).toBe(false);
+    });
+
+    test('should process recognition results', () => {
+        const mockEvent = {
+            results: [{
+                isFinal: true,
+                0: {
+                    transcript: 'Blue-Eyes White Dragon',
+                    confidence: 0.9
+                },
+                length: 1
+            }]
+        };
+
+        let capturedResult = null;
+        voiceEngine.onResult((result) => {
+            capturedResult = result;
+        });
+
+        voiceEngine.handleRecognitionResult(mockEvent, 'webspeech');
+
+        expect(capturedResult).toBeDefined();
+        expect(capturedResult.transcript).toContain('blue-eyes white dragon');
+        expect(capturedResult.confidence).toBe(0.9);
+        expect(capturedResult.engine).toBe('webspeech');
+        expect(capturedResult.isFinal).toBe(true);
+    });
+
+    test('should cleanup resources', () => {
+        voiceEngine.destroy();
+        expect(voiceEngine.isInitialized).toBe(false);
+        expect(voiceEngine.isListening).toBe(false);
+    });
+});

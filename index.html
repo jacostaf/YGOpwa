@@ -26,18 +26,17 @@
     <link rel="stylesheet" href="src/css/responsive.css">
     
     <!-- Preload critical resources -->
-    <link rel="preload" href="src/js/app.js" as="script" crossorigin="anonymous">
-    <link rel="preload" href="src/js/voice/VoiceEngine.js" as="script" crossorigin="anonymous">
+    <link rel="preload" href="test-module.js" as="script" crossorigin="anonymous">
 </head>
 <body>
     <!-- App Loading Screen -->
     <div id="loading-screen" class="loading-screen">
         <div class="loading-content">
             <div class="app-logo">
-                <h1>YGO Ripper UI v2</h1>
+                <h1>YGO Ripper UI v2 - MODULE TEST</h1>
                 <div class="loading-spinner"></div>
             </div>
-            <p class="loading-text">Initializing application...</p>
+            <p class="loading-text">Testing module loading...</p>
             <div class="loading-progress">
                 <div class="progress-bar" id="loading-progress"></div>
             </div>
@@ -374,7 +373,7 @@
         <!-- Toasts will be populated dynamically -->
     </div>
 
-    <!-- Scripts -->
+    <!-- Scripts - Main Application -->
     <script type="module" src="src/js/app.js"></script>
 
     <!-- Service Worker Registration -->

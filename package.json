@@ -6,13 +6,70 @@
   "main": "index.html",
   "scripts": {
     "start": "python3 -m http.server 8080 --directory .",
-    "dev": "python3 -m http.server 4055 --directory . --bind 127.0.0.1",
-    "test": "node src/tests/runner.js",
-    "test-voice": "node src/tests/voice.test.js",
-    "build": "node scripts/build.js",
+    "dev": "python3 -m http.server 5562 --directory . --bind 127.0.0.1",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
+    "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch",
+    "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage",
+    "test:voice": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --testPathPattern=voice",
+    "test:session": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --testPathPattern=session",
+    "test:integration": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --testPathPattern=integration",
+    "lint": "eslint src/js/**/*.js",
+    "lint:fix": "eslint src/js/**/*.js --fix",
+    "build": "npm run test && npm run lint",
+    "build:production": "npm run test:coverage && npm run lint && npm run build:assets",
+    "build:assets": "echo 'Building production assets...'",
+    "validate": "npm run test:coverage && npm run lint",
     "install-electron": "npm install electron@32.3.3 --save-dev",
     "start-electron": "electron main.js",
     "package-electron": "electron-builder"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": [
+      "<rootDir>/src/js/tests/setup.js"
+    ],
+    "testMatch": [
+      "<rootDir>/src/js/tests/**/*.test.js",
+      "<rootDir>/src/js/tests/**/*.spec.js"
+    ],
+    "collectCoverageFrom": [
+      "src/js/**/*.js",
+      "!src/js/tests/**",
+      "!src/js/**/*.test.js",
+      "!src/js/**/*.spec.js",
+      "!src/js/lib/**"
+    ],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html",
+      "json-summary"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
+      }
+    },
+    "moduleFileExtensions": [
+      "js",
+      "json"
+    ],
+    "testTimeout": 30000,
+    "verbose": true,
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/src/$1"
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!(.*\\.mjs$))"
+    ],
+    "coverageDirectory": "coverage",
+    "collectCoverage": true,
+    "forceCoverageMatch": [
+      "**/src/js/**/*.js"
+    ]
   },
   "keywords": [
     "yugioh",
@@ -29,7 +86,10 @@
   "license": "MIT",
   "devDependencies": {
     "electron": "^32.3.3",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
   },
   "engines": {
     "node": ">=16.0.0",
