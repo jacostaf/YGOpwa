@@ -92,7 +92,7 @@ export class SessionManager {
     getApiUrl() {
         // realBackendAPI.py backend runs on port 8081
         // Based on the realBackendAPI.py backend API
-        return config.API_URL || 'http://127.0.0.1:8081';
+        return config.API_URL || 'http://localhost:8081';
 
     }
 
@@ -233,9 +233,9 @@ export class SessionManager {
      * Fetch card sets from API (matching ygo_ripper.py endpoints exactly)
      */
     async fetchCardSets(searchTerm = '') {
+        let url; // Declare outside try block for error handling access
+        
         try {
-            let url;
-            
             if (searchTerm) {
                 // Use search endpoint with search term (matching ygo_ripper.py)
                 // Backend expects: /card-sets/search/<set_name> 
@@ -255,15 +255,19 @@ export class SessionManager {
             const timeoutId = setTimeout(() => controller.abort(), this.config.apiTimeout);
             
             this.logger.info(`[API DEBUG] Making fetch request with timeout: ${this.config.apiTimeout}ms`);
+            this.logger.info(`[API DEBUG] Request origin: ${window.location.origin}`);
+            this.logger.info(`[API DEBUG] Target URL: ${url}`);
+            this.logger.info(`[API DEBUG] Cross-origin request: ${window.location.origin !== 'http://localhost:8081'}`);
             
             
 
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                 },
+                mode: 'cors',
+                credentials: 'omit',
                 signal: controller.signal
             });
             
@@ -346,9 +350,16 @@ export class SessionManager {
             });
             
             // Provide more specific error messages for debugging
-            if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-                this.logger.error('[API DEBUG] Network error detected - backend may not be running or accessible');
-                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on');
+            if (error.message.includes('CORS') || error.message.includes('cors')) {
+                this.logger.error('[API DEBUG] CORS error detected - backend CORS configuration issue');
+                throw new Error('CORS error: Backend server CORS configuration needs to be updated. Check browser console for details.');
+            }
+            
+            if (error.message.includes('fetch') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                this.logger.error('[API DEBUG] Network/fetch error detected - backend may not be running or accessible');
+                this.logger.error('[API DEBUG] Current API URL:', this.apiUrl);
+                this.logger.error('[API DEBUG] Attempted URL:', url);
+                throw new Error(`Cannot connect to backend API at ${this.apiUrl}. Please ensure backend is running on port 8081.`);
             }
             
             if (error.message.includes('ECONNREFUSED')) {
@@ -423,7 +434,10 @@ export class SessionManager {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                 },
+                mode: 'cors',
+                credentials: 'omit',
                 body: JSON.stringify(requestPayload),
                 signal: AbortSignal.timeout(this.config.apiTimeout)
             });
@@ -498,9 +512,10 @@ export class SessionManager {
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                 },
+                mode: 'cors',
+                credentials: 'omit',
                 signal: controller.signal
             });
             

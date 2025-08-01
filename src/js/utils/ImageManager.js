@@ -143,10 +143,10 @@ export class ImageManager {
      */
     async downloadAndProcessImage(imageUrl, size) {
         return new Promise(async (resolve, reject) => {
-            // For YGOPRODeck images, always use backend proxy to avoid CORS issues
-            // Never try to load them directly due to CORS restrictions
+            // For YGOPRODeck images, use compliant backend approach
+            // Backend returns original URL for direct loading (compliance with YGOProdeck terms)
             if (imageUrl && imageUrl.startsWith('https://images.ygoprodeck.com/')) {
-                this.logger.debug(`YGOPRODeck image detected, using backend proxy: ${imageUrl}`);
+                this.logger.debug(`YGOPRODeck image detected, using compliant backend approach: ${imageUrl}`);
                 try {
                     const proxyResult = await this.loadImageViaProxy(imageUrl, size);
                     resolve(proxyResult);
@@ -198,42 +198,121 @@ export class ImageManager {
     }
 
     /**
-     * Load image via backend proxy
+     * Load image via compliant backend (YGOProdeck compliance)
+     * The backend now returns the original URL instead of proxying for compliance
      * @private
      */
     async loadImageViaProxy(imageUrl, size) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            let temp =config.API_URL ||'http://127.0.0.1:8081'
+        return new Promise(async (resolve, reject) => {
+            try {
+                const temp = config.API_URL || 'http://127.0.0.1:8081';
+                const apiUrl = `${temp}/cards/image?url=${encodeURIComponent(imageUrl)}`;
+                
+                this.logger.debug(`Getting compliant image URL from: ${apiUrl}`);
+                
+                // Get the compliant response from backend
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success || !data.image_url) {
+                    throw new Error(`API error: ${data.error || 'No image URL returned'}`);
+                }
+                
+                // Try loading with CORS first, then fallback to non-CORS
+                this.loadImageWithFallback(data.image_url, size, resolve, reject, imageUrl);
+                
+            } catch (error) {
+                this.logger.error(`Compliant image loading failed: ${error.message}`);
+                reject(new Error(`Compliant loading failed for ${imageUrl}: ${error.message}`));
+            }
+        });
+    }
 
-            const proxyUrl = `${temp}/cards/image?url=${encodeURIComponent(imageUrl)}`;
+    /**
+     * Load image with CORS fallback for YGOProdeck compliance
+     * @private
+     */
+    loadImageWithFallback(imageUrl, size, resolve, reject, originalUrl) {
+        // First attempt: Try with CORS for canvas operations
+        const imgWithCors = new Image();
+        imgWithCors.crossOrigin = 'anonymous';
+        
+        imgWithCors.onload = () => {
+            this.logger.debug(`Successfully loaded image with CORS: ${imageUrl}`);
+            try {
+                const processedImg = this.processImage(imgWithCors, size);
+                resolve(processedImg);
+            } catch (canvasError) {
+                this.logger.warn(`Canvas processing failed with CORS image, trying fallback: ${canvasError.message}`);
+                this.loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl);
+            }
+        };
+        
+        imgWithCors.onerror = (error) => {
+            this.logger.debug(`CORS image loading failed, trying without CORS: ${imageUrl}`);
+            this.loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl);
+        };
+        
+        imgWithCors.src = imageUrl;
+        
+        // Timeout for CORS attempt
+        setTimeout(() => {
+            if (!imgWithCors.complete) {
+                this.logger.debug(`CORS image loading timeout, trying without CORS: ${imageUrl}`);
+                this.loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl);
+            }
+        }, 5000); // 5 second timeout for CORS attempt
+    }
 
-
-            
-            // Set crossOrigin to anonymous to avoid CORS tainted canvas issues
-            // This allows canvas operations like toDataURL() to work with the proxy-loaded images
-            img.crossOrigin = 'anonymous';
-            
-            img.onload = () => {
-                this.logger.debug(`Successfully loaded image via proxy: ${imageUrl}`);
+    /**
+     * Load image without CORS (fallback approach)
+     * @private
+     */
+    loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl) {
+        const img = new Image();
+        // No crossOrigin - this means canvas operations may be restricted but basic display works
+        
+        img.onload = () => {
+            this.logger.debug(`Successfully loaded image without CORS: ${imageUrl}`);
+            try {
+                // Try to process with canvas (may fail due to CORS taint)
                 const processedImg = this.processImage(img, size);
                 resolve(processedImg);
-            };
-            
-            img.onerror = (error) => {
-                this.logger.error(`Proxy image loading failed: ${proxyUrl}`, error);
-                reject(new Error(`Proxy failed for ${imageUrl}`));
-            };
-            
-            img.src = proxyUrl;
-            
-            // Timeout for proxy requests
-            setTimeout(() => {
-                if (!img.complete) {
-                    reject(new Error(`Proxy timeout for ${imageUrl}`));
-                }
-            }, 10000); // 10 second timeout for proxy
-        });
+            } catch (canvasError) {
+                this.logger.debug(`Canvas processing failed, returning original image: ${canvasError.message}`);
+                // Return the image as-is without canvas processing
+                img.style.width = `${size.width}px`;
+                img.style.height = `${size.height}px`;
+                img.style.objectFit = 'contain';
+                resolve(img);
+            }
+        };
+        
+        img.onerror = (error) => {
+            this.logger.error(`Direct image loading failed: ${imageUrl}`, error);
+            reject(new Error(`Failed to load image from YGOProdeck: ${originalUrl}`));
+        };
+        
+        img.src = imageUrl;
+        
+        // Timeout for non-CORS attempt
+        setTimeout(() => {
+            if (!img.complete) {
+                reject(new Error(`Image loading timeout for ${originalUrl}`));
+            }
+        }, 10000); // 10 second timeout
     }
 
     /**

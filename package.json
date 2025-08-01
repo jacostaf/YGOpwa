@@ -5,8 +5,8 @@
   "description": "Yu-Gi-Oh Card Price Checker & Pack Ripper - Cross-Platform PWA Edition",
   "main": "index.html",
   "scripts": {
-    "start": "python3 -m http.server 8080 --directory .",
-    "dev": "python3 -m http.server 4055 --directory . --bind 127.0.0.1",
+    "start": "python3 -m http.server 8088 --directory .",
+    "dev": "python3 -m http.server 3334 --directory . --bind 127.0.0.1",
     "test": "node src/tests/runner.js",
     "test-voice": "node src/tests/voice.test.js",
     "build": "node scripts/build.js",
