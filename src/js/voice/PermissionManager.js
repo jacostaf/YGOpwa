@@ -426,7 +426,7 @@ export class PermissionManager {
             platform: this.platform,
             browser: this.browser,
             hasPermissionsAPI: 'permissions' in navigator,
-            hasGetUserMedia: 'mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices
+            hasGetUserMedia: 'mediaDevices' in navigator && navigator.mediaDevices && 'getUserMedia' in navigator.mediaDevices
         };
     }
 
@@ -465,14 +465,15 @@ export class PermissionManager {
     detectBrowser() {
         const userAgent = navigator.userAgent.toLowerCase();
         
-        if (userAgent.includes('chrome') && !userAgent.includes('edge')) {
+        // Check for Edge first since it contains 'chrome' in its user agent
+        if (userAgent.includes('edge') || userAgent.includes('edg/')) {
+            return 'edge';
+        } else if (userAgent.includes('chrome')) {
             return 'chrome';
         } else if (userAgent.includes('firefox')) {
             return 'firefox';
         } else if (userAgent.includes('safari') && !userAgent.includes('chrome')) {
             return 'safari';
-        } else if (userAgent.includes('edge')) {
-            return 'edge';
         } else {
             return 'unknown';
         }

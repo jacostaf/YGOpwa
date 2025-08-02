@@ -397,7 +397,17 @@ export class Logger {
         scopedLogger.time(`${label}-scope`);
         
         return {
-            ...scopedLogger,
+            info: (...args) => scopedLogger.info(...args),
+            warn: (...args) => scopedLogger.warn(...args),
+            error: (...args) => scopedLogger.error(...args),
+            debug: (...args) => scopedLogger.debug(...args),
+            trace: (...args) => scopedLogger.trace(...args),
+            log: (...args) => scopedLogger.log(...args),
+            time: (...args) => scopedLogger.time(...args),
+            timeEnd: (...args) => scopedLogger.timeEnd(...args),
+            perf: (...args) => scopedLogger.perf(...args),
+            group: (...args) => scopedLogger.group(...args),
+            groupEnd: (...args) => scopedLogger.groupEnd(...args),
             end: () => {
                 scopedLogger.timeEnd(`${label}-scope`);
             }

@@ -265,6 +265,10 @@ export class ImageManager {
         // Create image element from canvas
         const img = new Image();
         img.src = canvas.toDataURL('image/png');
+        
+        // Explicitly set width and height properties for testing
+        img.width = size.width;
+        img.height = size.height;
         img.style.width = `${size.width}px`;
         img.style.height = `${size.height}px`;
         img.style.objectFit = 'contain';
@@ -303,6 +307,10 @@ export class ImageManager {
         // Create new image element from canvas
         const processedImg = new Image();
         processedImg.src = canvas.toDataURL('image/jpeg', 0.85); // 85% quality
+        
+        // Explicitly set dimensions for testing
+        processedImg.width = Math.round(width);
+        processedImg.height = Math.round(height);
         processedImg.style.width = `${targetSize.width}px`;
         processedImg.style.height = `${targetSize.height}px`;
         processedImg.style.objectFit = 'contain';
@@ -317,9 +325,12 @@ export class ImageManager {
         // Clear container
         container.innerHTML = '';
         
-        // Create image wrapper
+        // Create image wrapper with proper styling
         const wrapper = document.createElement('div');
         wrapper.className = 'card-image-wrapper';
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'center';
         
         // Create new image element instead of cloning to fix data URL display issues
         const displayImg = new Image();
@@ -327,7 +338,9 @@ export class ImageManager {
         displayImg.className = 'card-image';
         displayImg.alt = 'Yu-Gi-Oh Card';
         
-        // Copy styles from original image
+        // Copy dimensions and styles from original image
+        displayImg.width = img.width;
+        displayImg.height = img.height;
         displayImg.style.width = img.style.width;
         displayImg.style.height = img.style.height;
         displayImg.style.objectFit = img.style.objectFit;

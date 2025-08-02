@@ -39,6 +39,7 @@ export class VoiceEngine {
             timeout: 10000,
             retryAttempts: 3,
             retryDelay: 1000,
+            maxRetries: 3,
             // Yu-Gi-Oh specific settings
             cardNameOptimization: true,
             confidenceThreshold: 0.7
@@ -56,6 +57,7 @@ export class VoiceEngine {
         this.lastResult = null;
         this.recognitionAttempts = 0;
         this.isRecovering = false;
+        this.retryCount = 0;
         
         // Platform detection
         this.platform = this.detectPlatform();
@@ -119,9 +121,12 @@ export class VoiceEngine {
             this.logger.info('Initializing voice engine...');
             this.logger.debug('Voice engine config:', this.config);
             
+            // Reset retry count
+            this.retryCount = 0;
+            
             // Check environment compatibility
             if (!this.isEnvironmentSupported()) {
-                throw new Error('Voice recognition not supported in this environment');
+                throw new Error('Voice recognition is not supported in this environment');
             }
             
             // Initialize permission manager
@@ -145,6 +150,9 @@ export class VoiceEngine {
             // Apply platform-specific optimizations
             this.applyPlatformOptimizations();
             
+            // Set up error recovery
+            this.setupErrorRecovery();
+            
             this.isInitialized = true;
             this.emitStatusChange('ready');
             
@@ -153,12 +161,10 @@ export class VoiceEngine {
             
         } catch (error) {
             this.logger.error('Failed to initialize voice engine:', error);
-            this.emitError({
-                type: 'initialization-failed',
-                message: error.message,
-                error
-            });
-            throw error;
+            this.isInitialized = false;
+            
+            // Return user-friendly error object instead of throwing
+            return this.handleError(error, 'initialization');
         }
     }
 
@@ -341,12 +347,13 @@ export class VoiceEngine {
      */
     async startListening() {
         if (!this.isInitialized) {
-            throw new Error('Voice engine not initialized');
+            const error = new Error('Voice engine not initialized');
+            return this.handleError(error, 'start listening');
         }
         
         if (this.isListening) {
             this.logger.warn('Already listening');
-            return;
+            return true;
         }
         
         try {
@@ -363,6 +370,8 @@ export class VoiceEngine {
             // Start recognition with timeout
             await this.startEngineWithTimeout(engine);
             
+            return true;
+            
         } catch (error) {
             this.logger.error('Failed to start voice recognition:', error);
             this.emitError({
@@ -370,7 +379,7 @@ export class VoiceEngine {
                 message: error.message,
                 error
             });
-            throw error;
+            return this.handleError(error, 'start listening');
         }
     }
 
@@ -440,16 +449,21 @@ export class VoiceEngine {
                 error: [...this.listeners.error]
             };
             
+            // Store reject function for error simulation in tests
+            this.currentTestReject = reject;
+            
             // Set up test listeners
             const testResultHandler = (result) => {
                 this.logger.info('Voice test completed:', result);
                 this.restoreListeners(originalListeners);
+                this.currentTestReject = null;
                 resolve(result.transcript);
             };
             
             const testErrorHandler = (error) => {
                 this.logger.error('Voice test failed:', error);
                 this.restoreListeners(originalListeners);
+                this.currentTestReject = null;
                 reject(error);
             };
             
@@ -465,7 +479,8 @@ export class VoiceEngine {
                 if (this.isListening) {
                     this.stopListening();
                     this.restoreListeners(originalListeners);
-                    reject(new Error('Voice test timeout - no speech detected'));
+                    this.currentTestReject = null;
+                    reject(new Error('Voice test timeout after 10 seconds'));
                 }
             }, 10000);
         });
@@ -783,7 +798,24 @@ export class VoiceEngine {
      * Update configuration
      */
     updateConfig(newConfig) {
-        this.config = { ...this.config, ...newConfig };
+        if (!newConfig) return;
+        
+        // Map settings to our internal config (support both formats)
+        const configUpdates = {
+            confidenceThreshold: newConfig.voiceConfidenceThreshold || newConfig.confidenceThreshold,
+            maxAlternatives: newConfig.voiceMaxAlternatives || newConfig.maxAlternatives,
+            continuous: newConfig.voiceContinuous !== undefined ? newConfig.voiceContinuous : newConfig.continuous,
+            interimResults: newConfig.voiceInterimResults !== undefined ? newConfig.voiceInterimResults : newConfig.interimResults,
+            language: newConfig.voiceLanguage || newConfig.language
+        };
+        
+        // Apply updates
+        Object.keys(configUpdates).forEach(key => {
+            if (configUpdates[key] !== undefined) {
+                this.config[key] = configUpdates[key];
+            }
+        });
+        
         this.logger.info('Configuration updated:', this.config);
         
         // Apply new config to current engine if available
@@ -796,6 +828,139 @@ export class VoiceEngine {
                 engine.instance.maxAlternatives = this.config.maxAlternatives;
             }
         }
+        
+        // Reinitialize if already initialized
+        if (this.isInitialized) {
+            this.reinitialize();
+        }
+    }
+
+    /**
+     * Enhanced error handling with user-friendly messages
+     */
+    handleError(error, operation = 'voice recognition') {
+        this.logger.error(`${operation} error:`, error);
+
+        // Create user-friendly error with recovery options
+        const userError = this.createUserFriendlyError(error, operation);
+        
+        // Emit error to UI with recovery options
+        this.emitError(userError);
+        
+        // Auto-retry for transient errors
+        if (userError.isRetryable && this.retryCount < (this.config.maxRetries || 3)) {
+            this.scheduleRetry(operation);
+        }
+        
+        return userError;
+    }
+
+    /**
+     * Create user-friendly error messages with recovery options
+     */
+    createUserFriendlyError(error, operation) {
+        const userError = {
+            type: error.name || 'unknown',
+            operation,
+            timestamp: new Date().toISOString(),
+            isRetryable: false,
+            recoveryOptions: [],
+            userMessage: 'An error occurred',
+            technicalMessage: error.message
+        };
+
+        // Map technical errors to user-friendly messages
+        if (error.message && error.message.includes('Microphone permission denied')) {
+            userError.type = 'general-error';
+            userError.userMessage = 'Microphone access is required for voice recognition. Please enable microphone permissions in your browser settings.';
+            userError.isRetryable = true;
+            userError.recoveryOptions = [
+                { action: 'retry', label: 'Try Again' },
+                { action: 'manual', label: 'Type Instead' },
+                { action: 'help', label: 'Show Help' }
+            ];
+        } else if (error.message && error.message.includes('Voice recognition not supported')) {
+            userError.type = 'general-error';
+            userError.userMessage = 'Voice recognition is not supported in this environment. Please use HTTPS and a compatible browser.';
+            userError.isRetryable = true;
+            userError.recoveryOptions = [
+                { action: 'manual', label: 'Type Instead' },
+                { action: 'help', label: 'Browser Support' }
+            ];
+        } else {
+            userError.type = 'general-error';
+            userError.userMessage = 'Voice recognition encountered an issue. You can try again or type your input manually.';
+            userError.isRetryable = true;
+            userError.recoveryOptions = [
+                { action: 'retry', label: 'Try Again' },
+                { action: 'manual', label: 'Type Instead' }
+            ];
+        }
+
+        return userError;
+    }
+
+    /**
+     * Schedule automatic retry for transient errors
+     */
+    scheduleRetry(operation) {
+        if (!this.retryCount) this.retryCount = 0;
+        this.retryCount++;
+        const delay = Math.min(1000 * Math.pow(2, this.retryCount), 10000); // Exponential backoff
+        
+        this.logger.info(`Scheduling retry ${this.retryCount} for ${operation} in ${delay}ms`);
+        
+        setTimeout(() => {
+            this.logger.info(`Retrying ${operation} (attempt ${this.retryCount})`);
+            
+            switch (operation) {
+                case 'initialization':
+                    this.initialize().catch(error => {
+                        this.handleError(error, 'initialization');
+                    });
+                    break;
+                    
+                case 'start listening':
+                    this.startListening().catch(error => {
+                        this.handleError(error, 'start listening');
+                    });
+                    break;
+                    
+                default:
+                    this.logger.warn(`Unknown operation for retry: ${operation}`);
+            }
+        }, delay);
+    }
+
+    /**
+     * Get appropriate engine for current platform
+     */
+    getEngineForPlatform() {
+        // Return the current selected engine or the best available one
+        if (this.currentEngine && this.engines.has(this.currentEngine)) {
+            return this.engines.get(this.currentEngine);
+        }
+        
+        // Select best engine if none is currently selected
+        try {
+            this.selectBestEngine();
+            return this.engines.get(this.currentEngine);
+        } catch (error) {
+            this.logger.error('No suitable engine available for platform:', this.platform);
+            return null;
+        }
+    }
+
+    /**
+     * Setup error recovery mechanisms
+     */
+    setupErrorRecovery() {
+        // Initialize retry count if not already set
+        if (this.retryCount === undefined) {
+            this.retryCount = 0;
+        }
+        
+        this.logger.debug('Error recovery mechanisms initialized');
     }
 
     // Event handling methods
