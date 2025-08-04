@@ -1334,7 +1334,7 @@ class YGORipperApp {
      */
     handleSetsLoaded(data, undefined, extraParam) {
         this.logger.info('Card sets loaded:', data);
-        this.uiManager.updateCardSets(data.sets, undefined, extraParam || 1);
+        this.uiManager.updateCardSets(data.sets, undefined, data.totalSets || data.sets.length);
     }
 
     /**
@@ -1342,7 +1342,7 @@ class YGORipperApp {
      */
     handleSetsFiltered(data) {
         this.logger.info('Card sets filtered:', data);
-        this.uiManager.updateCardSets(data.filteredSets);
+        this.uiManager.updateCardSets(data.sets, data.searchTerm, data.totalSets);
     }
 
     /**
@@ -1425,3 +1425,8 @@ class YGORipperApp {
 
 // Export the YGORipperApp class as default export
 export default YGORipperApp;
+
+// Initialize the application when DOM is ready
+window.addEventListener('DOMContentLoaded', () => {
+    window.app = new YGORipperApp();
+});

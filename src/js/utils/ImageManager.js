@@ -142,98 +142,81 @@ export class ImageManager {
      * @private
      */
     async downloadAndProcessImage(imageUrl, size) {
-        return new Promise(async (resolve, reject) => {
-            // For YGOPRODeck images, always use backend proxy to avoid CORS issues
-            // Never try to load them directly due to CORS restrictions
+        return new Promise((resolve, reject) => {
+            // For YGOPRODeck images, use direct client-side downloading as per compliance requirements
             if (imageUrl && imageUrl.startsWith('https://images.ygoprodeck.com/')) {
-                this.logger.debug(`YGOPRODeck image detected, using backend proxy: ${imageUrl}`);
-                try {
-                    const proxyResult = await this.loadImageViaProxy(imageUrl, size);
-                    resolve(proxyResult);
-                    return;
-                } catch (proxyError) {
-                    this.logger.warn(`Backend proxy failed for ${imageUrl}:`, proxyError.message);
-                    // Fallback to placeholder for YGOPRODeck images
-                    const placeholderImg = this.createPlaceholderImage(size);
-                    resolve(placeholderImg);
-                    return;
-                }
+                this.logger.debug(`YGOPRODeck image detected, using direct client-side download: ${imageUrl}`);
             }
             
-            // For non-YGOPRODeck images, use normal loading
-            const img = new Image();
-            
-            // Set crossOrigin for cross-origin images to avoid tainted canvas issues
-            img.crossOrigin = 'anonymous';
-            
-            // Set up event handlers
-            img.onload = () => {
-                this.logger.debug(`Image downloaded successfully: ${imageUrl}`);
-                
-                // Process the image (resize if needed)
-                const processedImg = this.processImage(img, size);
-                resolve(processedImg);
-            };
-            
-            img.onerror = (error) => {
-                this.logger.error(`Failed to download image: ${imageUrl}`, error);
-                
-                // For non-YGOPRODeck images, create a placeholder
-                const placeholderImg = this.createPlaceholderImage(size);
-                resolve(placeholderImg);
-            };
-            
-            // Start the download
-            img.src = imageUrl;
-            
-            // Set timeout for the request
-            setTimeout(() => {
-                if (!img.complete) {
-                    this.logger.debug(`Creating placeholder for timed out image: ${imageUrl}`);
-                    const placeholderImg = this.createPlaceholderImage(size);
-                    resolve(placeholderImg);
-                }
-            }, 15000); // 15 second timeout
+            // Use normal loading with fallback for all images
+            // This handles CORS issues by trying with CORS first, then without
+            this.loadImageWithFallback(imageUrl, size, resolve, reject, imageUrl);
         });
     }
 
+
     /**
-     * Load image via backend proxy
+     * Load image with fallback strategy
      * @private
      */
-    async loadImageViaProxy(imageUrl, size) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            let temp =config.API_URL ||'http://127.0.0.1:8081'
+    loadImageWithFallback(imageUrl, size, resolve, reject, originalUrl) {
+        // First attempt: Try with CORS for canvas operations
+        const imgWithCors = new Image();
+        imgWithCors.crossOrigin = 'anonymous';
+        
+        imgWithCors.onload = () => {
+            this.logger.debug(`Successfully loaded compliant image: ${imageUrl}`);
+            const processedImg = this.processImage(imgWithCors, size);
+            resolve(processedImg);
+        };
+        
+        imgWithCors.onerror = (error) => {
+            this.logger.warn(`CORS image loading failed: ${imageUrl}`, error);
+            // Second attempt: Try without CORS
+            this.loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl);
+        };
+        
+        imgWithCors.src = imageUrl;
+        
+        // Timeout for compliant image loading
+        setTimeout(() => {
+            if (!imgWithCors.complete) {
+                this.logger.debug(`Compliant image loading timed out: ${imageUrl}`);
+                this.loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl);
+            }
+        }, 10000);
+    }
 
-            const proxyUrl = `${temp}/cards/image?url=${encodeURIComponent(imageUrl)}`;
-
-
-            
-            // Set crossOrigin to anonymous to avoid CORS tainted canvas issues
-            // This allows canvas operations like toDataURL() to work with the proxy-loaded images
-            img.crossOrigin = 'anonymous';
-            
-            img.onload = () => {
-                this.logger.debug(`Successfully loaded image via proxy: ${imageUrl}`);
-                const processedImg = this.processImage(img, size);
-                resolve(processedImg);
-            };
-            
-            img.onerror = (error) => {
-                this.logger.error(`Proxy image loading failed: ${proxyUrl}`, error);
-                reject(new Error(`Proxy failed for ${imageUrl}`));
-            };
-            
-            img.src = proxyUrl;
-            
-            // Timeout for proxy requests
-            setTimeout(() => {
-                if (!img.complete) {
-                    reject(new Error(`Proxy timeout for ${imageUrl}`));
-                }
-            }, 10000); // 10 second timeout for proxy
-        });
+    /**
+     * Load image without CORS (fallback)
+     * @private
+     */
+    loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl) {
+        const img = new Image();
+        
+        img.onload = () => {
+            this.logger.debug(`Successfully loaded image without CORS: ${imageUrl}`);
+            const processedImg = this.processImage(img, size);
+            resolve(processedImg);
+        };
+        
+        img.onerror = (error) => {
+            this.logger.error(`All image loading attempts failed for: ${originalUrl}`, error);
+            // Final fallback: create placeholder
+            const placeholderImg = this.createPlaceholderImage(size);
+            resolve(placeholderImg);
+        };
+        
+        img.src = imageUrl;
+        
+        // Final timeout
+        setTimeout(() => {
+            if (!img.complete) {
+                this.logger.debug(`Creating placeholder for final timeout: ${originalUrl}`);
+                const placeholderImg = this.createPlaceholderImage(size);
+                resolve(placeholderImg);
+            }
+        }, 15000);
     }
 
     /**
@@ -281,41 +264,58 @@ export class ImageManager {
      * @private
      */
     processImage(img, targetSize) {
-        // Create canvas for image processing
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Calculate dimensions maintaining aspect ratio
-        const aspectRatio = img.width / img.height;
-        let { width, height } = targetSize;
-        
-        if (aspectRatio > (width / height)) {
-            // Image is wider, constrain by width
-            height = width / aspectRatio;
-        } else {
-            // Image is taller, constrain by height
-            width = height * aspectRatio;
+        try {
+            // Create canvas for image processing
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Calculate dimensions maintaining aspect ratio
+            const aspectRatio = img.width / img.height;
+            let { width, height } = targetSize;
+            
+            if (aspectRatio > (width / height)) {
+                // Image is wider, constrain by width
+                height = width / aspectRatio;
+            } else {
+                // Image is taller, constrain by height
+                width = height * aspectRatio;
+            }
+            
+            // Set canvas size
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Draw and resize image
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Create new image element from canvas
+            const processedImg = new Image();
+            
+            try {
+                // Try to export canvas - this will fail if image is tainted
+                processedImg.src = canvas.toDataURL('image/jpeg', 0.85); // 85% quality
+            } catch (securityError) {
+                this.logger.warn('Canvas tainted, using original image src:', securityError.message);
+                // If canvas is tainted, just use the original image with proper styling
+                processedImg.src = img.src;
+            }
+            
+            // Explicitly set dimensions for testing
+            processedImg.width = Math.round(width);
+            processedImg.height = Math.round(height);
+            processedImg.style.width = `${targetSize.width}px`;
+            processedImg.style.height = `${targetSize.height}px`;
+            processedImg.style.objectFit = 'contain';
+            
+            return processedImg;
+        } catch (error) {
+            this.logger.error('Error processing image:', error);
+            // Return original image with proper styling as fallback
+            img.style.width = `${targetSize.width}px`;
+            img.style.height = `${targetSize.height}px`;
+            img.style.objectFit = 'contain';
+            return img;
         }
-        
-        // Set canvas size
-        canvas.width = width;
-        canvas.height = height;
-        
-        // Draw and resize image
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        // Create new image element from canvas
-        const processedImg = new Image();
-        processedImg.src = canvas.toDataURL('image/jpeg', 0.85); // 85% quality
-        
-        // Explicitly set dimensions for testing
-        processedImg.width = Math.round(width);
-        processedImg.height = Math.round(height);
-        processedImg.style.width = `${targetSize.width}px`;
-        processedImg.style.height = `${targetSize.height}px`;
-        processedImg.style.objectFit = 'contain';
-        
-        return processedImg;
     }
 
     /**
@@ -414,7 +414,13 @@ export class ImageManager {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            let dataUrl;
+            try {
+                dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            } catch (securityError) {
+                this.logger.debug(`Cannot cache tainted image: ${cacheKey}`);
+                return; // Skip caching for tainted images
+            }
             
             // Store in localStorage with expiration
             const cacheData = {

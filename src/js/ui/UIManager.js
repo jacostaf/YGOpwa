@@ -424,7 +424,7 @@ export class UIManager {
         
         // Update tab panels - fix the selector to match actual HTML structure
         this.elements.tabPanels.forEach(panel => {
-            const isActive = panel.id === tabId || panel.dataset.tab === tabId;
+            const isActive = panel.id === `${tabId}-panel` || panel.id === tabId || panel.dataset.tab === tabId;
             panel.classList.toggle('hidden', !isActive);
             panel.classList.toggle('active', isActive);
             panel.setAttribute('aria-hidden', !isActive);

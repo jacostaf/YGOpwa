@@ -261,9 +261,10 @@ export class SessionManager {
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                 },
+                mode: 'cors',
+                credentials: 'omit',
                 signal: controller.signal
             });
             
@@ -409,22 +410,30 @@ export class SessionManager {
     async fetchEnhancedCardInfo(cardData) {
         try {
             // Convert card data to the format expected by the backend
+            // Look for the full card number like "SUDA-EN031" in various places
+            const cardNumber = cardData.setInfo?.setCode || 
+                              cardData.card_number || 
+                              (cardData.target_set_codes && cardData.target_set_codes[0]) ||
+                              (cardData.card_sets && cardData.card_sets[0]?.set_code) ||
+                              '';
+            
             const requestPayload = {
-                card_number: cardData.setInfo?.setCode || cardData.card_number || '',
+                card_number: cardNumber,
                 card_name: cardData.name || cardData.card_name || '',
                 card_rarity: cardData.displayRarity || cardData.rarity || cardData.card_rarity || '',
                 art_variant: cardData.artVariant || cardData.card_art_variant || '',
                 force_refresh: false
             };
             
-            this.logger.debug('Fetching enhanced card info for session card:', requestPayload);
-            
             const response = await fetch(`${this.apiUrl}/cards/price`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
                 body: JSON.stringify(requestPayload),
+                mode: 'cors',
+                credentials: 'omit',
                 signal: AbortSignal.timeout(this.config.apiTimeout)
             });
             
@@ -437,15 +446,11 @@ export class SessionManager {
             if (!data.success) {
                 throw new Error(data.message || 'Backend API returned failure');
             }
-            console.log("\n\n\n\n\nhere data",data,"\n\n")
-            console.log("\n\n\n\n\n here data.data",data.data,"\n\n")
 
-            return data.data; // Return the card data portion
+            return data.data;
             
         } catch (error) {
             this.logger.error('Backend API not available for session card enhancement:', error.message);
-            
-            // Throw error instead of using mock data - the app requires the backend API
             throw new Error(`Backend API unavailable for card enhancement: ${error.message}. Please ensure the backend server is running on ${this.apiUrl}`);
         }
     }
@@ -498,9 +503,10 @@ export class SessionManager {
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                 },
+                mode: 'cors',
+                credentials: 'omit',
                 signal: controller.signal
             });
             
@@ -799,26 +805,9 @@ export class SessionManager {
             this.emitCardAdded(enhancedCard);
             this.emitSessionUpdate(this.currentSession);
             
-            // Check if we need to fetch pricing data
-            const hasValidImportedPricing = !forceRefreshPricing && (
-                cardData.importedPricing === true || 
-                (cardData.price_status === 'imported') ||
-                (cardData.price_status === 'loaded' && (cardData.tcg_price || cardData.tcg_market_price))
-            );
-            
-            if (!hasValidImportedPricing) {
-                // Start async price update without blocking
-                this._updateCardPricing(enhancedCard, cardData);
-            } else if (cardData.tcg_price || cardData.tcg_market_price) {
-                // Use existing pricing data immediately
-                this._applyPricingData(enhancedCard, {
-                    tcg_price: cardData.tcg_price,
-                    tcg_market_price: cardData.tcg_market_price,
-                    price: cardData.price || parseFloat(cardData.tcg_market_price || cardData.tcg_price || '0'),
-                    price_status: 'imported',
-                    importedPricing: true
-                });
-            }
+            // Always fetch pricing data from backend API
+            // Never use YGOProdeck pricing as fallback
+            this._updateCardPricing(enhancedCard, cardData);
             
             this.logger.info('Card added to session:', enhancedCard.name || enhancedCard.card_name || enhancedCard.id);
             return enhancedCard;

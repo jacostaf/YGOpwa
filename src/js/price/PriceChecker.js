@@ -144,8 +144,11 @@ export class PriceChecker {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                 },
                 body: JSON.stringify(requestPayload),
+                mode: 'cors',
+                credentials: 'omit',
                 signal: AbortSignal.timeout(this.config.timeout)
             });
             
