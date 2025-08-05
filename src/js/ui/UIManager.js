@@ -424,7 +424,7 @@ export class UIManager {
         
         // Update tab panels - fix the selector to match actual HTML structure
         this.elements.tabPanels.forEach(panel => {
-            const isActive = panel.id === tabId || panel.dataset.tab === tabId;
+            const isActive = panel.id === `${tabId}-panel` || panel.id === tabId;
             panel.classList.toggle('hidden', !isActive);
             panel.classList.toggle('active', isActive);
             panel.setAttribute('aria-hidden', !isActive);
@@ -939,6 +939,12 @@ export class UIManager {
     updateCardSets(sets, searchTerm = '', totalSets = 0) {
         if (!this.elements.setSelect) return;
         
+        // Defensive check for undefined sets
+        if (!sets || !Array.isArray(sets)) {
+            this.logger.warn('updateCardSets called with invalid sets parameter:', sets);
+            sets = [];
+        }
+        
         // Clear existing options
         this.elements.setSelect.innerHTML = '';
         
@@ -989,24 +995,21 @@ export class UIManager {
         if (this.elements.totalSetsCount) {
             const total = totalSets || sets.length;
             this.elements.totalSetsCount.textContent = total.toString();
-            
-            // Show a warning if we have fewer sets than expected
-            if (!searchTerm && total < 500) {
-                this.logger.warn(`Only ${total} sets loaded, expected 990+. Check backend API.`);
-                this.showToast(`Only ${total} sets loaded (expected 990+). Check if backend is running properly.`, 'warning');
-            }
         }
         
-        // Update status message in the UI
-        if (sets.length > 0) {
-            const statusMessage = searchTerm ? 
-                `Found ${sets.length} sets matching "${searchTerm}"` :
-                `Loaded ${sets.length} card sets from backend`;
-            
-            // Show success message for significant loads
-            if (!searchTerm && sets.length > 100) {
-                this.showToast(statusMessage, 'success');
+        // Only show status messages when not filtering/searching
+        if (!searchTerm) {
+            if (sets.length < 500) {
+                this.logger.warn(`Only ${sets.length} sets loaded, expected 990+. Check backend API.`);
+                this.showToast(`Only ${sets.length} sets loaded (expected 990+). Check if backend is running properly.`, 'warning');
+            } else if (sets.length > 500) {
+                // Only show success message once for initial load
+                this.logger.info(`Successfully loaded ${sets.length} card sets from backend`);
+                // Don't show toast for normal operation - let the app initialization handle success messages
             }
+        } else if (searchTerm && sets.length > 0) {
+            // Only show search results, no toast needed
+            this.logger.info(`Found ${sets.length} sets matching "${searchTerm}"`);
         }
         
         this.logger.info(`Updated card sets dropdown: ${sets.length} displayed, ${totalSets || sets.length} total available`);
@@ -1863,6 +1866,87 @@ export class UIManager {
         if (this.elements.modalOverlay) {
             this.elements.modalOverlay.classList.add('hidden');
         }
+    }
+
+    /**
+     * Show card selection modal for voice recognition results
+     */
+    showCardSelectionModal(cards, transcript, callback) {
+        const cardOptions = cards.slice(0, 5).map((card, index) => {
+            const confidence = Math.round(card.confidence || 0);
+            const rarity = card.displayRarity || card.rarity || 'Unknown';
+            const setCode = card.setInfo?.setCode || 'Unknown';
+            const cardType = card.type || card.humanReadableCardType || 'Unknown';
+            const atk = card.atk !== undefined ? card.atk : '';
+            const def = card.def !== undefined ? card.def : '';
+            const level = card.level || '';
+            
+            return `
+                <div class="voice-card-option" data-card-index="${index}">
+                    <div class="voice-card-header">
+                        <div class="voice-card-name">
+                            <strong>${card.name}</strong>
+                            <div class="voice-card-type">${cardType}</div>
+                        </div>
+                        <div class="voice-confidence-badge ${confidence >= 90 ? 'high' : confidence >= 70 ? 'medium' : 'low'}">
+                            ${confidence}%
+                        </div>
+                    </div>
+                    <div class="voice-card-details">
+                        <div class="voice-card-rarity">
+                            <span class="rarity-label">${rarity}</span>
+                            <span class="set-code">[${setCode}]</span>
+                        </div>
+                        ${(atk !== '' || def !== '' || level) ? `
+                            <div class="voice-card-stats">
+                                ${level ? `<span class="level">★${level}</span>` : ''}
+                                ${atk !== '' ? `<span class="atk">ATK/${atk}</span>` : ''}
+                                ${def !== '' ? `<span class="def">DEF/${def}</span>` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const content = `
+            <div class="voice-card-selection">
+                <div class="voice-query-display">
+                    <span class="voice-icon">🎤</span>
+                    <span class="voice-transcript">"${transcript}"</span>
+                </div>
+                <p class="selection-prompt">Which card did you mean?</p>
+                <div class="voice-card-options">
+                    ${cardOptions}
+                </div>
+                <div class="voice-dialog-actions">
+                    <button class="btn btn-secondary" id="cancel-card-selection">
+                        <span class="btn-icon">✖️</span>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        `;
+
+        const modal = this.createModal('Select Card', content);
+        
+        // Add event listeners for card selection
+        modal.querySelectorAll('.voice-card-option').forEach(option => {
+            option.addEventListener('click', () => {
+                const cardIndex = parseInt(option.dataset.cardIndex);
+                const selectedCard = cards[cardIndex];
+                this.closeModal();
+                callback(selectedCard);
+            });
+        });
+
+        // Add cancel button listener
+        modal.querySelector('#cancel-card-selection')?.addEventListener('click', () => {
+            this.closeModal();
+            callback(null);
+        });
+
+        this.showModal(modal);
     }
 
     /**

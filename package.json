@@ -6,7 +6,7 @@
   "main": "index.html",
   "scripts": {
     "start": "python3 -m http.server 8080 --directory .",
-    "dev": "python3 -m http.server 7777 --directory . --bind 127.0.0.1",
+    "dev": "python3 -m http.server 8003 --directory . --bind 127.0.0.1",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",

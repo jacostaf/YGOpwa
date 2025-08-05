@@ -108,7 +108,7 @@ export class VoiceEngine {
      */
     async reinitialize() {
         this.logger.info('Reinitializing voice engine with updated config...');
-        await this.stop();
+        this.stopListening();
         await this.initialize();
     }
     

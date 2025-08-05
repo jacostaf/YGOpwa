@@ -415,7 +415,187 @@
   background: var(--color-surface-light);
 }
 
-/* Card Selection Dialog */
+/* Voice Card Selection Dialog */
+.voice-card-selection {
+  max-width: 600px;
+}
+
+.voice-query-display {
+  background: linear-gradient(135deg, var(--color-surface-dark), var(--color-surface));
+  border: 2px solid var(--color-primary);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.voice-icon {
+  font-size: 1.5em;
+  animation: pulse 2s infinite;
+}
+
+.voice-transcript {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--color-primary);
+  font-style: italic;
+}
+
+.selection-prompt {
+  text-align: center;
+  font-size: 1.1em;
+  color: var(--color-text-primary);
+  margin: var(--spacing-md) 0;
+  font-weight: 500;
+}
+
+.voice-card-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin: var(--spacing-lg) 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.voice-card-option {
+  background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-light) 100%);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  position: relative;
+  box-shadow: var(--shadow-sm);
+}
+
+.voice-card-option:hover {
+  background: linear-gradient(135deg, var(--color-surface-light) 0%, var(--color-surface-lighter) 100%);
+  border-color: var(--color-primary);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.voice-card-option:active {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.voice-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-md);
+}
+
+.voice-card-name strong {
+  color: var(--color-text-primary);
+  font-size: 1.2em;
+  display: block;
+  margin-bottom: var(--spacing-xs);
+}
+
+.voice-card-type {
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.voice-confidence-badge {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--border-radius-full);
+  font-size: 0.9em;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.voice-confidence-badge.high {
+  background: linear-gradient(135deg, #4caf50, #2e7d32);
+  color: white;
+}
+
+.voice-confidence-badge.medium {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+  color: white;
+}
+
+.voice-confidence-badge.low {
+  background: linear-gradient(135deg, #f44336, #c62828);
+  color: white;
+}
+
+.voice-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.voice-card-rarity {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.rarity-label {
+  background: var(--color-primary);
+  color: var(--color-accent-text);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-md);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.set-code {
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-dark);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+}
+
+.voice-card-stats {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.voice-card-stats span {
+  background: var(--color-surface-dark);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+.level {
+  color: var(--color-primary);
+}
+
+.atk {
+  color: #ff4444;
+}
+
+.def {
+  color: #4444ff;
+}
+
+.voice-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--color-border);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .voice-query {
   background: var(--color-surface-dark);
   padding: var(--spacing-md);
