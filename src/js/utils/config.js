@@ -2,11 +2,9 @@
 // Configuration for YGO Ripper UI
 // This works across all platforms (Mac, Windows, iOS, Android, etc.)
 export const config = {
-    // API URL - change this to switch between local and production
-    //API_URL: 'https://ygopyguy.onrender.com',
-    
-    // You can also set it to local for development:
-    API_URL: 'http://127.0.0.1:8081',
+    // API URL - TCGcsv Implementation
+    // Using TCGcsv as the sole data source (no MongoDB required)
+    API_URL: 'http://127.0.0.1:8082',
     
     // Other configuration options
     APP_VERSION: '2.1.0',
