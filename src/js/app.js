@@ -234,6 +234,9 @@ class YGORipperApp {
                 this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger, this.storage);
             }
             await this.voiceEngine.initialize();
+            
+            // Set VoiceEngine reference on SessionManager for learning boost functionality
+            this.sessionManager.setVoiceEngine(this.voiceEngine);
         } catch (error) {
             this.logger.warn('Voice engine initialization failed:', error);
             

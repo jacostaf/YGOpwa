@@ -17,6 +17,7 @@ export class SessionManager {
     constructor(storage = null, logger = null) {
         this.storage = storage;
         this.logger = logger || new Logger('SessionManager');
+        this.voiceEngine = null; // Will be set by app.js after VoiceEngine initialization
         
         // API Configuration (matching ygo_ripper.py)
         this.apiUrl = this.getApiUrl();
@@ -115,11 +116,18 @@ export class SessionManager {
             
             this.logger.info('Session manager initialized successfully');
             return true;
-            
         } catch (error) {
             this.logger.error('Failed to initialize session manager:', error);
             throw error;
         }
+    }
+
+    /**
+     * Set VoiceEngine reference for learning boost functionality
+     */
+    setVoiceEngine(voiceEngine) {
+        this.voiceEngine = voiceEngine;
+        this.logger.debug('VoiceEngine reference set for learning boost functionality');
     }
 
     /**
@@ -1485,6 +1493,13 @@ export class SessionManager {
             
             this.logger.debug(`[VARIANT] Found ${matchingCards.length} cards with name: ${cardName}`);
             
+            // DEBUG: Log all matching cards with their rarities
+            if (matchingCards.length > 0) {
+                this.logger.debug(`[VARIANT DEBUG] All cards with name "${cardName}":`, 
+                    matchingCards.map(c => `"${c.name}" - ${c.rarity} [${c.set_code}] ID:${c.id}`)
+                );
+            }
+            
             // For each matching card, create variants (TCGcsv structure: each card is already a variant)
             for (const card of matchingCards) {
                 this.logger.debug(`[VARIANT] Processing card "${card.name}" with rarity: "${card.rarity}"`);
@@ -1524,6 +1539,12 @@ export class SessionManager {
                     const nameScore = match.confidence;
                     confidence = (nameScore * 0.75) + (rarityScore * 0.25);
                     this.logger.debug(`[VARIANT] Weighted confidence: ${nameScore}% name + ${rarityScore}% rarity = ${confidence}%`);
+                } else {
+                    // When no rarity is specified, slightly adjust confidence based on rarity commonness
+                    // This ensures variants have different confidence scores for better UI display
+                    const rarityBonus = this.getRarityDisplayPriority(rarity);
+                    confidence = match.confidence + (rarityBonus * 0.01); // Very small adjustment
+                    this.logger.debug(`[VARIANT] No rarity specified, base confidence: ${match.confidence}%, adjusted: ${confidence}% (rarity bonus: ${rarityBonus})`);
                 }
                 
                 const variantKey = `${card.name}_${rarity}_${setCode}`;
@@ -1581,7 +1602,12 @@ export class SessionManager {
         });
 
         // Use the existing method as base but apply enhancements
-        const baseResults = await this.findCardsInCurrentSet(transcript, extractedRarity);
+        let baseResults = await this.findCardsInCurrentSet(transcript, extractedRarity);
+        
+        // LEARNING BOOST: If no results found, check for learned patterns
+        if (baseResults.length === 0 && this.voiceEngine && this.voiceEngine.learningEngine) {
+            baseResults = await this.applyLearningBoostSearch(transcript, extractedRarity);
+        }
         
         // Apply enhancements to the results
         const enhancedResults = baseResults.map(card => {
@@ -1623,6 +1649,167 @@ export class SessionManager {
         this.logger.info(`Enhanced search found ${sortedResults.length} cards for transcript: "${transcript}"`);
         
         return sortedResults;
+    }
+
+    /**
+     * Find all card variants that match a base card name (used for training)
+     */
+    async findAllCardVariantsByBaseName(baseCardName, extractedRarity = null) {
+        if (!this.currentSet) {
+            return [];
+        }
+        
+        const setCards = this.setCards.get(this.currentSet.id) || [];
+        const matchingVariants = [];
+        
+        this.logger.debug(`[VARIANT SEARCH] Looking for all variants of base name: "${baseCardName}"`);
+        
+        // Helper function to extract base name from full card name (same logic as TrainingUI)
+        const extractBaseCardName = (fullCardName) => {
+            return fullCardName
+                .replace(/\s*\([^)]*\)$/, '') // Remove parenthetical at end
+                .replace(/\s*-\s*(Secret Rare|Ultra Rare|Super Rare|Rare|Common|Quarter Century Secret Rare|Starlight Rare|Ghost Rare|Collector's Rare|Prismatic Secret Rare|Ultimate Rare|Gold Rare|Platinum Rare|Silver Rare).*$/i, '')
+                .replace(/\s*\[\w+\]$/, '') // Remove bracketed info at end
+                .replace(/\s*#\d+.*$/, '') // Remove card numbers
+                .replace(/\s*\d+st\s+Edition.*$/i, '') // Remove "1st Edition" etc
+                .trim();
+        };
+        
+        // Find all cards whose base name matches
+        for (const card of setCards) {
+            const cardBaseName = extractBaseCardName(card.name);
+            
+            if (cardBaseName.toLowerCase() === baseCardName.toLowerCase()) {
+                // This card matches the base name - add it as a variant
+                const rarity = card.rarity || 'Common';
+                const setCode = card.set_code || this.currentSet?.abbreviation || this.currentSet?.code || 'Unknown';
+                
+                // Skip cards with invalid rarity
+                if (!rarity || 
+                    typeof rarity !== 'string' ||
+                    rarity.trim() === '' || 
+                    rarity.toLowerCase().trim() === 'unknown' ||
+                    rarity.toLowerCase().trim() === 'n/a') {
+                    continue;
+                }
+                
+                let confidence = 90; // High confidence since it's a learned pattern match
+                
+                // Apply rarity filtering if specified
+                if (extractedRarity) {
+                    const rarityScore = this.calculateRarityScore(extractedRarity, rarity);
+                    if (rarityScore < 20) {
+                        this.logger.debug(`[VARIANT SEARCH] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
+                        continue;
+                    }
+                    confidence = (confidence * 0.75) + (rarityScore * 0.25);
+                }
+                
+                matchingVariants.push({
+                    ...card,
+                    confidence: confidence,
+                    method: 'learning-boost-variant',
+                    displayRarity: rarity,
+                    setInfo: {
+                        setCode: setCode,
+                        setName: this.currentSet?.name || 'Unknown Set'
+                    },
+                    baseCardMatch: baseCardName
+                });
+                
+                this.logger.debug(`[VARIANT SEARCH] Found variant: "${card.name}" (${rarity}) - confidence: ${confidence}%`);
+            }
+        }
+        
+        // Sort by confidence descending
+        matchingVariants.sort((a, b) => b.confidence - a.confidence);
+        
+        this.logger.info(`[VARIANT SEARCH] Found ${matchingVariants.length} variants for base name: "${baseCardName}"`);
+        return matchingVariants;
+    }
+
+    /**
+     * Get display priority for rarity (higher numbers = more prominent display)
+     * @private
+     */
+    getRarityDisplayPriority(rarity) {
+        const rarityLower = (rarity || '').toLowerCase().trim();
+        
+        // Higher priority rarities get higher numbers for slight confidence boost
+        const priorities = {
+            'quarter century secret rare': 10,
+            'quarter century secret': 10,
+            'starlight rare': 9,
+            'collector\'s rare': 8,
+            'collectors rare': 8,
+            'collector rare': 8,
+            'ghost rare': 7,
+            'prismatic secret rare': 6,
+            'prismatic secret': 6,
+            'secret rare': 5,
+            'ultimate rare': 4,
+            'ultra rare': 3,
+            'super rare': 2,
+            'rare': 1,
+            'common': 0
+        };
+        
+        return priorities[rarityLower] || 0;
+    }
+
+    /**
+     * Apply learning boost search when no initial results found
+     */
+    async applyLearningBoostSearch(transcript, extractedRarity = null) {
+        try {
+            const voiceInputLower = transcript.toLowerCase().trim();
+            const learningEngine = this.voiceEngine.learningEngine;
+            const results = [];
+            
+            this.logger.debug(`[LEARNING BOOST] Checking patterns for voice input: "${transcript}"`);
+            
+            // Search through stored learning patterns for matching voice input
+            for (const [patternKey, pattern] of learningEngine.userPatterns) {
+                if (pattern.voiceInput.toLowerCase().trim() === voiceInputLower) {
+                    this.logger.info(`[LEARNING BOOST] Found pattern: "${pattern.voiceInput}" → "${pattern.targetCard}"`);
+                    
+                    // Since we now store base card names, find all variants of that card
+                    const targetResults = await this.findAllCardVariantsByBaseName(pattern.targetCard, extractedRarity);
+                    
+                    if (targetResults.length > 0) {
+                        // Apply learning boost to confidence
+                        const boostedResults = targetResults.map(card => ({
+                            ...card,
+                            confidence: Math.min(95, card.confidence + 15), // Boost confidence by 15%
+                            learningApplied: true,
+                            learningPattern: pattern.voiceInput,
+                            learningTarget: pattern.targetCard,
+                            learningBoost: 15
+                        }));
+                        
+                        results.push(...boostedResults);
+                        this.logger.info(`[LEARNING BOOST] Applied pattern "${pattern.voiceInput}" → "${pattern.targetCard}", found ${boostedResults.length} variants`);
+                    }
+                }
+            }
+            
+            // Remove duplicates and sort by confidence
+            const uniqueResults = results.filter((card, index, self) => 
+                index === self.findIndex(c => c.name === card.name)
+            );
+            
+            uniqueResults.sort((a, b) => b.confidence - a.confidence);
+            
+            if (uniqueResults.length > 0) {
+                this.logger.info(`[LEARNING BOOST] Applied learning patterns, found ${uniqueResults.length} cards for "${transcript}"`);
+            }
+            
+            return uniqueResults;
+            
+        } catch (error) {
+            this.logger.error(`[LEARNING BOOST] Error applying learning patterns:`, error);
+            return [];
+        }
     }
 
     /**

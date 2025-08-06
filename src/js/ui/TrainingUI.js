@@ -584,6 +584,24 @@ export class TrainingUI {
     }
 
     /**
+     * Extract base card name (without rarity/variant info)
+     * @private
+     */
+    extractBaseCardName(fullCardName) {
+        // Remove common rarity indicators and variant markers
+        const baseCardName = fullCardName
+            .replace(/\s*\([^)]*\)$/, '') // Remove parenthetical at end (like "(Quarter Century Secret Rare)")
+            .replace(/\s*-\s*(Secret Rare|Ultra Rare|Super Rare|Rare|Common|Quarter Century Secret Rare|Starlight Rare|Ghost Rare|Collector's Rare|Prismatic Secret Rare|Ultimate Rare|Gold Rare|Platinum Rare|Silver Rare).*$/i, '')
+            .replace(/\s*\[\w+\]$/, '') // Remove bracketed info at end like [INFO]
+            .replace(/\s*#\d+.*$/, '') // Remove card numbers like #001
+            .replace(/\s*\d+st\s+Edition.*$/i, '') // Remove "1st Edition" etc
+            .trim();
+            
+        this.logger.debug(`[TRAINING] Extracted base name: "${fullCardName}" → "${baseCardName}"`);
+        return baseCardName;
+    }
+
+    /**
      * Train the voice recognition system with the user's correction
      */
     async trainVoiceRecognition(voiceInput, correctCard) {
@@ -592,15 +610,20 @@ export class TrainingUI {
             const voiceEngine = this.app.voiceEngine;
             
             if (voiceEngine && voiceEngine.learningEngine) {
-                // Record this as a successful learning interaction
+                // Extract base card name (without rarity/variant info) for training
+                const baseCardName = this.extractBaseCardName(correctCard.name);
+                
+                // Record this as a successful learning interaction using base card name
                 voiceEngine.learningEngine.learnFromSuccess(
                     voiceInput,
-                    correctCard.name,
+                    baseCardName,  // Use base name instead of full name with rarity
                     1.0, // Max confidence since user manually confirmed
                     {
                         trainingMode: true,
                         timestamp: Date.now(),
-                        cardSet: correctCard.set || 'unknown'
+                        cardSet: correctCard.set || 'unknown',
+                        originalFullName: correctCard.name, // Keep original for reference
+                        baseNameExtracted: true
                     }
                 );
                 
@@ -608,12 +631,13 @@ export class TrainingUI {
                 if (voiceEngine.confidenceManager) {
                     voiceEngine.confidenceManager.recordInteraction({
                         voiceInput: voiceInput,
-                        cardName: correctCard.name,
+                        cardName: baseCardName,  // Use base name for consistency
                         wasCorrect: true,
                         confidence: 1.0,
                         context: {
                             trainingMode: true,
-                            timestamp: Date.now()
+                            timestamp: Date.now(),
+                            originalFullName: correctCard.name
                         }
                     });
                 }
@@ -622,13 +646,13 @@ export class TrainingUI {
                 await voiceEngine.learningEngine.savePatterns();
                 this.logger.info(`Training patterns saved to storage`);
                 
-                this.logger.info(`Training completed: "${voiceInput}" -> "${correctCard.name}"`);
+                this.logger.info(`Training completed: "${voiceInput}" -> "${baseCardName}" (from: "${correctCard.name}")`);
             } else {
                 this.logger.warn('Voice learning engine not available');
             }
             
             // Show user-friendly confirmation
-            this.app.showToast(`Voice recognition trained! Next time you say "${voiceInput}", it will better recognize "${correctCard.name}".`, 'success');
+            this.app.showToast(`Voice recognition trained! Next time you say "${voiceInput}", it will better recognize "${baseCardName}" and its variants.`, 'success');
             
         } catch (error) {
             this.logger.error('Failed to train voice recognition:', error);
