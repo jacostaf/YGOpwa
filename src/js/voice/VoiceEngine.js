@@ -13,11 +13,15 @@
  */
 
 import { Logger } from '../utils/Logger.js';
+import { PhoneticMapper } from './PhoneticMapper.js';
+import { AdaptiveConfidenceManager } from './AdaptiveConfidenceManager.js';
+import { ProgressiveLearningEngine } from './ProgressiveLearningEngine.js';
 
 export class VoiceEngine {
-    constructor(permissionManager, logger = null) {
+    constructor(permissionManager, logger = null, storage = null) {
         this.permissionManager = permissionManager;
         this.logger = logger || new Logger('VoiceEngine');
+        this.storage = storage;
         
         // Recognition engines
         this.engines = new Map();
@@ -30,19 +34,29 @@ export class VoiceEngine {
         this.isPaused = false;
         this.shouldKeepListening = false; // Track if user wants continuous listening
         
+        // Enhanced fantasy name processing components
+        this.phoneticMapper = new PhoneticMapper(this.logger);
+        this.confidenceManager = new AdaptiveConfidenceManager(this.storage, this.logger);
+        this.learningEngine = new ProgressiveLearningEngine(this.storage, this.logger);
+        
         // Configuration
         this.config = {
             language: 'en-US',
             continuous: false, // Better for macOS/iOS
             interimResults: false,
-            maxAlternatives: 3,
+            maxAlternatives: 10, // Increased for better fantasy name alternatives
             timeout: 10000,
             retryAttempts: 3,
             retryDelay: 1000,
             maxRetries: 3,
             // Yu-Gi-Oh specific settings
             cardNameOptimization: true,
-            confidenceThreshold: 0.7
+            confidenceThreshold: 0.4, // Lowered for fantasy names
+            // Enhanced settings
+            adaptiveThreshold: true,
+            progressiveLearning: true,
+            phoneticEnhancement: true,
+            multiLanguageSupport: true
         };
         
         // Event listeners
@@ -62,11 +76,18 @@ export class VoiceEngine {
         // Platform detection
         this.platform = this.detectPlatform();
         
-        // Yu-Gi-Oh specific optimizations
+        // Yu-Gi-Oh specific optimizations (legacy support)
         this.cardNamePatterns = new Map();
         this.commonCardTerms = [];
         
-        this.logger.info('VoiceEngine initialized for platform:', this.platform);
+        // Context for enhanced processing
+        this.currentContext = {
+            currentSet: null,
+            sessionLength: 0,
+            userPreferences: {}
+        };
+        
+        this.logger.info('Enhanced VoiceEngine initialized for platform:', this.platform);
     }
 
     /**
@@ -144,8 +165,11 @@ export class VoiceEngine {
             // Select best engine
             this.selectBestEngine();
             
-            // Load Yu-Gi-Oh optimizations
+            // Load Yu-Gi-Oh optimizations (legacy)
             await this.loadCardNameOptimizations();
+            
+            // Initialize enhanced components
+            await this.initializeEnhancedComponents();
             
             // Apply platform-specific optimizations
             this.applyPlatformOptimizations();
@@ -489,7 +513,7 @@ export class VoiceEngine {
     /**
      * Handle recognition result
      */
-    handleRecognitionResult(event, engineType) {
+    async handleRecognitionResult(event, engineType) {
         try {
             const results = Array.from(event.results);
             const lastResult = results[results.length - 1];
@@ -503,29 +527,29 @@ export class VoiceEngine {
                 confidence: alt.confidence || 0
             }));
             
-            // Filter by confidence threshold
-            const validAlternatives = alternatives.filter(alt => 
-                alt.confidence >= this.config.confidenceThreshold
-            );
+            // Apply enhanced fantasy name processing
+            const enhancedResults = await this.enhanceRecognitionResults(alternatives, engineType);
             
-            if (validAlternatives.length === 0) {
-                this.logger.warn('No high-confidence recognition results');
+            if (enhancedResults.length === 0) {
+                this.logger.warn('No valid recognition results after enhancement');
                 return;
             }
             
-            // Select best result
-            const bestResult = validAlternatives[0];
-            
-            // Apply Yu-Gi-Oh specific optimizations
-            const optimizedResult = this.optimizeCardNameRecognition(bestResult);
+            // Select best enhanced result
+            const bestResult = enhancedResults[0];
             
             const result = {
-                transcript: optimizedResult.transcript,
-                confidence: optimizedResult.confidence,
-                alternatives: validAlternatives,
+                transcript: bestResult.transcript,
+                confidence: bestResult.confidence,
+                alternatives: enhancedResults,
                 engine: engineType,
                 timestamp: new Date().toISOString(),
-                isFinal: lastResult.isFinal
+                isFinal: lastResult.isFinal,
+                // Enhanced metadata
+                phoneticProcessed: bestResult.phoneticProcessed || false,
+                learningApplied: bestResult.learningApplied || false,
+                adaptiveThreshold: bestResult.adaptiveThreshold || this.config.confidenceThreshold,
+                originalTranscript: bestResult.originalTranscript || bestResult.transcript
             };
             
             this.lastResult = result;
@@ -695,6 +719,270 @@ export class VoiceEngine {
         this.config.continuous = true; // Better for multi-word card names
         
         this.logger.info(`Loaded ${this.commonCardTerms.length} card name optimizations`);
+    }
+
+    /**
+     * Initialize enhanced fantasy name processing components
+     */
+    async initializeEnhancedComponents() {
+        try {
+            this.logger.info('Initializing enhanced fantasy name processing components...');
+            
+            // Load confidence manager history
+            await this.confidenceManager.loadUserHistory();
+            
+            // Load learning engine patterns
+            await this.learningEngine.loadPatterns();
+            
+            this.logger.info('Enhanced components initialized successfully');
+        } catch (error) {
+            this.logger.warn('Failed to initialize enhanced components:', error);
+        }
+    }
+
+    /**
+     * Enhanced recognition results processing with phonetic mapping, 
+     * adaptive confidence, and progressive learning
+     */
+    async enhanceRecognitionResults(alternatives, engineType) {
+        if (!alternatives || alternatives.length === 0) return [];
+
+        try {
+            const enhancedResults = [];
+
+            for (const alternative of alternatives) {
+                let enhanced = { 
+                    ...alternative,
+                    originalTranscript: alternative.transcript 
+                };
+
+                // Step 1: Apply phonetic normalization if enabled
+                if (this.config.phoneticEnhancement) {
+                    const normalized = this.phoneticMapper.normalize(alternative.transcript);
+                    if (normalized !== alternative.transcript) {
+                        enhanced.transcript = normalized;
+                        enhanced.phoneticProcessed = true;
+                        this.logger.debug(`Phonetic normalization: "${alternative.transcript}" → "${normalized}"`);
+                    }
+                }
+
+                // Step 2: Apply legacy optimizations for compatibility
+                enhanced = this.optimizeCardNameRecognition(enhanced);
+
+                // Step 3: Apply adaptive confidence threshold if enabled
+                if (this.config.adaptiveThreshold) {
+                    const adaptiveThreshold = this.confidenceManager.getAdaptiveThreshold(
+                        enhanced.transcript,
+                        this.currentContext
+                    );
+                    enhanced.adaptiveThreshold = adaptiveThreshold;
+                    enhanced.isAboveThreshold = enhanced.confidence >= adaptiveThreshold;
+                    
+                    this.logger.debug(`Adaptive threshold for "${enhanced.transcript}": ${adaptiveThreshold.toFixed(3)}`);
+                } else {
+                    enhanced.isAboveThreshold = enhanced.confidence >= this.config.confidenceThreshold;
+                }
+
+                enhancedResults.push(enhanced);
+            }
+
+            // Step 4: Apply progressive learning if enabled
+            let finalResults = enhancedResults;
+            if (this.config.progressiveLearning && enhancedResults.length > 0) {
+                // Create dummy candidates for learning engine (it expects card name format)
+                const candidates = enhancedResults.map(result => ({
+                    name: result.transcript,
+                    confidence: result.confidence,
+                    ...result
+                }));
+
+                const learnedCandidates = this.learningEngine.applyPersonalizedRecognition(
+                    alternatives[0].transcript, // Original voice input
+                    candidates
+                );
+
+                // Convert back to result format
+                finalResults = learnedCandidates.map(candidate => ({
+                    transcript: candidate.name,
+                    confidence: candidate.confidence,
+                    originalTranscript: candidate.originalTranscript || candidate.name,
+                    phoneticProcessed: candidate.phoneticProcessed || false,
+                    learningApplied: candidate.learningApplied || false,
+                    adaptiveThreshold: candidate.adaptiveThreshold || this.config.confidenceThreshold,
+                    isAboveThreshold: candidate.confidence >= (candidate.adaptiveThreshold || this.config.confidenceThreshold),
+                    personalizedScore: candidate.personalizedScore || 0
+                }));
+            }
+
+            // Step 5: Filter by adaptive thresholds and sort by confidence
+            const validResults = finalResults
+                .filter(result => result.isAboveThreshold)
+                .sort((a, b) => b.confidence - a.confidence);
+
+            this.logger.debug(`Enhanced recognition: ${alternatives.length} → ${validResults.length} valid results`);
+
+            return validResults;
+
+        } catch (error) {
+            this.logger.error('Error in enhanced recognition processing:', error);
+            
+            // Fallback to basic processing
+            return alternatives
+                .filter(alt => alt.confidence >= this.config.confidenceThreshold)
+                .map(alt => ({
+                    ...alt,
+                    originalTranscript: alt.transcript,
+                    phoneticProcessed: false,
+                    learningApplied: false,
+                    adaptiveThreshold: this.config.confidenceThreshold,
+                    isAboveThreshold: true
+                }));
+        }
+    }
+
+    /**
+     * Record user interaction for learning (called when user confirms/rejects)
+     */
+    recordUserInteraction(voiceInput, selectedCard, wasCorrect, context = {}) {
+        if (!this.config.progressiveLearning) return;
+
+        try {
+            // Record for confidence manager
+            this.confidenceManager.recordInteraction({
+                voiceInput: voiceInput,
+                cardName: selectedCard,
+                wasCorrect: wasCorrect,
+                confidence: this.lastResult?.confidence || 0,
+                context: { ...this.currentContext, ...context }
+            });
+
+            // Record for learning engine
+            if (wasCorrect) {
+                this.learningEngine.learnFromSuccess(
+                    voiceInput,
+                    selectedCard,
+                    this.lastResult?.confidence || 0,
+                    { ...this.currentContext, ...context }
+                );
+            } else if (selectedCard) {
+                this.learningEngine.learnFromRejection(
+                    voiceInput,
+                    selectedCard,
+                    context.correctCard,
+                    this.lastResult?.confidence || 0
+                );
+            }
+
+            this.logger.debug('Recorded user interaction for learning', {
+                voiceInput,
+                selectedCard,
+                wasCorrect
+            });
+
+        } catch (error) {
+            this.logger.error('Failed to record user interaction:', error);
+        }
+    }
+
+    /**
+     * Update current context for better recognition
+     */
+    updateContext(context = {}) {
+        this.currentContext = {
+            ...this.currentContext,
+            ...context
+        };
+        
+        this.logger.debug('Updated voice recognition context:', this.currentContext);
+    }
+
+    /**
+     * Get enhanced recognition statistics
+     */
+    getEnhancedStats() {
+        const baseStats = this.getStatus();
+        
+        try {
+            return {
+                ...baseStats,
+                phoneticMapper: {
+                    patterns: this.phoneticMapper.getPatternStats()
+                },
+                confidenceManager: {
+                    userStats: this.confidenceManager.getUserStats()
+                },
+                learningEngine: {
+                    stats: this.learningEngine.getLearningStats()
+                },
+                enhancedFeatures: {
+                    phoneticEnhancement: this.config.phoneticEnhancement,
+                    adaptiveThreshold: this.config.adaptiveThreshold,
+                    progressiveLearning: this.config.progressiveLearning
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to get enhanced stats:', error);
+            return baseStats;
+        }
+    }
+
+    /**
+     * Export all learned data for backup
+     */
+    async exportLearningData() {
+        try {
+            const data = {
+                version: '1.0',
+                timestamp: Date.now(),
+                userInteractions: this.confidenceManager.getUserStats(),
+                learnedPatterns: this.learningEngine.exportPatterns(),
+                configuration: {
+                    phoneticEnhancement: this.config.phoneticEnhancement,
+                    adaptiveThreshold: this.config.adaptiveThreshold,
+                    progressiveLearning: this.config.progressiveLearning
+                }
+            };
+            
+            return data;
+        } catch (error) {
+            this.logger.error('Failed to export learning data:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Import learning data from backup
+     */
+    async importLearningData(data) {
+        if (!data || data.version !== '1.0') {
+            throw new Error('Invalid learning data format');
+        }
+        
+        try {
+            if (data.learnedPatterns) {
+                this.learningEngine.importPatterns(data.learnedPatterns);
+            }
+            
+            this.logger.info('Successfully imported learning data');
+        } catch (error) {
+            this.logger.error('Failed to import learning data:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Reset all learning data
+     */
+    async resetLearningData() {
+        try {
+            this.confidenceManager.resetHistory();
+            this.learningEngine.reset();
+            
+            this.logger.info('All learning data has been reset');
+        } catch (error) {
+            this.logger.error('Failed to reset learning data:', error);
+            throw error;
+        }
     }
 
     /**

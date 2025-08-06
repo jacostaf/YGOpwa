@@ -1154,21 +1154,45 @@ export class SessionManager {
     }
 
     /**
-     * Process voice input to identify cards
+     * Process voice input to identify cards with enhanced fantasy name recognition
      */
-    async processVoiceInput(transcript) {
+    async processVoiceInput(transcript, enhancedResults = null) {
         this.logger.info('Processing voice input:', transcript);
         
         if (!transcript || typeof transcript !== 'string') {
             return [];
         }
 
+        // Use enhanced results if provided by VoiceEngine, otherwise fallback to basic processing
+        let processedTranscript = transcript;
+        let processingMetadata = {
+            phoneticProcessed: false,
+            learningApplied: false,
+            adaptiveThreshold: null
+        };
+
+        if (enhancedResults && enhancedResults.length > 0) {
+            // Use the best enhanced result
+            const bestResult = enhancedResults[0];
+            processedTranscript = bestResult.transcript;
+            processingMetadata = {
+                phoneticProcessed: bestResult.phoneticProcessed || false,
+                learningApplied: bestResult.learningApplied || false,
+                adaptiveThreshold: bestResult.adaptiveThreshold || null,
+                originalTranscript: bestResult.originalTranscript || transcript
+            };
+            
+            this.logger.info(`Using enhanced voice result: "${transcript}" → "${processedTranscript}"`, {
+                enhancements: processingMetadata
+            });
+        }
+
         // Step 1: Auto-extract rarity and art variant if enabled (matching oldIteration.py)
-        let processedText = transcript;
+        let processedText = processedTranscript;
         let extractedRarity = null;
         let extractedArtVariant = null;
 
-        this.logger.debug(`[VOICE PROCESSING] Original transcript: "${transcript}"`);
+        this.logger.debug(`[VOICE PROCESSING] Input transcript: "${processedTranscript}"`);
         this.logger.debug(`[VOICE PROCESSING] Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
         this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
 
@@ -1185,26 +1209,25 @@ export class SessionManager {
         if (extractedRarity || extractedArtVariant) {
             this.logger.info(`[VOICE PROCESSING] Extracted from voice - Rarity: "${extractedRarity}", Art Variant: "${extractedArtVariant}", Card Name: "${processedText}"`);
         } else {
-            this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using full transcript as card name: "${processedText}"`);
+            this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using processed card name: "${processedText}"`);
         }
 
         const cleanTranscript = processedText.toLowerCase().trim();
         
         try {
-            // Use unified matching approach like oldIteration.py - only set-specific matching with proper variant creation
-            // This avoids duplicates and ensures all results have proper rarity information
+            // Use unified matching approach with enhanced fantasy name processing
             let recognizedCards = [];
             
             if (this.currentSet) {
-                recognizedCards = await this.findCardsInCurrentSet(cleanTranscript, extractedRarity);
+                recognizedCards = await this.findCardsInCurrentSetEnhanced(cleanTranscript, extractedRarity, processingMetadata);
             }
             
             this.logger.info(`Found ${recognizedCards.length} potential card matches`);
             
-            // Debug output of found cards - only log variants with proper displayRarity
+            // Debug output of found cards with enhancement information
             if (recognizedCards.length > 0) {
                 this.logger.debug(`[VOICE PROCESSING] Found cards:`, recognizedCards.map(card => 
-                    `${card.name} - ${card.displayRarity || 'Unknown'} [${card.setInfo?.setCode || 'N/A'}] (${card.confidence}%)`
+                    `${card.name} - ${card.displayRarity || 'Unknown'} [${card.setInfo?.setCode || 'N/A'}] (${card.confidence}% ${card.enhancementApplied ? 'enhanced' : ''})`
                 ));
             }
             
@@ -1542,6 +1565,64 @@ export class SessionManager {
         this.logger.info(`Generated ${sortedVariants.length} card variants for transcript: "${transcript}"`);
         
         return sortedVariants;
+    }
+
+    /**
+     * Enhanced card finding with fantasy name processing metadata
+     */
+    async findCardsInCurrentSetEnhanced(transcript, extractedRarity = null, processingMetadata = {}) {
+        if (!this.currentSet) {
+            return [];
+        }
+        
+        this.logger.debug(`[ENHANCED SEARCH] Processing transcript: "${transcript}"`, {
+            extractedRarity,
+            metadata: processingMetadata
+        });
+
+        // Use the existing method as base but apply enhancements
+        const baseResults = await this.findCardsInCurrentSet(transcript, extractedRarity);
+        
+        // Apply enhancements to the results
+        const enhancedResults = baseResults.map(card => {
+            let enhanced = { ...card };
+            
+            // Apply enhancement metadata
+            enhanced.enhancementApplied = processingMetadata.phoneticProcessed || processingMetadata.learningApplied;
+            enhanced.phoneticProcessed = processingMetadata.phoneticProcessed || false;
+            enhanced.learningApplied = processingMetadata.learningApplied || false;
+            enhanced.adaptiveThreshold = processingMetadata.adaptiveThreshold;
+            enhanced.originalTranscript = processingMetadata.originalTranscript || transcript;
+            
+            // Boost confidence for enhanced processing
+            if (enhanced.enhancementApplied) {
+                // Small boost for phonetic processing
+                if (enhanced.phoneticProcessed) {
+                    enhanced.confidence += 5;
+                    enhanced.confidence = Math.min(95, enhanced.confidence); // Cap at 95%
+                }
+                
+                // Additional boost for learning-based improvements
+                if (enhanced.learningApplied) {
+                    enhanced.confidence += 3;
+                    enhanced.confidence = Math.min(98, enhanced.confidence); // Cap at 98%
+                }
+                
+                this.logger.debug(`[ENHANCED SEARCH] Applied enhancement boost to: ${enhanced.name} (+${enhanced.confidence - card.confidence}%)`);
+            }
+            
+            return enhanced;
+        });
+
+        // Re-sort after confidence adjustments
+        const sortedResults = enhancedResults.sort((a, b) => b.confidence - a.confidence);
+        
+        // Ensure unique confidence scores after enhancement
+        this.ensureUniqueConfidenceScores(sortedResults);
+        
+        this.logger.info(`Enhanced search found ${sortedResults.length} cards for transcript: "${transcript}"`);
+        
+        return sortedResults;
     }
 
     /**

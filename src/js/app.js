@@ -226,7 +226,7 @@ class YGORipperApp {
     async safeInitializeVoice() {
         try {
             if (!this.voiceEngine) {
-                this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger);
+                this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger, this.storage);
             }
             await this.voiceEngine.initialize();
         } catch (error) {
@@ -337,7 +337,9 @@ class YGORipperApp {
             this.isProcessingVoice = true;
             
             // Process the voice result to identify cards with error boundary (non-blocking)
-            this.safeProcessVoiceInput(result.transcript).then(cards => {
+            // Pass enhanced results to SessionManager if available
+            const enhancedResults = result.alternatives || null;
+            this.safeProcessVoiceInput(result.transcript, enhancedResults).then(cards => {
                 if (cards.length > 0) {
                     // Sort cards by confidence for auto-confirm logic
                     const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
@@ -385,11 +387,11 @@ class YGORipperApp {
     }
 
     /**
-     * Safe voice input processing with error boundaries
+     * Safe voice input processing with error boundaries and enhanced results
      */
-    async safeProcessVoiceInput(transcript) {
+    async safeProcessVoiceInput(transcript, enhancedResults = null) {
         try {
-            return await this.sessionManager.processVoiceInput(transcript);
+            return await this.sessionManager.processVoiceInput(transcript, enhancedResults);
         } catch (error) {
             this.logger.error('Voice input processing failed:', error);
             
@@ -428,6 +430,14 @@ class YGORipperApp {
                     ...bestMatch,
                     quantity: 1
                 });
+                
+                // Record successful interaction for learning
+                if (this.voiceEngine) {
+                    this.voiceEngine.recordUserInteraction(transcript, bestMatch.name, true, {
+                        autoConfirmed: true,
+                        currentSet: this.sessionManager.currentSet
+                    });
+                }
                 
                 // Update UI
                 this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
@@ -1039,6 +1049,15 @@ class YGORipperApp {
             this.logger.info('Starting session for set:', setId);
             
             await this.sessionManager.startSession(setId);
+            
+            // Update voice engine context with current set
+            if (this.voiceEngine) {
+                this.voiceEngine.updateContext({
+                    currentSet: this.sessionManager.currentSet,
+                    sessionStartTime: Date.now()
+                });
+            }
+            
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
             this.uiManager.showToast('Session started successfully', 'success');
             
@@ -1399,10 +1418,27 @@ class YGORipperApp {
         if (cards.length > 0) {
             this.uiManager.showCardSelectionModal(cards, transcript, (selectedCard) => {
                 if (selectedCard) {
+                    // Record user selection for learning
+                    if (this.voiceEngine) {
+                        this.voiceEngine.recordUserInteraction(transcript, selectedCard.name, true, {
+                            userSelected: true,
+                            currentSet: this.sessionManager.currentSet,
+                            alternativesAvailable: cards.length
+                        });
+                    }
+                    
                     this.safeAddCard({
                         ...selectedCard,
                         quantity: 1
                     });
+                } else {
+                    // Record rejection for learning
+                    if (this.voiceEngine && cards.length > 0) {
+                        this.voiceEngine.recordUserInteraction(transcript, cards[0].name, false, {
+                            rejectedSuggestion: true,
+                            currentSet: this.sessionManager.currentSet
+                        });
+                    }
                 }
             });
         } else {
