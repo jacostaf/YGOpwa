@@ -410,7 +410,7 @@ export class SessionManager {
         try {
             // Convert card data to the format expected by the backend
             const requestPayload = {
-                card_number: cardData.setInfo?.setCode || cardData.card_number || '',
+                card_number: cardData.card_number || cardData.ext_number || '',
                 card_name: cardData.name || cardData.card_name || '',
                 card_rarity: cardData.displayRarity || cardData.rarity || cardData.card_rarity || '',
                 art_variant: cardData.artVariant || cardData.card_art_variant || '',
@@ -437,10 +437,9 @@ export class SessionManager {
             if (!data.success) {
                 throw new Error(data.message || 'Backend API returned failure');
             }
-            console.log("\n\n\n\n\nhere data",data,"\n\n")
-            console.log("\n\n\n\n\n here data.data",data.data,"\n\n")
-
-            return data.data; // Return the card data portion
+            
+            // TCGcsv backend returns price data directly in response, not wrapped in data property
+            return data; // Return the entire response which contains the price data
             
         } catch (error) {
             this.logger.error('Backend API not available for session card enhancement:', error.message);
@@ -520,7 +519,14 @@ export class SessionManager {
             });
             
             if (data.success) {
-                const cards = data.data || [];
+                // Handle both direct array and wrapped object response
+                let cards = data.data || [];
+                
+                // If data.data is an object with a cards property, extract it
+                if (data.data && typeof data.data === 'object' && !Array.isArray(data.data) && data.data.cards) {
+                    cards = data.data.cards;
+                    this.logger.debug('Extracted cards array from wrapped response');
+                }
                 
                 if (!Array.isArray(cards)) {
                     this.logger.warn('API returned non-array card data:', cards);
@@ -840,28 +846,29 @@ export class SessionManager {
         this.loadingPriceData.add(cardId);
         
         try {
-            const enhancedInfo = await this.fetchEnhancedCardInfo(cardData);
+            // Use the enhanced card data instead of original cardData to ensure variant rarity is used
+            const enhancedInfo = await this.fetchEnhancedCardInfo(card);
             if (enhancedInfo) {
                 this._applyPricingData(card, {
-                    tcg_price: enhancedInfo.tcg_price,
-                    tcg_market_price: enhancedInfo.tcg_market_price,
-                    price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
+                    tcg_price: enhancedInfo.lowPrice || enhancedInfo.tcgPrice,
+                    tcg_market_price: enhancedInfo.marketPrice || enhancedInfo.tcgPrice,
+                    price: parseFloat(enhancedInfo.marketPrice || enhancedInfo.tcgPrice || '0'),
                     price_status: 'loaded',
-                    card_name: enhancedInfo.card_name || cardData.name,
-                    card_number: enhancedInfo.card_number || cardData.setInfo?.setCode,
-                    card_rarity: enhancedInfo.card_rarity || cardData.displayRarity || cardData.rarity,
+                    card_name: enhancedInfo.cardName || cardData.name,
+                    card_number: enhancedInfo.card_number || cardData.card_number || cardData.ext_number,
+                    card_rarity: enhancedInfo.rarity || cardData.displayRarity || cardData.rarity,
                     booster_set_name: enhancedInfo.booster_set_name,
                     card_art_variant: enhancedInfo.card_art_variant,
-                    set_code: enhancedInfo.set_code,
-                    last_price_updt: enhancedInfo.last_price_updt,
-                    image_url: enhancedInfo.image_url || card.image_url,
+                    set_code: enhancedInfo.setCode,
+                    last_price_updt: new Date().toISOString(),
+                    image_url: enhancedInfo.imageUrl || card.image_url,
                     image_url_small: enhancedInfo.image_url_small || card.image_url_small,
                     source_url: enhancedInfo.source_url,
-                    scrape_success: enhancedInfo.scrape_success,
+                    scrape_success: true,
                     hasEnhancedInfo: true
                 });
                 
-                this.logger.info(`Pricing updated for: ${card.name} - Price: $${enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || 'N/A'}`);
+                this.logger.info(`Pricing updated for: ${card.name} - Price: $${enhancedInfo.marketPrice || enhancedInfo.tcgPrice || 'N/A'}`);
             } else {
                 this.logger.warn('No pricing data available for card:', card.name || card.id);
                 this._applyPricingData(card, {
@@ -962,9 +969,9 @@ export class SessionManager {
                     // Update the existing card with fresh pricing data
                     Object.assign(card, {
                         // Price information
-                        tcg_price: enhancedInfo.tcg_price,
-                        tcg_market_price: enhancedInfo.tcg_market_price,
-                        price: parseFloat(enhancedInfo.tcg_market_price || enhancedInfo.tcg_price || '0'),
+                        tcg_price: enhancedInfo.tcgPrice || enhancedInfo.lowPrice,
+                        tcg_market_price: enhancedInfo.marketPrice,
+                        price: parseFloat(enhancedInfo.marketPrice || enhancedInfo.tcgPrice || '0'),
                         
                         // Update pricing status
                         price_status: 'refreshed',
@@ -976,7 +983,7 @@ export class SessionManager {
                         scrape_success: enhancedInfo.scrape_success
                     });
                     
-                    this.logger.info(`Pricing refreshed for: ${card.name} - New TCG Low: $${enhancedInfo.tcg_price || 'N/A'}, New TCG Market: $${enhancedInfo.tcg_market_price || 'N/A'}`);
+                    this.logger.info(`Pricing refreshed for: ${card.name} - New TCG Low: $${enhancedInfo.tcgPrice || 'N/A'}, New TCG Market: $${enhancedInfo.marketPrice || 'N/A'}`);
                 } else {
                     this.logger.warn(`No enhanced pricing info available for: ${card.name}`);
                 }
@@ -1455,113 +1462,69 @@ export class SessionManager {
             
             this.logger.debug(`[VARIANT] Found ${matchingCards.length} cards with name: ${cardName}`);
             
-            // For each matching card, create variants based on card_sets array (like oldIteration.py)
+            // For each matching card, create variants (TCGcsv structure: each card is already a variant)
             for (const card of matchingCards) {
-                const cardSets = card.card_sets || [];
+                this.logger.debug(`[VARIANT] Processing card "${card.name}" with rarity: "${card.rarity}"`);
+                this.logger.debug(`[VARIANT] Card structure - name: "${card.name}", id: ${card.id}, rarity: "${card.rarity}"`);
                 
-                this.logger.debug(`[VARIANT] Processing card "${card.name}" with ${cardSets.length} card_sets entries`);
-                this.logger.debug(`[VARIANT] Card structure - name: "${card.name}", id: ${card.id}`);
+                // In TCGcsv structure, each card already has its rarity and set info directly
+                const rarity = card.rarity || 'Common'; // Default to Common if no rarity
+                const setCode = card.set_code || this.currentSet?.abbreviation || this.currentSet?.code || 'Unknown';
                 
-                // Log the actual card structure for debugging
-                if (cardSets.length > 0) {
-                    this.logger.debug(`[VARIANT] First card_set example:`, JSON.stringify(cardSets[0], null, 2));
-                    this.logger.debug(`[VARIANT] All card_sets:`, cardSets.map(cs => `${cs.set_rarity} [${cs.set_code}]`).join(', '));
-                } else {
-                    this.logger.debug(`[VARIANT] Card has no card_sets array. Skipping as per oldIteration.py logic.`);
+                // Filter out cards with invalid rarity
+                if (!rarity || 
+                    typeof rarity !== 'string' ||
+                    rarity.trim() === '' || 
+                    rarity.toLowerCase().trim() === 'unknown' ||
+                    rarity.toLowerCase().trim() === 'n/a' ||
+                    rarity.toLowerCase().trim() === 'undefined' ||
+                    rarity.toLowerCase().trim() === 'null') {
+                    this.logger.debug(`[VARIANT] Skipping card with invalid rarity: "${rarity}" for card: ${card.name}`);
+                    continue;
                 }
                 
-                // Only create variants from cards that have actual card_sets data (matching oldIteration.py logic)
-                if (cardSets.length > 0) {
-                    // Create a variant for each card_set entry (different rarities)
-                    for (const cardSet of cardSets) {
-                        // Add comprehensive debugging for this card_set entry
-                        this.logger.debug(`[VARIANT] Processing card_set entry for card: ${card.name}`, {
-                            set_rarity: cardSet.set_rarity,
-                            set_code: cardSet.set_code,
-                            set_name: cardSet.set_name,
-                            type_of_rarity: typeof cardSet.set_rarity,
-                            type_of_setcode: typeof cardSet.set_code,
-                            rarity_is_undefined: cardSet.set_rarity === undefined,
-                            rarity_is_null: cardSet.set_rarity === null,
-                            setcode_is_undefined: cardSet.set_code === undefined,
-                            setcode_is_null: cardSet.set_code === null
-                        });
-                        
-                        // Filter out card_sets entries with missing or invalid rarity
-                        if (cardSet.set_rarity === null || 
-                            cardSet.set_rarity === undefined || 
-                            typeof cardSet.set_rarity !== 'string' ||
-                            cardSet.set_rarity.trim() === '' || 
-                            cardSet.set_rarity.toLowerCase().trim() === 'unknown' ||
-                            cardSet.set_rarity.toLowerCase().trim() === 'n/a' ||
-                            cardSet.set_rarity.toLowerCase().trim() === 'undefined' ||
-                            cardSet.set_rarity.toLowerCase().trim() === 'null') {
-                            this.logger.debug(`[VARIANT] Skipping card_set with invalid rarity: "${cardSet.set_rarity}" (type: ${typeof cardSet.set_rarity}) for card: ${card.name}`);
-                            continue;
-                        }
-                        
-                        // Filter out card_sets entries with missing or invalid set code
-                        if (cardSet.set_code === null || 
-                            cardSet.set_code === undefined || 
-                            typeof cardSet.set_code !== 'string' ||
-                            cardSet.set_code.trim() === '' || 
-                            cardSet.set_code.toLowerCase().trim() === 'n/a' ||
-                            cardSet.set_code.toLowerCase().trim() === 'undefined' ||
-                            cardSet.set_code.toLowerCase().trim() === 'null') {
-                            this.logger.debug(`[VARIANT] Skipping card_set with invalid set_code: "${cardSet.set_code}" (type: ${typeof cardSet.set_code}) for card: ${card.name}`);
-                            continue;
-                        }
-                        
-                        // Only use verified valid values (no fallbacks)
-                        const rarity = cardSet.set_rarity;
-                        const setCode = cardSet.set_code;
-                        
-                        this.logger.debug(`[VARIANT] Processing valid card_set: rarity="${rarity}", setCode="${setCode}" for card: ${card.name}`);
-                        
-                        // Apply rarity filtering when extractedRarity is provided (like oldIteration.py)
-                        let confidence = match.confidence;
-                        if (extractedRarity) {
-                            const rarityScore = this.calculateRarityScore(extractedRarity, rarity);
-                            this.logger.debug(`[VARIANT] Rarity matching: "${extractedRarity}" vs "${rarity}" = ${rarityScore}%`);
-                            
-                            // Skip variants that don't match the extracted rarity well enough
-                            if (rarityScore < 20) {
-                                this.logger.debug(`[VARIANT] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
-                                continue;
-                            }
-                            
-                            // Use weighted confidence: 75% name + 25% rarity (like oldIteration.py)
-                            const nameScore = match.confidence;
-                            confidence = (nameScore * 0.75) + (rarityScore * 0.25);
-                            this.logger.debug(`[VARIANT] Weighted confidence: ${nameScore}% name + ${rarityScore}% rarity = ${confidence}%`);
-                        }
-                        
-                        const variantKey = `${card.name}_${rarity}_${setCode}`;
-                        
-                        // Check if we already added this exact variant
-                        if (!allVariants.some(v => v.variantKey === variantKey)) {
-                            this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}] (${confidence}%)`);
-                            const newVariant = {
-                                ...card,
-                                confidence: confidence,
-                                method: match.method,
-                                transcript: match.transcript,
-                                variantKey: variantKey,
-                                // Use the specific rarity and set info from this card_set
-                                displayRarity: rarity,
-                                setInfo: {
-                                    setCode: setCode,
-                                    setName: cardSet.set_name || this.currentSet.name
-                                }
-                            };
-                            this.logger.debug(`[VARIANT] Variant object displayRarity: "${newVariant.displayRarity}", setInfo:`, newVariant.setInfo);
-                            allVariants.push(newVariant);
-                        } else {
-                            this.logger.debug(`[VARIANT] Skipped duplicate variant: ${variantKey}`);
-                        }
+                this.logger.debug(`[VARIANT] Processing valid card: rarity="${rarity}", setCode="${setCode}" for card: ${card.name}`);
+                
+                // Apply rarity filtering when extractedRarity is provided
+                let confidence = match.confidence;
+                if (extractedRarity) {
+                    const rarityScore = this.calculateRarityScore(extractedRarity, rarity);
+                    this.logger.debug(`[VARIANT] Rarity matching: "${extractedRarity}" vs "${rarity}" = ${rarityScore}%`);
+                    
+                    // Skip variants that don't match the extracted rarity well enough
+                    if (rarityScore < 20) {
+                        this.logger.debug(`[VARIANT] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
+                        continue;
                     }
+                    
+                    // Use weighted confidence: 75% name + 25% rarity
+                    const nameScore = match.confidence;
+                    confidence = (nameScore * 0.75) + (rarityScore * 0.25);
+                    this.logger.debug(`[VARIANT] Weighted confidence: ${nameScore}% name + ${rarityScore}% rarity = ${confidence}%`);
+                }
+                
+                const variantKey = `${card.name}_${rarity}_${setCode}`;
+                
+                // Check if we already added this exact variant
+                if (!allVariants.some(v => v.variantKey === variantKey)) {
+                    this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}] (${confidence}%)`);
+                    const newVariant = {
+                        ...card,
+                        confidence: confidence,
+                        method: match.method,
+                        transcript: match.transcript,
+                        variantKey: variantKey,
+                        // Use the card's direct rarity and set info
+                        displayRarity: rarity,
+                        setInfo: {
+                            setCode: setCode,
+                            setName: this.currentSet?.name || 'Unknown Set'
+                        }
+                    };
+                    this.logger.debug(`[VARIANT] Variant object displayRarity: "${newVariant.displayRarity}", setInfo:`, newVariant.setInfo);
+                    allVariants.push(newVariant);
                 } else {
-                    this.logger.debug(`[VARIANT] Card "${card.name}" has no card_sets array. Skipping as per oldIteration.py logic.`);
+                    this.logger.debug(`[VARIANT] Skipped duplicate variant: ${variantKey}`);
                 }
             }
         }

@@ -684,7 +684,7 @@ class YGORipperApp {
         this.logger.info('Offering manual card input with suggestion:', suggestedName);
         
         // For now, just show a helpful toast
-        this.showToast('Try typing the card name manually in the search box.', 'info');
+        this.showToast('Card not found. Try speaking the card name again or select a different set.', 'info');
     }
 
     /**

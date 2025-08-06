@@ -4,7 +4,7 @@
 export const config = {
     // API URL - TCGcsv Implementation
     // Using TCGcsv as the sole data source (no MongoDB required)
-    API_URL: 'http://127.0.0.1:8082',
+    API_URL: 'http://127.0.0.1:8083',
     
     // Other configuration options
     APP_VERSION: '2.1.0',
