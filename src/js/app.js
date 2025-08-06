@@ -17,6 +17,7 @@ import { PermissionManager } from './voice/PermissionManager.js';
 import { SessionManager } from './session/SessionManager.js';
 import { PriceChecker } from './price/PriceChecker.js';
 import { UIManager } from './ui/UIManager.js';
+import { TrainingUI } from './ui/TrainingUI.js';
 import { Logger } from './utils/Logger.js';
 import { Storage } from './utils/Storage.js';
 
@@ -38,6 +39,7 @@ class YGORipperApp {
         this.sessionManager = new SessionManager();
         this.priceChecker = new PriceChecker();
         this.uiManager = new UIManager();
+        this.trainingUI = null; // Initialized after app setup
         
         // Application state
         this.isInitialized = false;
@@ -97,6 +99,9 @@ class YGORipperApp {
             
             // Initialize UI Manager with error boundary
             await this.safeInitializeUI();
+            
+            // Initialize Training UI
+            this.trainingUI = new TrainingUI(this, this.logger);
             
             this.updateLoadingProgress(40, 'Checking permissions...');
             
@@ -340,7 +345,9 @@ class YGORipperApp {
             // Pass enhanced results to SessionManager if available
             const enhancedResults = result.alternatives || null;
             this.safeProcessVoiceInput(result.transcript, enhancedResults).then(cards => {
-                if (cards.length > 0) {
+                this.logger.info(`Voice processing result: found ${cards ? cards.length : 0} cards for "${result.transcript}"`);
+                this.logger.debug('Cards array:', cards);
+                if (cards && cards.length > 0) {
                     // Sort cards by confidence for auto-confirm logic
                     const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
                     
@@ -350,6 +357,7 @@ class YGORipperApp {
                     this.safeHandleAutoConfirm(sortedCards, result.transcript);
                     
                 } else {
+                    this.logger.info(`No cards found for transcript: "${result.transcript}" - triggering training`);
                     this.showToast(`No cards recognized for: "${result.transcript}"`, 'warning');
                     
                     // Offer manual input as fallback
@@ -391,7 +399,9 @@ class YGORipperApp {
      */
     async safeProcessVoiceInput(transcript, enhancedResults = null) {
         try {
-            return await this.sessionManager.processVoiceInput(transcript, enhancedResults);
+            const result = await this.sessionManager.processVoiceInput(transcript, enhancedResults);
+            this.logger.debug(`safeProcessVoiceInput result for "${transcript}":`, result);
+            return result;
         } catch (error) {
             this.logger.error('Voice input processing failed:', error);
             
@@ -687,14 +697,18 @@ class YGORipperApp {
     }
 
     /**
-     * Offer manual card input as fallback
+     * Offer manual card input as fallback with training option
      */
     offerManualCardInput(suggestedName = '') {
-        // Implementation would show manual input dialog
         this.logger.info('Offering manual card input with suggestion:', suggestedName);
         
-        // For now, just show a helpful toast
-        this.showToast('Card not found. Try speaking the card name again or select a different set.', 'info');
+        // Show training button for failed voice recognition
+        if (this.trainingUI && suggestedName) {
+            this.trainingUI.showTrainingButton(suggestedName);
+        }
+        
+        // Also show helpful toast
+        this.showToast('Card not found. Try speaking the card name again or click "Train" to help improve recognition.', 'info');
     }
 
     /**
@@ -788,6 +802,7 @@ class YGORipperApp {
             voiceMaxAlternatives: 5,
             voiceContinuous: true,
             voiceInterimResults: true,
+            liveTranscript: true,
             autoExtractRarity: false,
             autoExtractArtVariant: false
         };
@@ -1024,6 +1039,10 @@ class YGORipperApp {
         if (this.voiceEngine) {
             this.voiceEngine.onResult((result) => {
                 this.handleVoiceResult(result);
+            });
+
+            this.voiceEngine.onInterimResult((result) => {
+                this.handleInterimVoiceResult(result);
             });
 
             this.voiceEngine.onStatusChange((status) => {
@@ -1416,7 +1435,16 @@ class YGORipperApp {
         
         // Show modal dialog for user to select card
         if (cards.length > 0) {
-            this.uiManager.showCardSelectionModal(cards, transcript, (selectedCard) => {
+            this.uiManager.showCardSelectionModal(cards, transcript, (selectedCard, originalTranscript) => {
+                // Check if user requested training
+                if (selectedCard === '__TRAIN_RECOGNITION__') {
+                    this.logger.info('User requested training for transcript:', originalTranscript);
+                    if (this.trainingUI) {
+                        this.trainingUI.showTrainingButton(originalTranscript);
+                    }
+                    return;
+                }
+                
                 if (selectedCard) {
                     // Record user selection for learning
                     if (this.voiceEngine) {
@@ -1551,6 +1579,52 @@ class YGORipperApp {
         }
         
         this.logger.error('Initialization error displayed:', error);
+    }
+
+    /**
+     * Clean up application resources
+     */
+    cleanup() {
+        try {
+            this.logger.info('Cleaning up application resources...');
+            
+            // Clean up TrainingUI
+            if (this.trainingUI) {
+                this.trainingUI.cleanup();
+                this.trainingUI = null;
+            }
+            
+            // Clean up voice engine
+            if (this.voiceEngine) {
+                this.voiceEngine.stopListening();
+            }
+            
+            // Clean up other components as needed
+            this.logger.info('Application cleanup completed');
+            
+        } catch (error) {
+            this.logger.error('Error during cleanup:', error);
+        }
+    }
+
+    /**
+     * Handle interim voice results (live transcript display)
+     */
+    handleInterimVoiceResult(result) {
+        // Update UI with live transcript
+        this.uiManager.updateLiveTranscript(result.transcript, result.confidence);
+    }
+
+    /**
+     * Test method to manually trigger training UI (for debugging)
+     */
+    testTrainingUI(voiceInput = "test card name") {
+        this.logger.info('Testing training UI with:', voiceInput);
+        if (this.trainingUI) {
+            this.trainingUI.showTrainingButton(voiceInput);
+        } else {
+            this.logger.error('TrainingUI not available for testing');
+        }
     }
 }
 

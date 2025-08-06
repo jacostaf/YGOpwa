@@ -1920,6 +1920,10 @@ export class UIManager {
                     ${cardOptions}
                 </div>
                 <div class="voice-dialog-actions">
+                    <button class="btn btn-accent" id="train-card-recognition">
+                        <span class="btn-icon">🎯</span>
+                        None of these - Train Recognition
+                    </button>
                     <button class="btn btn-secondary" id="cancel-card-selection">
                         <span class="btn-icon">✖️</span>
                         Cancel
@@ -1946,7 +1950,74 @@ export class UIManager {
             callback(null);
         });
 
+        // Add training button listener
+        modal.querySelector('#train-card-recognition')?.addEventListener('click', () => {
+            this.closeModal();
+            // Trigger training UI through a special callback
+            callback('__TRAIN_RECOGNITION__', transcript);
+        });
+
         this.showModal(modal);
+    }
+
+    /**
+     * Update live transcript display
+     */
+    updateLiveTranscript(transcript, confidence) {
+        // Check if live transcript is enabled in settings
+        const liveTranscriptEnabled = this.app?.settings?.liveTranscript !== false; // Default to true
+        
+        if (!liveTranscriptEnabled) {
+            // Hide display if setting is disabled
+            const liveDisplay = document.querySelector('.live-transcript');
+            if (liveDisplay) {
+                liveDisplay.style.display = 'none';
+            }
+            return;
+        }
+        
+        // Find or create live transcript display
+        let liveDisplay = document.querySelector('.live-transcript');
+        
+        if (!liveDisplay) {
+            // Create live transcript display
+            liveDisplay = document.createElement('div');
+            liveDisplay.className = 'live-transcript';
+            liveDisplay.innerHTML = `
+                <div class="live-transcript-header">
+                    <span class="live-icon">🎤</span>
+                    <span class="live-label">Live Transcript</span>
+                </div>
+                <div class="live-transcript-content">
+                    <div class="live-transcript-text"></div>
+                    <div class="live-confidence"></div>
+                </div>
+            `;
+            
+            // Add to voice status area or main container
+            const voiceStatus = document.querySelector('.voice-status') || document.body;
+            voiceStatus.appendChild(liveDisplay);
+        }
+        
+        // Update content
+        const textElement = liveDisplay.querySelector('.live-transcript-text');
+        const confidenceElement = liveDisplay.querySelector('.live-confidence');
+        
+        if (transcript && transcript.trim()) {
+            textElement.textContent = `"${transcript}"`;
+            confidenceElement.textContent = `${(confidence * 100).toFixed(1)}%`;
+            liveDisplay.style.display = 'block';
+            
+            // Auto-hide after 3 seconds of no updates
+            clearTimeout(this.liveTranscriptTimeout);
+            this.liveTranscriptTimeout = setTimeout(() => {
+                if (liveDisplay) {
+                    liveDisplay.style.display = 'none';
+                }
+            }, 3000);
+        } else {
+            liveDisplay.style.display = 'none';
+        }
     }
 
     /**
@@ -2007,6 +2078,14 @@ export class UIManager {
                         <label for="voice-interim-results">
                             <input type="checkbox" id="voice-interim-results" name="voiceInterimResults" checked>
                             Show Interim Results
+                        </label>
+                        <p class="setting-description">Enable real-time speech recognition feedback</p>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label for="live-transcript">
+                            <input type="checkbox" id="live-transcript" name="liveTranscript" checked>
+                            Live Transcript Display
                         </label>
                         <p class="setting-description">Show recognition results while speaking</p>
                     </div>

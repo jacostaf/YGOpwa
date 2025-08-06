@@ -9,7 +9,352 @@
  * - Virtual scrolling components
  * - Interactive animations
  * - Card image display and loading states
+ * - Voice training UI components
  */
+
+/* Voice Training UI Components */
+.voice-train-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  animation: slideInUp 0.3s ease-out;
+}
+
+.train-btn {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  padding: 12px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.train-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, var(--color-accent-light) 0%, var(--color-accent) 100%);
+}
+
+.train-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.train-icon {
+  font-size: 1.1rem;
+}
+
+.training-modal-overlay {
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.training-modal {
+  max-width: 600px;
+  width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--color-background);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.training-modal .modal-header {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: white;
+  padding: var(--spacing-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+}
+
+.training-modal .modal-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.training-modal .modal-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+
+.training-modal .modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.training-modal .modal-body {
+  padding: var(--spacing-xl);
+}
+
+.training-intro {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.training-intro p {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+.voice-input-display {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.voice-transcript {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.card-search-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.card-search-section label {
+  display: block;
+  margin-bottom: var(--spacing-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.search-input-group {
+  position: relative;
+  margin-bottom: var(--spacing-md);
+}
+
+.card-search-input {
+  width: 100%;
+  padding: 12px 40px 12px 16px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.card-search-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.1);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: color 0.2s;
+}
+
+.search-clear-btn:hover {
+  color: var(--color-text);
+  background: var(--color-border);
+}
+
+.search-results-container {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-surface);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.search-results-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background: var(--color-background);
+}
+
+.search-result-item.selected {
+  background: rgba(var(--color-accent-rgb), 0.1);
+  border-left: 4px solid var(--color-accent);
+}
+
+.card-info {
+  flex: 1;
+}
+
+.card-name {
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.card-details {
+  display: flex;
+  gap: var(--spacing-sm);
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
+.card-set {
+  background: var(--color-accent);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.card-type {
+  background: var(--color-surface-light);
+  color: var(--color-text-secondary);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.select-card-btn {
+  background: var(--color-accent);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.select-card-btn:hover {
+  background: var(--color-accent-dark);
+}
+
+.search-loading, .search-error, .no-results {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--color-text-secondary);
+}
+
+.search-error {
+  color: var(--color-error);
+}
+
+.training-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.training-progress, .training-success, .training-error {
+  text-align: center;
+  padding: var(--spacing-xl);
+}
+
+.progress-icon, .success-icon, .error-icon {
+  font-size: 3rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.success-icon {
+  color: var(--color-success);
+}
+
+.error-icon {
+  color: var(--color-error);
+}
+
+.training-progress h4, .training-success h4, .training-error h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--color-text);
+}
+
+.training-progress p, .training-success p, .training-error p {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--color-border);
+  border-top: 4px solid var(--color-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: var(--spacing-lg) auto;
+}
+
+.error-details {
+  font-size: 0.9rem;
+  background: var(--color-surface);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius);
+  border-left: 4px solid var(--color-error);
+  margin-bottom: var(--spacing-lg);
+}
+
+/* Animations */
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 
 /* Enhanced Price Results Display (matching oldIteration.py format) */
 .price-results-enhanced {
@@ -2385,5 +2730,133 @@
   .source-header,
   .source-data {
     padding: var(--spacing-sm);
+  }
+}
+
+/* Voice Card Selection Modal Enhancements */
+.voice-dialog-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.voice-dialog-actions .btn-accent {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: white;
+  border: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.voice-dialog-actions .btn-accent:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--color-accent-rgb), 0.3);
+}
+
+.voice-dialog-actions .btn-accent .btn-icon {
+  margin-right: 6px;
+}
+
+@media (max-width: 480px) {
+  .voice-dialog-actions {
+    flex-direction: column;
+  }
+  
+  .voice-dialog-actions .btn {
+    width: 100%;
+  }
+}
+
+
+/* Live Transcript Display */
+.live-transcript {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md);
+  min-width: 300px;
+  max-width: 400px;
+  z-index: 1500;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  border: 2px solid var(--color-accent);
+  display: none;
+  animation: slideInFromTop 0.3s ease-out;
+}
+
+.live-transcript-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.live-icon {
+  font-size: 1.1rem;
+  animation: pulse 1.5s infinite;
+}
+
+.live-label {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.live-transcript-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.live-transcript-text {
+  font-family: monospace;
+  font-size: 1rem;
+  color: white;
+  word-break: break-word;
+  line-height: 1.4;
+  min-height: 1.4em;
+}
+
+.live-confidence {
+  font-size: 0.8rem;
+  color: var(--color-accent);
+  font-weight: 600;
+  text-align: right;
+}
+
+@keyframes slideInFromTop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 1; 
+  }
+  50% { 
+    opacity: 0.5; 
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .live-transcript {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    min-width: auto;
+    max-width: none;
   }
 }

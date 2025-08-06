@@ -43,7 +43,7 @@ export class VoiceEngine {
         this.config = {
             language: 'en-US',
             continuous: false, // Better for macOS/iOS
-            interimResults: false,
+            interimResults: true, // Enable interim results for live display
             maxAlternatives: 10, // Increased for better fantasy name alternatives
             timeout: 10000,
             retryAttempts: 3,
@@ -64,7 +64,8 @@ export class VoiceEngine {
             result: [],
             error: [],
             statusChange: [],
-            permissionChange: []
+            permissionChange: [],
+            interimResult: []
         };
         
         // Recognition state
@@ -306,19 +307,21 @@ export class VoiceEngine {
                 
                 // Auto-restart if user wants continuous listening and not manually stopped
                 if (this.shouldKeepListening && !this.isPaused && this.isInitialized) {
+                    // Give more time for result processing and training UI to appear
                     setTimeout(() => {
                         if (this.shouldKeepListening && !this.isPaused) {
                             this.startListening().catch((error) => {
                                 this.logger.warn('Failed to restart recognition:', error);
                             });
                         }
-                    }, 100);
+                    }, 2000); // Increased from 100ms to 2000ms
                 } else {
                     this.emitStatusChange('ready');
                 }
             };
             
             recognition.onresult = (event) => {
+                console.log('🎯 RAW VOICE RESULT DETECTED:', event);
                 this.handleRecognitionResult(event, 'webspeech');
             };
             
@@ -514,9 +517,25 @@ export class VoiceEngine {
      * Handle recognition result
      */
     async handleRecognitionResult(event, engineType) {
+        console.log('🔍 HANDLE RECOGNITION RESULT CALLED');
         try {
             const results = Array.from(event.results);
             const lastResult = results[results.length - 1];
+            
+            // Always log what's being heard for debugging
+            const transcript = lastResult[0].transcript;
+            const confidence = lastResult[0].confidence || 0;
+            
+            if (!lastResult.isFinal) {
+                // Show interim results (what's being heard in real-time)
+                this.logger.info(`[LIVE] Hearing: "${transcript}" (interim, ${(confidence * 100).toFixed(1)}%)`);
+                this.emitInterimResult(transcript, confidence);
+                return;
+            } else {
+                // Show final results
+                console.log('🎯 FINAL RESULT DETECTED:', transcript, 'confidence:', confidence);
+                this.logger.info(`[FINAL] Heard: "${transcript}" (final, ${(confidence * 100).toFixed(1)}%)`);
+            }
             
             if (!lastResult.isFinal && !this.config.interimResults) {
                 return;
@@ -528,13 +547,17 @@ export class VoiceEngine {
             }));
             
             // Apply enhanced fantasy name processing
+            console.log('📝 About to enhance results:', alternatives);
             const enhancedResults = await this.enhanceRecognitionResults(alternatives, engineType);
+            console.log('✨ Enhanced results:', enhancedResults);
             
             if (enhancedResults.length === 0) {
+                console.log('❌ NO ENHANCED RESULTS - EXITING EARLY');
                 this.logger.warn('No valid recognition results after enhancement');
                 return;
             }
             
+            console.log('✅ CONTINUING WITH ENHANCED RESULTS');
             // Select best enhanced result
             const bestResult = enhancedResults[0];
             
@@ -556,7 +579,9 @@ export class VoiceEngine {
             this.recognitionAttempts = 0; // Reset retry counter on success
             
             this.logger.info('Voice recognition result:', result);
+            console.log('🚀 ABOUT TO EMIT RESULT:', result.transcript);
             this.emitResult(result);
+            console.log('✅ RESULT EMITTED');
             
         } catch (error) {
             this.logger.error('Error processing recognition result:', error);
@@ -686,6 +711,7 @@ export class VoiceEngine {
             
             // Specific problematic cards
             { pattern: /mulch?army\s*me[ao]wls?/gi, replacement: 'Mulcharmy Meowls' },
+            { pattern: /mulch?army\s*p[ue]r[uo]lia/gi, replacement: 'Mulcharmy Purulia' },
             { pattern: /futsu\s*no\s*mitama\s*no\s*mitsurugi/gi, replacement: 'Futsu no Mitama no Mitsurugi' },
             { pattern: /blue\s*[ie]y?e[ds]?\s*white\s*drag[ou]n/gi, replacement: 'Blue-Eyes White Dragon' },
             { pattern: /dark\s*mag?i[sc]h?i[ea]n/gi, replacement: 'Dark Magician' },
@@ -815,9 +841,19 @@ export class VoiceEngine {
             }
 
             // Step 5: Filter by adaptive thresholds and sort by confidence
+            console.log('🎯 BEFORE FILTERING:', finalResults.map(r => ({
+                transcript: r.transcript,
+                confidence: r.confidence,
+                adaptiveThreshold: r.adaptiveThreshold,
+                isAboveThreshold: r.isAboveThreshold
+            })));
+            
+            // Allow low-confidence results for training - don't filter out everything
             const validResults = finalResults
-                .filter(result => result.isAboveThreshold)
+                .filter(result => result.isAboveThreshold || result.confidence > 0.1) // Keep anything above 10% for training
                 .sort((a, b) => b.confidence - a.confidence);
+            
+            console.log('🎯 AFTER FILTERING:', validResults.length, 'valid results');
 
             this.logger.debug(`Enhanced recognition: ${alternatives.length} → ${validResults.length} valid results`);
 
@@ -1268,12 +1304,26 @@ export class VoiceEngine {
         this.listeners.permissionChange.push(callback);
     }
 
+    onInterimResult(callback) {
+        this.listeners.interimResult.push(callback);
+    }
+
     emitResult(result) {
         this.listeners.result.forEach(callback => {
             try {
                 callback(result);
             } catch (error) {
                 this.logger.error('Error in result callback:', error);
+            }
+        });
+    }
+
+    emitInterimResult(transcript, confidence) {
+        this.listeners.interimResult.forEach(callback => {
+            try {
+                callback({ transcript, confidence, interim: true });
+            } catch (error) {
+                this.logger.error('Error in interim result callback:', error);
             }
         });
     }

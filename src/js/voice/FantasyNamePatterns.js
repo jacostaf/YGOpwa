@@ -191,6 +191,7 @@ export const FANTASY_NAME_PATTERNS = {
         // Modern meta cards
         'ash\\s*blossom|ash\\s*blosom|ash\\s*blosm': 'ash blossom & joyous spring',
         'effect\\s*veiler|efect\\s*veilr|efekt\\s*veiler': 'effect veiler',
+        'mulcharmy\\s*purulia|mulcharmie\\s*purulia|mulcharmi\\s*purulia|mulcharmy\\s*perolia|mulcharmy\\s*purolia': 'mulcharmy purulia',
         'maxx\\s*c|max\\s*c|maks\\s*c': 'maxx "c"',
         'infinite\\s*impermanence|infinit\\s*impermanenc|infinite\\s*imperminence': 'infinite impermanence',
         'called\\s*by\\s*the\\s*grave|cald\\s*by\\s*the\\s*grav': 'called by the grave',

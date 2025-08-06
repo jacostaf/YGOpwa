@@ -416,7 +416,14 @@ export class AdaptiveConfidenceManager {
             }
             
             const setData = this.contextFactors.setPopularity.get(setCode);
-            setData.push(record.wasCorrect ? 1 : 0);
+            if (!Array.isArray(setData)) {
+                console.warn('setData is not an array:', setData, 'for setCode:', setCode);
+                this.contextFactors.setPopularity.set(setCode, []);
+                const fixedSetData = this.contextFactors.setPopularity.get(setCode);
+                fixedSetData.push(record.wasCorrect ? 1 : 0);
+            } else {
+                setData.push(record.wasCorrect ? 1 : 0);
+            }
             
             // Keep only recent data (last 20 interactions per set)
             if (setData.length > 20) {

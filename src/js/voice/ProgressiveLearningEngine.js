@@ -273,25 +273,42 @@ export class ProgressiveLearningEngine {
      * @private
      */
     calculatePronunciationBoost(voiceInput, cardName) {
-        const key = this.createPatternKey(voiceInput, cardName);
-        const pattern = this.userPatterns.get(key);
-        
-        if (pattern && pattern.successRate > this.config.confidenceThreshold) {
-            // Strong boost for highly successful patterns
-            const boost = 0.1 * pattern.successRate * (pattern.reinforcements / 10);
-            return Math.min(0.2, boost); // Cap at 0.2
-        }
-        
-        // Check for partial matches in personalized rules
+        // NEW LOGIC: Look for stored patterns where voice input matches, then boost target cards
         let maxBoost = 0;
-        for (const [ruleKey, rule] of this.personalizedRules) {
-            if (voiceInput.includes(rule.voicePattern) && cardName.toLowerCase().includes(rule.targetPattern)) {
-                const boost = rule.strength * 0.05;
-                maxBoost = Math.max(maxBoost, boost);
+        const voiceInputLower = voiceInput.toLowerCase().trim();
+        const cardNameLower = cardName.toLowerCase().trim();
+        
+        // Search through all stored patterns for matching voice input
+        for (const [patternKey, pattern] of this.userPatterns) {
+            if (pattern.voiceInput.toLowerCase().trim() === voiceInputLower) {
+                // Found a pattern where voice input matches - check if this card matches the target
+                const targetCardLower = pattern.targetCard.toLowerCase().trim();
+                
+                // Check for exact match or partial match with target card
+                if (cardNameLower === targetCardLower || 
+                    cardNameLower.includes(targetCardLower) || 
+                    targetCardLower.includes(cardNameLower)) {
+                    
+                    if (pattern.successRate > this.config.confidenceThreshold) {
+                        // Strong boost for highly successful patterns
+                        const boost = 0.15 * pattern.successRate * (pattern.reinforcements / 10);
+                        maxBoost = Math.max(maxBoost, Math.min(0.25, boost)); // Cap at 0.25
+                        
+                        console.log(`🎯 TRAINING APPLIED: "${voiceInput}" → "${pattern.targetCard}" boosted "${cardName}" by ${boost.toFixed(3)}`);
+                    }
+                }
             }
         }
         
-        return Math.min(0.1, maxBoost);
+        // Check for partial matches in personalized rules (keep existing logic)
+        for (const [ruleKey, rule] of this.personalizedRules) {
+            if (voiceInput.includes(rule.voicePattern) && cardNameLower.includes(rule.targetPattern)) {
+                const boost = rule.strength * 0.05;
+                maxBoost = Math.max(maxBoost, Math.min(0.1, boost));
+            }
+        }
+        
+        return maxBoost;
     }
     
     /**
