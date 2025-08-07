@@ -44,6 +44,7 @@ export class UIManager {
         // UI state
         this.currentTab = 'pack-ripper'; // Changed to make pack-ripper the default tab
         this.currentVerticalTab = 'voice-recognition'; // Default vertical sub-tab
+        this.isVerticalTabsExpanded = false; // Track sidebar expansion state
         this.isLoading = false;
         this.toasts = [];
         this.modals = [];
@@ -51,12 +52,33 @@ export class UIManager {
         this.cardSize = 120;
         this.currentPopup = null;
         
+        // Auto-scroll state management
+        this.lastUserScrollTime = null;
+        this.autoScrollTimeout = null;
+        this.userScrollThrottle = null;
+        
+        // Floating elements collision detection
+        this.floatingElements = new Map();
+        this.collisionCheckInterval = null;
+        
+        // IntersectionObserver for lazy loading and performance
+        this.lazyLoadObserver = null;
+        this.visibilityObserver = null;
+        this.observedElements = new WeakMap();
+        
         // Configuration
         this.config = {
             toastDuration: 5000,
             animationDuration: 300,
-            debounceDelay: 300
+            debounceDelay: 300,
+            batchUpdateDelay: 16, // ~60fps frame time
+            maxBatchSize: 50 // Maximum DOM updates per batch
         };
+        
+        // DOM batching system
+        this.pendingDOMUpdates = [];
+        this.domBatchTimer = null;
+        this.isProcessingBatch = false;
         
         this.logger.info('UIManager initialized');
     }
@@ -84,6 +106,9 @@ export class UIManager {
             // Set up responsive design
             this.setupResponsive();
             
+            // Set up IntersectionObservers for performance
+            this.setupIntersectionObservers();
+            
             this.logger.info('UI manager initialized successfully');
             return true;
             
@@ -108,6 +133,8 @@ export class UIManager {
         // Vertical tabs (sub-tabs under pack ripper)
         this.elements.verticalTabBtns = document.querySelectorAll('.vertical-tab-btn');
         this.elements.verticalTabPanels = document.querySelectorAll('.vertical-tab-panel');
+        this.elements.verticalTabsToggle = document.querySelector('.vertical-tabs-toggle');
+        this.elements.verticalTabsNav = document.querySelector('.vertical-tabs-nav');
         
         // Price checker elements
         this.elements.priceForm = document.getElementById('price-form');
@@ -201,6 +228,13 @@ export class UIManager {
                 this.switchVerticalTab(subtabId);
             });
         });
+
+        // Vertical tabs toggle button
+        if (this.elements.verticalTabsToggle) {
+            this.elements.verticalTabsToggle.addEventListener('click', () => {
+                this.toggleVerticalTabsExpansion();
+            });
+        }
 
         // Price checker form
         if (this.elements.priceForm) {
@@ -365,6 +399,11 @@ export class UIManager {
             this.handleResize();
         }, this.config.debounceDelay));
 
+        // User scroll detection for smart auto-scroll
+        window.addEventListener('scroll', this.throttle(() => {
+            this.handleUserScroll();
+        }, 100), { passive: true });
+
         this.logger.debug('Event listeners set up successfully');
     }
 
@@ -374,6 +413,24 @@ export class UIManager {
     initializeComponents() {
         // Set initial tab
         this.switchTab(this.currentTab);
+        
+        // Restore vertical tabs preference
+        try {
+            const savedExpanded = localStorage.getItem('verticalTabsExpanded');
+            if (savedExpanded === 'true') {
+                this.isVerticalTabsExpanded = true;
+                if (this.elements.verticalTabsNav) {
+                    this.elements.verticalTabsNav.classList.add('expanded');
+                }
+                if (this.elements.verticalTabsToggle) {
+                    this.elements.verticalTabsToggle.setAttribute('aria-expanded', 'true');
+                    // Don't show pulse animation if user has already interacted
+                    this.elements.verticalTabsToggle.style.animation = 'none';
+                }
+            }
+        } catch (error) {
+            this.logger.warn('Failed to restore vertical tabs preference', error);
+        }
         
         // Initialize tooltips
         this.initializeTooltips();
@@ -482,6 +539,33 @@ export class UIManager {
         
         this.currentVerticalTab = subtabId;
         this.logger.debug(`Switched to vertical sub-tab: ${subtabId}`);
+    }
+
+    /**
+     * Toggle vertical tabs sidebar expansion
+     */
+    toggleVerticalTabsExpansion() {
+        this.isVerticalTabsExpanded = !this.isVerticalTabsExpanded;
+        
+        if (this.elements.verticalTabsNav) {
+            this.elements.verticalTabsNav.classList.toggle('expanded', this.isVerticalTabsExpanded);
+        }
+        
+        // Update ARIA expanded state for accessibility
+        if (this.elements.verticalTabsToggle) {
+            this.elements.verticalTabsToggle.setAttribute('aria-expanded', this.isVerticalTabsExpanded);
+            // Stop the pulse animation after first interaction
+            this.elements.verticalTabsToggle.style.animation = 'none';
+        }
+        
+        // Save preference to localStorage
+        try {
+            localStorage.setItem('verticalTabsExpanded', this.isVerticalTabsExpanded);
+        } catch (error) {
+            this.logger.warn('Failed to save vertical tabs preference', error);
+        }
+        
+        this.logger.debug(`Vertical tabs ${this.isVerticalTabsExpanded ? 'expanded' : 'collapsed'}`);
     }
 
     /**
@@ -1709,13 +1793,25 @@ export class UIManager {
         
         if (shouldShow) {
             this.elements.floatingVoiceSubmenu.classList.remove('hidden');
+            
+            // Register for collision detection with medium priority
+            this.registerFloatingElement('floating-voice-submenu', this.elements.floatingVoiceSubmenu, {
+                priority: 2,
+                fallbackPositions: [
+                    { bottom: 80, right: 20 }, // Higher up on right
+                    { bottom: 20, left: 20 }, // Bottom left
+                    { top: 20, right: 60 }, // Top right, offset from edge
+                ],
+                margin: 10
+            });
         } else {
             this.elements.floatingVoiceSubmenu.classList.add('hidden');
+            this.unregisterFloatingElement('floating-voice-submenu');
         }
     }
 
     /**
-     * Scroll to newest card in session (contextual autoscrolling)
+     * Scroll to newest card in session with smart debouncing and user intent detection
      */
     scrollToNewestCard() {
         if (!this.elements.sessionCards) return;
@@ -1726,11 +1822,41 @@ export class UIManager {
         
         if (!isPackRipperTab || !isVoiceActive) return;
         
+        // Check if user has scrolled recently (within last 3 seconds)
+        const now = Date.now();
+        if (this.lastUserScrollTime && (now - this.lastUserScrollTime) < 3000) {
+            this.logger.debug('Skipping auto-scroll: user scrolled recently');
+            return;
+        }
+        
+        // Debounce auto-scroll calls to prevent excessive scrolling
+        if (this.autoScrollTimeout) {
+            clearTimeout(this.autoScrollTimeout);
+        }
+        
+        this.autoScrollTimeout = setTimeout(() => {
+            this.performAutoScroll();
+        }, 500); // 500ms debounce delay
+    }
+
+    /**
+     * Perform the actual auto-scroll operation
+     * @private
+     */
+    performAutoScroll() {
+        if (!this.elements.sessionCards) return;
+        
         // Find the last added card (newest)
         const sessionCards = this.elements.sessionCards.querySelectorAll('.session-card');
         if (sessionCards.length === 0) return;
         
         const newestCard = sessionCards[sessionCards.length - 1];
+        
+        // Check if the newest card is already visible
+        if (this.isElementInViewport(newestCard)) {
+            this.logger.debug('Newest card already visible, skipping auto-scroll');
+            return;
+        }
         
         // Smooth scroll to the newest card with some offset for better visibility
         try {
@@ -1739,9 +1865,12 @@ export class UIManager {
                 block: 'center',
                 inline: 'nearest'
             });
+            
+            this.logger.debug('Auto-scrolled to newest card');
         } catch (error) {
             // Fallback for older browsers
             newestCard.scrollIntoView();
+            this.logger.warn('Used fallback scrollIntoView', error);
         }
         
         // Add a brief highlight effect to the newest card
@@ -1749,6 +1878,20 @@ export class UIManager {
         setTimeout(() => {
             newestCard.classList.remove('newly-added');
         }, 2000);
+    }
+
+    /**
+     * Check if an element is in the viewport
+     * @private
+     */
+    isElementInViewport(element) {
+        const rect = element.getBoundingClientRect();
+        return (
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+        );
     }
 
     /**
@@ -2120,15 +2263,28 @@ export class UIManager {
             confidenceElement.textContent = `${(confidence * 100).toFixed(1)}%`;
             liveDisplay.style.display = 'block';
             
+            // Register for collision detection with high priority
+            this.registerFloatingElement('live-transcript', liveDisplay, {
+                priority: 3,
+                fallbackPositions: [
+                    { top: 20, left: 20 }, // Top left fallback
+                    { top: 60, right: 20 }, // Slightly lower top right
+                    { top: 100, right: 20 } // Even lower top right
+                ],
+                margin: 15
+            });
+            
             // Auto-hide after 3 seconds of no updates
             clearTimeout(this.liveTranscriptTimeout);
             this.liveTranscriptTimeout = setTimeout(() => {
                 if (liveDisplay) {
                     liveDisplay.style.display = 'none';
+                    this.unregisterFloatingElement('live-transcript');
                 }
             }, 3000);
         } else {
             liveDisplay.style.display = 'none';
+            this.unregisterFloatingElement('live-transcript');
         }
     }
 
@@ -2737,6 +2893,663 @@ export class UIManager {
                 this.logger.error('Error in session import callback:', error);
             }
         });
+    }
+
+    /**
+     * Handle user scroll activity for smart auto-scroll
+     * @private
+     */
+    handleUserScroll() {
+        this.lastUserScrollTime = Date.now();
+    }
+
+    /**
+     * Throttle function to limit how often a function can be called
+     * @private
+     */
+    throttle(func, delay) {
+        let timeoutId;
+        let lastExecTime = 0;
+        
+        return function (...args) {
+            const currentTime = Date.now();
+            
+            if (currentTime - lastExecTime > delay) {
+                func.apply(this, args);
+                lastExecTime = currentTime;
+            } else {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    func.apply(this, args);
+                    lastExecTime = Date.now();
+                }, delay - (currentTime - lastExecTime));
+            }
+        };
+    }
+
+    /**
+     * Debounce function to delay execution until after a pause
+     * @private
+     */
+    debounce(func, delay) {
+        let timeoutId;
+        
+        return function (...args) {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
+    /**
+     * Register a floating element for collision detection
+     * @param {string} id - Unique identifier for the element
+     * @param {HTMLElement} element - The DOM element
+     * @param {Object} options - Options for positioning and priority
+     */
+    registerFloatingElement(id, element, options = {}) {
+        const defaultOptions = {
+            priority: 1, // Higher number = higher priority (stays in place)
+            fallbackPositions: [], // Alternative positions if collision detected
+            allowOverflow: false, // Whether element can go outside viewport
+            margin: 10 // Minimum distance from other elements
+        };
+
+        this.floatingElements.set(id, {
+            element,
+            options: { ...defaultOptions, ...options },
+            lastPosition: null
+        });
+
+        // Start collision checking if this is the first element
+        if (this.floatingElements.size === 1) {
+            this.startCollisionDetection();
+        }
+
+        this.logger.debug(`Registered floating element: ${id}`);
+    }
+
+    /**
+     * Unregister a floating element
+     * @param {string} id - Element identifier
+     */
+    unregisterFloatingElement(id) {
+        this.floatingElements.delete(id);
+        
+        // Stop collision checking if no elements remain
+        if (this.floatingElements.size === 0) {
+            this.stopCollisionDetection();
+        }
+
+        this.logger.debug(`Unregistered floating element: ${id}`);
+    }
+
+    /**
+     * Start periodic collision detection
+     * @private
+     */
+    startCollisionDetection() {
+        if (this.collisionCheckInterval) return;
+
+        this.collisionCheckInterval = setInterval(() => {
+            this.checkAndResolveCollisions();
+        }, 500); // Check every 500ms
+
+        this.logger.debug('Started collision detection');
+    }
+
+    /**
+     * Stop collision detection
+     * @private
+     */
+    stopCollisionDetection() {
+        if (this.collisionCheckInterval) {
+            clearInterval(this.collisionCheckInterval);
+            this.collisionCheckInterval = null;
+        }
+
+        this.logger.debug('Stopped collision detection');
+    }
+
+    /**
+     * Check for collisions and resolve them
+     * @private
+     */
+    checkAndResolveCollisions() {
+        const elements = Array.from(this.floatingElements.entries());
+        const visibleElements = elements.filter(([id, data]) => {
+            return data.element && 
+                   !data.element.classList.contains('hidden') && 
+                   data.element.style.display !== 'none';
+        });
+
+        // Sort by priority (higher priority elements get processed first)
+        visibleElements.sort((a, b) => b[1].options.priority - a[1].options.priority);
+
+        const occupiedRects = [];
+
+        for (const [id, data] of visibleElements) {
+            const rect = data.element.getBoundingClientRect();
+            
+            // Check for collisions with already positioned elements
+            const hasCollision = occupiedRects.some(occupiedRect => 
+                this.rectsCollide(rect, occupiedRect, data.options.margin)
+            );
+
+            if (hasCollision) {
+                this.resolveCollision(id, data, occupiedRects);
+                // Update rect after repositioning
+                const newRect = data.element.getBoundingClientRect();
+                occupiedRects.push(newRect);
+            } else {
+                occupiedRects.push(rect);
+            }
+        }
+    }
+
+    /**
+     * Check if two rectangles collide with margin
+     * @private
+     */
+    rectsCollide(rect1, rect2, margin = 0) {
+        return !(rect1.right + margin < rect2.left || 
+                rect2.right + margin < rect1.left || 
+                rect1.bottom + margin < rect2.top || 
+                rect2.bottom + margin < rect1.top);
+    }
+
+    /**
+     * Resolve collision for a specific element
+     * @private
+     */
+    resolveCollision(id, elementData, occupiedRects) {
+        const { element, options } = elementData;
+        const originalRect = element.getBoundingClientRect();
+
+        // Try fallback positions
+        for (const fallbackPosition of options.fallbackPositions) {
+            this.applyPosition(element, fallbackPosition);
+            const testRect = element.getBoundingClientRect();
+            
+            // Check if this position resolves the collision
+            const hasCollision = occupiedRects.some(occupiedRect => 
+                this.rectsCollide(testRect, occupiedRect, options.margin)
+            );
+
+            const inViewport = this.isRectInViewport(testRect) || options.allowOverflow;
+
+            if (!hasCollision && inViewport) {
+                this.logger.debug(`Resolved collision for ${id} using fallback position`);
+                return;
+            }
+        }
+
+        // If no fallback worked, try dynamic positioning
+        const dynamicPosition = this.findDynamicPosition(originalRect, occupiedRects, options);
+        if (dynamicPosition) {
+            this.applyPosition(element, dynamicPosition);
+            this.logger.debug(`Resolved collision for ${id} using dynamic position`);
+        } else {
+            // Restore original position as last resort
+            this.applyPosition(element, this.getElementPosition(element));
+            this.logger.warn(`Could not resolve collision for ${id}, keeping original position`);
+        }
+    }
+
+    /**
+     * Apply position to element
+     * @private
+     */
+    applyPosition(element, position) {
+        if (position.top !== undefined) element.style.top = position.top + 'px';
+        if (position.bottom !== undefined) element.style.bottom = position.bottom + 'px';
+        if (position.left !== undefined) element.style.left = position.left + 'px';
+        if (position.right !== undefined) element.style.right = position.right + 'px';
+    }
+
+    /**
+     * Get current position of element
+     * @private
+     */
+    getElementPosition(element) {
+        const style = getComputedStyle(element);
+        return {
+            top: parseFloat(style.top) || undefined,
+            bottom: parseFloat(style.bottom) || undefined,
+            left: parseFloat(style.left) || undefined,
+            right: parseFloat(style.right) || undefined
+        };
+    }
+
+    /**
+     * Check if rectangle is within viewport
+     * @private
+     */
+    isRectInViewport(rect) {
+        return rect.top >= 0 && 
+               rect.left >= 0 && 
+               rect.bottom <= window.innerHeight && 
+               rect.right <= window.innerWidth;
+    }
+
+    /**
+     * Set up IntersectionObservers for performance optimization
+     * @private
+     */
+    setupIntersectionObservers() {
+        // Skip if browser doesn't support IntersectionObserver
+        if (!window.IntersectionObserver) {
+            this.logger.warn('IntersectionObserver not supported');
+            return;
+        }
+
+        // Set up lazy loading observer for images
+        this.setupLazyLoadObserver();
+        
+        // Set up visibility observer for animations
+        this.setupVisibilityObserver();
+        
+        this.logger.debug('IntersectionObservers set up successfully');
+    }
+
+    /**
+     * Set up lazy loading observer for images and cards
+     * @private
+     */
+    setupLazyLoadObserver() {
+        const options = {
+            root: null,
+            rootMargin: '50px',
+            threshold: 0.01
+        };
+
+        this.lazyLoadObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const element = entry.target;
+                    
+                    // Handle lazy loading for images
+                    if (element.tagName === 'IMG' && element.dataset.src) {
+                        this.loadLazyImage(element);
+                    }
+                    
+                    // Handle lazy rendering for session cards
+                    if (element.classList.contains('session-card') && element.dataset.lazy) {
+                        this.renderLazyCard(element);
+                    }
+                    
+                    // Unobserve after loading
+                    this.lazyLoadObserver.unobserve(element);
+                }
+            });
+        }, options);
+    }
+
+    /**
+     * Set up visibility observer for animations and heavy operations
+     * @private
+     */
+    setupVisibilityObserver() {
+        const options = {
+            root: null,
+            rootMargin: '0px',
+            threshold: [0, 0.5, 1]
+        };
+
+        this.visibilityObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const element = entry.target;
+                const isVisible = entry.isIntersecting;
+                const visibilityRatio = entry.intersectionRatio;
+                
+                // Store visibility state
+                this.observedElements.set(element, {
+                    isVisible,
+                    visibilityRatio,
+                    lastUpdate: Date.now()
+                });
+                
+                // Pause/resume animations based on visibility
+                if (element.classList.contains('animated')) {
+                    if (isVisible && visibilityRatio > 0.5) {
+                        element.style.animationPlayState = 'running';
+                    } else {
+                        element.style.animationPlayState = 'paused';
+                    }
+                }
+                
+                // Trigger custom visibility events
+                if (isVisible && visibilityRatio > 0.5) {
+                    this.handleElementVisible(element);
+                } else if (!isVisible) {
+                    this.handleElementHidden(element);
+                }
+            });
+        }, options);
+    }
+
+    /**
+     * Load lazy image
+     * @private
+     */
+    loadLazyImage(img) {
+        const src = img.dataset.src;
+        if (!src) return;
+        
+        // Create a new image to preload
+        const tempImg = new Image();
+        tempImg.onload = () => {
+            img.src = src;
+            img.classList.add('loaded');
+            delete img.dataset.src;
+        };
+        tempImg.onerror = () => {
+            img.classList.add('error');
+            this.logger.warn(`Failed to load image: ${src}`);
+        };
+        tempImg.src = src;
+    }
+
+    /**
+     * Render lazy card content
+     * @private
+     */
+    renderLazyCard(card) {
+        const cardData = card.dataset.cardData;
+        if (!cardData) return;
+        
+        try {
+            const data = JSON.parse(cardData);
+            // Render full card content here
+            this.renderSessionCardContent(card, data);
+            delete card.dataset.lazy;
+            delete card.dataset.cardData;
+        } catch (error) {
+            this.logger.error('Failed to render lazy card:', error);
+        }
+    }
+
+    /**
+     * Handle element becoming visible
+     * @private
+     */
+    handleElementVisible(element) {
+        // Resume any expensive operations
+        element.classList.add('in-viewport');
+        
+        // Trigger custom event
+        element.dispatchEvent(new CustomEvent('elementVisible', {
+            bubbles: true,
+            detail: { element }
+        }));
+    }
+
+    /**
+     * Handle element becoming hidden
+     * @private
+     */
+    handleElementHidden(element) {
+        // Pause any expensive operations
+        element.classList.remove('in-viewport');
+        
+        // Trigger custom event
+        element.dispatchEvent(new CustomEvent('elementHidden', {
+            bubbles: true,
+            detail: { element }
+        }));
+    }
+
+    /**
+     * Observe element for lazy loading
+     * @param {HTMLElement} element - Element to observe
+     */
+    observeLazyLoad(element) {
+        if (this.lazyLoadObserver && element) {
+            this.lazyLoadObserver.observe(element);
+        }
+    }
+
+    /**
+     * Observe element for visibility
+     * @param {HTMLElement} element - Element to observe
+     */
+    observeVisibility(element) {
+        if (this.visibilityObserver && element) {
+            this.visibilityObserver.observe(element);
+        }
+    }
+
+    /**
+     * Unobserve element
+     * @param {HTMLElement} element - Element to unobserve
+     */
+    unobserveElement(element) {
+        if (this.lazyLoadObserver) {
+            this.lazyLoadObserver.unobserve(element);
+        }
+        if (this.visibilityObserver) {
+            this.visibilityObserver.unobserve(element);
+        }
+        this.observedElements.delete(element);
+    }
+
+    /**
+     * Clean up observers
+     */
+    cleanupObservers() {
+        if (this.lazyLoadObserver) {
+            this.lazyLoadObserver.disconnect();
+            this.lazyLoadObserver = null;
+        }
+        if (this.visibilityObserver) {
+            this.visibilityObserver.disconnect();
+            this.visibilityObserver = null;
+        }
+        this.observedElements = new WeakMap();
+    }
+
+    /**
+     * Batch DOM updates for better performance
+     * @param {Function} updateFn - Function containing DOM updates
+     * @param {string} updateId - Optional unique ID to prevent duplicates
+     * @param {number} priority - Priority level (higher = more important)
+     */
+    batchDOMUpdate(updateFn, updateId = null, priority = 0) {
+        // If we have an ID, check for existing update and replace if found
+        if (updateId) {
+            const existingIndex = this.pendingDOMUpdates.findIndex(u => u.id === updateId);
+            if (existingIndex !== -1) {
+                this.pendingDOMUpdates[existingIndex] = { fn: updateFn, id: updateId, priority };
+                return;
+            }
+        }
+        
+        // Add update to queue
+        this.pendingDOMUpdates.push({ fn: updateFn, id: updateId, priority });
+        
+        // Sort by priority (higher priority first)
+        this.pendingDOMUpdates.sort((a, b) => b.priority - a.priority);
+        
+        // Schedule batch processing
+        this.scheduleBatchProcessing();
+    }
+
+    /**
+     * Schedule batch processing
+     * @private
+     */
+    scheduleBatchProcessing() {
+        if (this.domBatchTimer || this.isProcessingBatch) return;
+        
+        this.domBatchTimer = requestAnimationFrame(() => {
+            this.processDOMBatch();
+        });
+    }
+
+    /**
+     * Process pending DOM updates
+     * @private
+     */
+    processDOMBatch() {
+        if (this.isProcessingBatch || this.pendingDOMUpdates.length === 0) {
+            this.domBatchTimer = null;
+            return;
+        }
+        
+        this.isProcessingBatch = true;
+        
+        // Process updates in batches
+        const batchSize = Math.min(this.config.maxBatchSize, this.pendingDOMUpdates.length);
+        const batch = this.pendingDOMUpdates.splice(0, batchSize);
+        
+        // Use DocumentFragment for multiple insertions
+        const fragment = document.createDocumentFragment();
+        
+        // Process batch
+        batch.forEach(update => {
+            try {
+                update.fn(fragment);
+            } catch (error) {
+                this.logger.error('Error in batched DOM update:', error);
+            }
+        });
+        
+        // Apply fragment if it has content
+        if (fragment.childNodes.length > 0) {
+            // Find appropriate container for fragment
+            const container = this.elements.sessionCards || document.body;
+            container.appendChild(fragment);
+        }
+        
+        this.isProcessingBatch = false;
+        this.domBatchTimer = null;
+        
+        // Schedule next batch if more updates pending
+        if (this.pendingDOMUpdates.length > 0) {
+            this.scheduleBatchProcessing();
+        }
+    }
+
+    /**
+     * Cancel pending DOM updates
+     * @param {string} updateId - Optional ID to cancel specific update
+     */
+    cancelDOMUpdate(updateId = null) {
+        if (updateId) {
+            this.pendingDOMUpdates = this.pendingDOMUpdates.filter(u => u.id !== updateId);
+        } else {
+            this.pendingDOMUpdates = [];
+            if (this.domBatchTimer) {
+                cancelAnimationFrame(this.domBatchTimer);
+                this.domBatchTimer = null;
+            }
+        }
+    }
+
+    /**
+     * Optimized session card display using batching
+     */
+    displaySessionCardsBatched(cards) {
+        if (!this.elements.sessionCards) return;
+        
+        // Clear existing content efficiently
+        this.batchDOMUpdate(() => {
+            // Remove all children at once
+            while (this.elements.sessionCards.firstChild) {
+                this.elements.sessionCards.removeChild(this.elements.sessionCards.firstChild);
+            }
+        }, 'clear-session', 10);
+        
+        if (cards.length === 0) {
+            // Show empty state
+            this.batchDOMUpdate(() => {
+                if (this.elements.emptySession) {
+                    this.elements.emptySession.classList.remove('hidden');
+                }
+            }, 'show-empty', 5);
+            return;
+        }
+        
+        // Hide empty state
+        this.batchDOMUpdate(() => {
+            if (this.elements.emptySession) {
+                this.elements.emptySession.classList.add('hidden');
+            }
+        }, 'hide-empty', 5);
+        
+        // Create cards in batches
+        const CARDS_PER_BATCH = 10;
+        for (let i = 0; i < cards.length; i += CARDS_PER_BATCH) {
+            const batchCards = cards.slice(i, i + CARDS_PER_BATCH);
+            const batchIndex = Math.floor(i / CARDS_PER_BATCH);
+            
+            this.batchDOMUpdate((fragment) => {
+                batchCards.forEach(card => {
+                    const cardElement = this.isConsolidatedView ? 
+                        this.createConsolidatedCardElement(card) : 
+                        this.createSessionCardElement(card);
+                    
+                    // Use lazy loading for images
+                    const img = cardElement.querySelector('img');
+                    if (img && img.src) {
+                        img.dataset.src = img.src;
+                        img.src = '';
+                        this.observeLazyLoad(img);
+                    }
+                    
+                    // Observe for visibility
+                    this.observeVisibility(cardElement);
+                    
+                    fragment.appendChild(cardElement);
+                });
+            }, `card-batch-${batchIndex}`, 1);
+        }
+    }
+
+    /**
+     * Find a dynamic position that doesn't collide
+     * @private
+     */
+    findDynamicPosition(originalRect, occupiedRects, options) {
+        const viewport = {
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+
+        // Try positioning in corners and edges
+        const testPositions = [
+            { top: 20, right: 20 }, // Top right
+            { top: 20, left: 20 }, // Top left
+            { bottom: 20, right: 20 }, // Bottom right
+            { bottom: 20, left: 20 }, // Bottom left
+            { top: '50%', right: 20 }, // Middle right
+            { top: '50%', left: 20 }, // Middle left
+            { top: 20, left: '50%' }, // Top center
+            { bottom: 20, left: '50%' } // Bottom center
+        ];
+
+        for (const position of testPositions) {
+            // Calculate actual pixel position
+            const testRect = {
+                left: position.left === '50%' ? viewport.width / 2 - originalRect.width / 2 : position.left || viewport.width - position.right - originalRect.width,
+                top: position.top === '50%' ? viewport.height / 2 - originalRect.height / 2 : position.top || viewport.height - position.bottom - originalRect.height,
+                width: originalRect.width,
+                height: originalRect.height
+            };
+            testRect.right = testRect.left + testRect.width;
+            testRect.bottom = testRect.top + testRect.height;
+
+            const hasCollision = occupiedRects.some(occupiedRect => 
+                this.rectsCollide(testRect, occupiedRect, options.margin)
+            );
+
+            const inViewport = this.isRectInViewport(testRect) || options.allowOverflow;
+
+            if (!hasCollision && inViewport) {
+                return position;
+            }
+        }
+
+        return null;
     }
 
     emitBulkPricingRefresh() {

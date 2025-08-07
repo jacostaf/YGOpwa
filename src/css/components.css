@@ -17,8 +17,9 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  z-index: 1000;
+  z-index: var(--z-training-ui);
   animation: slideInUp 0.3s ease-out;
+  will-change: transform;
 }
 
 .train-btn {
@@ -38,13 +39,15 @@
 }
 
 .train-btn:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -2px, 0);
+  will-change: transform;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   background: linear-gradient(135deg, var(--color-accent-light) 0%, var(--color-accent) 100%);
 }
 
 .train-btn:active {
-  transform: translateY(0);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
@@ -53,7 +56,7 @@
 }
 
 .training-modal-overlay {
-  z-index: 2000;
+  z-index: var(--z-training-modal);
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
 }
@@ -342,11 +345,11 @@
 /* Animations */
 @keyframes slideInUp {
   from {
-    transform: translateY(100%);
+    transform: translate3d(0, 100%, 0);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
     opacity: 1;
   }
 }
@@ -1755,7 +1758,7 @@
 /* Card Hover Popup */
 .card-popup {
   position: absolute;
-  z-index: 1000;
+  z-index: var(--z-popover);
   background: var(--color-surface);
   border: 2px solid var(--color-accent);
   border-radius: var(--border-radius-md);
@@ -2628,7 +2631,7 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-fast);
-  z-index: 1;
+  z-index: var(--z-base);
 }
 
 .submenu-btn:hover:before {
@@ -2837,20 +2840,21 @@
 /* Live Transcript Display */
 .live-transcript {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: calc(20px + var(--safe-area-inset-top));
+  right: calc(20px + var(--safe-area-inset-right));
   background: rgba(0, 0, 0, 0.9);
   color: white;
   border-radius: var(--border-radius-lg);
   padding: var(--spacing-md);
   min-width: 300px;
   max-width: 400px;
-  z-index: 1500;
+  z-index: var(--z-voice-transcript);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(10px);
   border: 2px solid var(--color-accent);
   display: none;
   animation: slideInFromTop 0.3s ease-out;
+  will-change: transform, opacity;
 }
 
 .live-transcript-header {
@@ -2897,11 +2901,11 @@
 
 @keyframes slideInFromTop {
   from {
-    transform: translateY(-100%);
+    transform: translate3d(0, -100%, 0);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
     opacity: 1;
   }
 }
@@ -3165,7 +3169,7 @@
     gap: 0;
     background: var(--card-bg);
     border-right: 2px solid var(--border-color);
-    padding: 1rem 0;
+    padding: 3rem 0 1rem 0; /* More top padding for toggle button */
     height: 100%;
     box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
     min-height: 100%;
@@ -3174,13 +3178,61 @@
     left: 0;
     transition: all 0.3s ease;
     overflow: hidden;
-    z-index: 10;
+    z-index: var(--z-docked);
+    will-change: flex-basis;
 }
 
-/* Expanded state on hover */
-#pack-ripper-panel .vertical-tabs-nav:hover {
+/* Expanded state - controlled by JavaScript */
+#pack-ripper-panel .vertical-tabs-nav.expanded {
     flex: 0 0 220px; /* Expanded width */
     overflow: visible;
+}
+
+/* Add expand/collapse toggle button - now inside the sidebar */
+.vertical-tabs-toggle {
+    position: absolute;
+    top: 10px;
+    right: 5px;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+    color: var(--color-text-inverse);
+    border: 2px solid var(--color-accent-light);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    font-weight: bold;
+    z-index: var(--z-fixed);
+    transition: all 0.2s ease;
+    box-shadow: 0 3px 10px rgba(255, 215, 0, 0.3);
+    will-change: transform, background-color;
+    animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% {
+        box-shadow: 0 3px 10px rgba(255, 215, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 3px 15px rgba(255, 215, 0, 0.5);
+    }
+}
+
+.vertical-tabs-toggle:hover {
+    background: var(--color-accent-light);
+    transform: scale3d(1.1, 1.1, 1);
+    will-change: transform, background-color;
+}
+
+.vertical-tabs-toggle .icon {
+    transition: transform 0.2s ease;
+}
+
+#pack-ripper-panel .vertical-tabs-nav.expanded .vertical-tabs-toggle .icon {
+    /* No rotation needed for hamburger menu icon */
 }
 
 .vertical-tab-btn {
@@ -3233,25 +3285,55 @@
 }
 
 /* When collapsed, center the icon */
-#pack-ripper-panel .vertical-tabs-nav:not(:hover) .vertical-tab-btn {
+#pack-ripper-panel .vertical-tabs-nav:not(.expanded) .vertical-tab-btn {
     justify-content: center;
     padding: 1rem 0.5rem;
 }
 
-/* Add a subtle expand indicator */
-#pack-ripper-panel .vertical-tabs-nav:not(:hover) .vertical-tab-btn::after {
-    content: '›';
+/* Add tooltip for collapsed state */
+#pack-ripper-panel .vertical-tabs-nav:not(.expanded) .vertical-tab-btn::before {
+    content: attr(title);
     position: absolute;
-    right: 5px;
+    left: 100%;
     top: 50%;
     transform: translateY(-50%);
-    opacity: 0.3;
-    font-size: 0.8rem;
-    transition: opacity 0.3s ease;
+    background: var(--color-surface-dark);
+    color: var(--color-text);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--border-radius);
+    white-space: nowrap;
+    font-size: 0.85rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    margin-left: 0.5rem;
+    z-index: var(--z-tooltip);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-#pack-ripper-panel .vertical-tabs-nav:hover .vertical-tab-btn::after {
-    opacity: 0;
+#pack-ripper-panel .vertical-tabs-nav:not(.expanded) .vertical-tab-btn:hover::before {
+    opacity: 1;
+}
+
+/* Remove the expand indicator since we have a dedicated toggle button */
+
+/* Newly added card highlight effect */
+.session-card.newly-added {
+    animation: cardHighlight 2s ease-out;
+    transform: scale3d(1.02, 1.02, 1);
+    box-shadow: 0 4px 20px rgba(255, 215, 0, 0.3);
+    will-change: transform, background-color, box-shadow;
+}
+
+@keyframes cardHighlight {
+    0% {
+        background-color: rgba(255, 215, 0, 0.2);
+        transform: scale3d(1.05, 1.05, 1);
+    }
+    100% {
+        background-color: transparent;
+        transform: scale3d(1.02, 1.02, 1);
+    }
 }
 
 .vertical-tab-btn .tab-label {
@@ -3261,11 +3343,14 @@
     transition: opacity 0.3s ease 0.1s; /* Delayed fade in */
     min-width: 0;
     overflow: hidden;
+    transform: translateX(-10px);
+    transition: opacity 0.3s ease 0.1s, transform 0.3s ease;
 }
 
-/* Show labels when sidebar is hovered */
-#pack-ripper-panel .vertical-tabs-nav:hover .vertical-tab-btn .tab-label {
+/* Show labels when sidebar is expanded */
+#pack-ripper-panel .vertical-tabs-nav.expanded .vertical-tab-btn .tab-label {
     opacity: 1;
+    transform: translateX(0);
 }
 
 #pack-ripper-panel .vertical-tabs-content {
@@ -3379,9 +3464,9 @@
 /* Responsive adjustments */
 @media (max-width: 480px) {
   .live-transcript {
-    top: 10px;
-    right: 10px;
-    left: 10px;
+    top: calc(10px + var(--safe-area-inset-top));
+    right: calc(10px + var(--safe-area-inset-right));
+    left: calc(10px + var(--safe-area-inset-left));
     min-width: auto;
     max-width: none;
   }

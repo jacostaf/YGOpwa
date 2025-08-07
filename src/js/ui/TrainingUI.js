@@ -68,8 +68,8 @@ export class TrainingUI {
             this.trainButton.className = 'voice-train-button';
             this.trainButton.style.cssText = `
                 position: fixed;
-                bottom: 20px;
-                right: 20px;
+                bottom: calc(20px + var(--safe-area-inset-bottom, 0px));
+                right: calc(20px + var(--safe-area-inset-right, 0px));
                 z-index: 1000;
             `;
             this.trainButton.innerHTML = `
@@ -130,6 +130,19 @@ export class TrainingUI {
             // Always append to document.body for fixed positioning stability
             document.body.appendChild(this.trainButton);
             
+            // Register with collision detection system if available
+            if (this.app.uiManager && this.app.uiManager.registerFloatingElement) {
+                this.app.uiManager.registerFloatingElement('training-button', this.trainButton, {
+                    priority: 1, // Lower priority than transcript and voice submenu
+                    fallbackPositions: [
+                        { bottom: 80, right: 20 }, // Higher up
+                        { bottom: 20, left: 20 }, // Bottom left
+                        { bottom: 40, right: 80 }, // Offset from corner
+                    ],
+                    margin: 10
+                });
+            }
+            
             this.logger.info('[TrainingUI] Training button appended to document.body');
             
             // DOM observer not needed when appending to document.body
@@ -157,6 +170,11 @@ export class TrainingUI {
         if (this.trainButton) {
             console.log('🟡 REMOVING BUTTON');
             this.logger.info('[TrainingUI] Hiding training button');
+            
+            // Unregister from collision detection system if available
+            if (this.app.uiManager && this.app.uiManager.unregisterFloatingElement) {
+                this.app.uiManager.unregisterFloatingElement('training-button');
+            }
             this.trainButton.remove();
             this.trainButton = null;
         }
