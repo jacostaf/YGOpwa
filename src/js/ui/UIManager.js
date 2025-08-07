@@ -1595,10 +1595,10 @@ export class UIManager {
                 imageContainer.appendChild(wrapper);
             };
             
-            // Set image dimensions for consistent layout
-            img.style.width = '100px';
-            img.style.height = '145px';
-            img.style.objectFit = 'contain';
+            // Set image dimensions to match card selection dialog
+            img.style.width = '80px';
+            img.style.height = '112px';
+            img.style.objectFit = 'cover';
             
             // Start loading the image
             img.src = card.image_url;
