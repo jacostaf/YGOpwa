@@ -248,19 +248,14 @@ export const FANTASY_NAME_PATTERNS = {
     },
     
     // Common card name prefixes/suffixes that can be removed for better matching
+    // MUCH MORE CONSERVATIVE - only remove at start/end of phrases
     removePatterns: [
-        '\\bthe\\b',       // Articles
-        '\\ba\\b',
-        '\\ban\\b',
-        '\\bof\\b',        // Prepositions
-        '\\bin\\b',
-        '\\bwith\\b',
-        '\\bfrom\\b',
-        '\\bmonster\\b',   // Generic terms
-        '\\bcard\\b',
-        '\\bspell\\b',
-        '\\btrap\\b',
-        '\\beffect\\b'
+        '^\\s*the\\s+',     // Only remove "the" at the beginning
+        '^\\s*a\\s+',       // Only remove "a" at the beginning  
+        '^\\s*an\\s+',      // Only remove "an" at the beginning
+        // NOTE: Removed aggressive removal of "monster", "card", "spell", "trap"
+        // as these can be legitimate parts of card names like "Monster Reborn"
+        // or when users say descriptive phrases like "spell card Monster Reborn"
     ],
     
     // Cleanup patterns for formatting

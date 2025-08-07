@@ -278,8 +278,8 @@ export class AdaptiveConfidenceManager {
         }
         
         // Check set-specific accuracy from history
-        const setAccuracy = this.contextFactors.setPopularity.get(setCode);
-        if (setAccuracy) {
+        const setAccuracy = this.contextFactors.setAverages?.get(setCode) || this.contextFactors.setPopularity.get(setCode);
+        if (setAccuracy && typeof setAccuracy === 'number') {
             if (setAccuracy > 0.8) {
                 adjustment -= 0.05;
             } else if (setAccuracy < 0.6) {
@@ -415,24 +415,27 @@ export class AdaptiveConfidenceManager {
                 this.contextFactors.setPopularity.set(setCode, []);
             }
             
-            const setData = this.contextFactors.setPopularity.get(setCode);
+            let setData = this.contextFactors.setPopularity.get(setCode);
             if (!Array.isArray(setData)) {
                 console.warn('setData is not an array:', setData, 'for setCode:', setCode);
-                this.contextFactors.setPopularity.set(setCode, []);
-                const fixedSetData = this.contextFactors.setPopularity.get(setCode);
-                fixedSetData.push(record.wasCorrect ? 1 : 0);
-            } else {
-                setData.push(record.wasCorrect ? 1 : 0);
+                setData = [];
+                this.contextFactors.setPopularity.set(setCode, setData);
             }
+            
+            setData.push(record.wasCorrect ? 1 : 0);
             
             // Keep only recent data (last 20 interactions per set)
             if (setData.length > 20) {
                 setData.shift();
             }
             
-            // Update average
+            // Calculate average but keep the array for future use
             const average = setData.reduce((a, b) => a + b, 0) / setData.length;
-            this.contextFactors.setPopularity.set(setCode, average);
+            // Store both the array and average - we'll store average in a separate structure
+            if (!this.contextFactors.setAverages) {
+                this.contextFactors.setAverages = new Map();
+            }
+            this.contextFactors.setAverages.set(setCode, average);
         }
         
         // Update card frequency

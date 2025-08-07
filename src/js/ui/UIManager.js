@@ -42,7 +42,8 @@ export class UIManager {
         };
         
         // UI state
-        this.currentTab = 'price-checker';
+        this.currentTab = 'pack-ripper'; // Changed to make pack-ripper the default tab
+        this.currentVerticalTab = 'voice-recognition'; // Default vertical sub-tab
         this.isLoading = false;
         this.toasts = [];
         this.modals = [];
@@ -103,6 +104,10 @@ export class UIManager {
         // Navigation
         this.elements.tabBtns = document.querySelectorAll('.tab-btn');
         this.elements.tabPanels = document.querySelectorAll('.tab-panel');
+        
+        // Vertical tabs (sub-tabs under pack ripper)
+        this.elements.verticalTabBtns = document.querySelectorAll('.vertical-tab-btn');
+        this.elements.verticalTabPanels = document.querySelectorAll('.vertical-tab-panel');
         
         // Price checker elements
         this.elements.priceForm = document.getElementById('price-form');
@@ -186,6 +191,14 @@ export class UIManager {
             btn.addEventListener('click', (e) => {
                 const tabId = e.currentTarget.dataset.tab;
                 this.switchTab(tabId);
+            });
+        });
+
+        // Vertical tab navigation (sub-tabs)
+        this.elements.verticalTabBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const subtabId = e.currentTarget.dataset.subtab;
+                this.switchVerticalTab(subtabId);
             });
         });
 
@@ -433,11 +446,42 @@ export class UIManager {
         this.currentTab = tabId;
         this.emitTabChange(tabId);
         
+        // Add class to body for CSS targeting
+        document.body.classList.toggle('pack-ripper-active', tabId === 'pack-ripper');
+        
         // Update floating submenu visibility based on current tab and voice state
         if (this.elements.floatingVoiceSubmenu) {
             const isVoiceActive = this.elements.stopVoiceBtn && !this.elements.stopVoiceBtn.classList.contains('hidden');
             this.updateFloatingSubmenu(isVoiceActive);
         }
+        
+        // Initialize vertical tabs if we're switching to pack ripper
+        if (tabId === 'pack-ripper') {
+            this.switchVerticalTab(this.currentVerticalTab);
+        }
+    }
+
+    /**
+     * Switch to a different vertical sub-tab
+     */
+    switchVerticalTab(subtabId) {
+        this.logger.debug(`Switching to vertical sub-tab: ${subtabId}`);
+        
+        // Update vertical tab buttons
+        this.elements.verticalTabBtns.forEach(btn => {
+            const isActive = btn.dataset.subtab === subtabId;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive);
+        });
+        
+        // Update vertical tab panels
+        this.elements.verticalTabPanels.forEach(panel => {
+            const isActive = panel.id === `${subtabId}-panel`;
+            panel.classList.toggle('active', isActive);
+        });
+        
+        this.currentVerticalTab = subtabId;
+        this.logger.debug(`Switched to vertical sub-tab: ${subtabId}`);
     }
 
     /**
@@ -1093,13 +1137,29 @@ export class UIManager {
         const cardElement = this.elements.sessionCards.querySelector(`.session-card[data-card-id="${card.id}"]`);
         if (!cardElement) return;
         
-        // Create a new card element with updated data
-        const newCardElement = this.isConsolidatedView ? 
-            this.createConsolidatedCardElement(card) : 
-            this.createSessionCardElement(card);
-            
-        // Replace the old card with the updated one
-        cardElement.replaceWith(newCardElement);
+        // For now, let's try updating only pricing info instead of replacing the whole element
+        // This should preserve the loaded images
+        
+        // Update pricing information if available
+        const priceElements = cardElement.querySelectorAll('.price');
+        if (card.tcg_price && cardElement.querySelector('.tcg-low .price-amount')) {
+            cardElement.querySelector('.tcg-low .price-amount').textContent = `$${parseFloat(card.tcg_price).toFixed(2)}`;
+        }
+        if (card.tcg_market_price && cardElement.querySelector('.tcg-market .price-amount')) {
+            cardElement.querySelector('.tcg-market .price-amount').textContent = `$${parseFloat(card.tcg_market_price).toFixed(2)}`;
+        }
+        
+        // Update quantity if needed
+        const quantityDisplay = cardElement.querySelector('.quantity-display');
+        if (quantityDisplay && card.quantity) {
+            quantityDisplay.textContent = card.quantity;
+        }
+        
+        // Update rarity if needed
+        const rarityElement = cardElement.querySelector('.card-rarity, .rarity-label');
+        if (rarityElement && (card.displayRarity || card.rarity)) {
+            rarityElement.textContent = card.displayRarity || card.rarity;
+        }
     }
 
     /**
@@ -1299,7 +1359,10 @@ export class UIManager {
         
         // Load card image if available
         if (card.image_url) {
+            console.log(`🖼️ Loading session image for ${card.name || card.card_name}: ${card.image_url}`);
             this.loadSessionCardImage(card, cardDiv);
+        } else {
+            console.log(`🖼️ No image URL for ${card.name || card.card_name}, card ID: ${card.id}`);
         }
         
         return cardDiv;
@@ -1407,7 +1470,10 @@ export class UIManager {
         
         // Load card image if available
         if (card.image_url) {
+            console.log(`🖼️ Loading session image for ${card.name || card.card_name}: ${card.image_url}`);
             this.loadSessionCardImage(card, cardDiv);
+        } else {
+            console.log(`🖼️ No image URL for ${card.name || card.card_name}, card ID: ${card.id}`);
         }
         
         return cardDiv;
@@ -1501,26 +1567,53 @@ export class UIManager {
         if (!imageContainer) return;
         
         try {
-            // Import ImageManager dynamically to avoid circular dependencies
-            const { ImageManager } = await import('../utils/ImageManager.js');
-            const imageManager = new ImageManager();
+            // Use a simpler, more reliable approach similar to card selection dialog
+            // but with proper error handling and loading states
             
-            // Use normal mode size for session cards (not as large as detail mode)
-            const cardImagePromise = imageManager.loadImageForDisplay(
-                card.card_number || card.id,
-                card.image_url,
-                imageManager.normalModeSize,
-                imageContainer
-            );
+            const img = document.createElement('img');
+            img.className = 'card-image session-card-image';
+            img.alt = card.name || card.card_name || 'Yu-Gi-Oh Card';
+            img.loading = 'lazy';
             
-            // Add timeout to prevent hanging
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Session card image loading timeout')), 10000); // 10 second timeout
-            });
+            // Set up error handling with fallback placeholder
+            img.onerror = () => {
+                imageContainer.innerHTML = `
+                    <div class="card-image-placeholder error">
+                        <div class="placeholder-icon">🃏</div>
+                        <div class="placeholder-text">Image unavailable</div>
+                    </div>
+                `;
+            };
             
-            await Promise.race([cardImagePromise, timeoutPromise]);
+            // Set up success handler to remove loading state
+            img.onload = () => {
+                // Clear container and add the loaded image
+                imageContainer.innerHTML = '';
+                const wrapper = document.createElement('div');
+                wrapper.className = 'card-image-wrapper';
+                wrapper.appendChild(img);
+                imageContainer.appendChild(wrapper);
+            };
             
-            console.log(`✅ Successfully loaded session card image for ${card.card_name || card.name}`);
+            // Set image dimensions for consistent layout
+            img.style.width = '100px';
+            img.style.height = '145px';
+            img.style.objectFit = 'contain';
+            
+            // Start loading the image
+            img.src = card.image_url;
+            
+            // Add timeout protection
+            setTimeout(() => {
+                if (!img.complete && imageContainer.querySelector('.card-image-loading')) {
+                    imageContainer.innerHTML = `
+                        <div class="card-image-placeholder timeout">
+                            <div class="placeholder-icon">🃏</div>
+                            <div class="placeholder-text">Load timeout</div>
+                        </div>
+                    `;
+                }
+            }, 10000); // 10 second timeout
             
         } catch (error) {
             console.warn('Failed to load session card image:', error.message);
@@ -1872,7 +1965,7 @@ export class UIManager {
      * Show card selection modal for voice recognition results
      */
     showCardSelectionModal(cards, transcript, callback) {
-        const cardOptions = cards.slice(0, 5).map((card, index) => {
+        const cardOptions = cards.slice(0, 10).map((card, index) => {
             const confidence = Math.round(card.confidence || 0);
             const rarity = card.displayRarity || card.rarity || 'Unknown';
             const setCode = card.setInfo?.setCode || 'Unknown';
@@ -1881,29 +1974,48 @@ export class UIManager {
             const def = card.def !== undefined ? card.def : '';
             const level = card.level || '';
             
+            // Generate image URL if not present
+            let imageUrl = card.image_url;
+            if (!imageUrl && card.id && typeof card.id === 'number') {
+                // Use YGOProdeck CDN format
+                imageUrl = `https://images.ygoprodeck.com/images/cards_small/${card.id}.jpg`;
+            }
+            
             return `
                 <div class="voice-card-option" data-card-index="${index}">
-                    <div class="voice-card-header">
-                        <div class="voice-card-name">
-                            <strong>${card.name}</strong>
-                            <div class="voice-card-type">${cardType}</div>
-                        </div>
-                        <div class="voice-confidence-badge ${confidence >= 90 ? 'high' : confidence >= 70 ? 'medium' : 'low'}">
-                            ${confidence}%
-                        </div>
-                    </div>
-                    <div class="voice-card-details">
-                        <div class="voice-card-rarity">
-                            <span class="rarity-label">${rarity}</span>
-                            <span class="set-code">[${setCode}]</span>
-                        </div>
-                        ${(atk !== '' || def !== '' || level) ? `
-                            <div class="voice-card-stats">
-                                ${level ? `<span class="level">★${level}</span>` : ''}
-                                ${atk !== '' ? `<span class="atk">ATK/${atk}</span>` : ''}
-                                ${def !== '' ? `<span class="def">DEF/${def}</span>` : ''}
+                    <div class="voice-card-image">
+                        ${imageUrl ? `
+                            <img src="${imageUrl}" alt="${card.name}" loading="lazy" 
+                                 onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22140%22><rect width=%22100%22 height=%22140%22 fill=%22%23333%22/><text x=%2250%%22 y=%2250%%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-family=%22sans-serif%22 font-size=%2214%22>No Image</text></svg>';">
+                        ` : `
+                            <div class="card-image-placeholder">
+                                <div class="placeholder-icon">🃏</div>
                             </div>
-                        ` : ''}
+                        `}
+                    </div>
+                    <div class="voice-card-info">
+                        <div class="voice-card-header">
+                            <div class="voice-card-name">
+                                <strong>${card.name}</strong>
+                                <div class="voice-card-type">${cardType}</div>
+                            </div>
+                            <div class="voice-confidence-badge ${confidence >= 90 ? 'high' : confidence >= 70 ? 'medium' : 'low'}">
+                                ${confidence}%
+                            </div>
+                        </div>
+                        <div class="voice-card-details">
+                            <div class="voice-card-rarity">
+                                <span class="rarity-label">${rarity}</span>
+                                <span class="set-code">[${setCode}]</span>
+                            </div>
+                            ${(atk !== '' || def !== '' || level) ? `
+                                <div class="voice-card-stats">
+                                    ${level ? `<span class="level">★${level}</span>` : ''}
+                                    ${atk !== '' ? `<span class="atk">ATK/${atk}</span>` : ''}
+                                    ${def !== '' ? `<span class="def">DEF/${def}</span>` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             `;

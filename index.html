@@ -66,11 +66,11 @@
 
         <!-- Navigation Tabs -->
         <nav class="tab-navigation" role="tablist">
-            <button class="tab-btn active" data-tab="price-checker" role="tab" aria-selected="true" aria-controls="price-checker-panel">
+            <button class="tab-btn" data-tab="price-checker" role="tab" aria-selected="false" aria-controls="price-checker-panel">
                 <span class="tab-icon">💰</span>
                 <span class="tab-label">Price Checker</span>
             </button>
-            <button class="tab-btn" data-tab="pack-ripper" role="tab" aria-selected="false" aria-controls="pack-ripper-panel">
+            <button class="tab-btn active" data-tab="pack-ripper" role="tab" aria-selected="true" aria-controls="pack-ripper-panel">
                 <span class="tab-icon">📦</span>
                 <span class="tab-label">Pack Ripper</span>
             </button>
@@ -79,7 +79,7 @@
         <!-- Main Content Area -->
         <main class="main-content">
             <!-- Price Checker Tab -->
-            <section id="price-checker-panel" class="tab-panel active" role="tabpanel" aria-labelledby="price-checker-tab">
+            <section id="price-checker-panel" class="tab-panel" role="tabpanel" aria-labelledby="price-checker-tab">
                 <div class="panel-content">
                     <div class="card section-card">
                         <h2>Card Price Checker</h2>
@@ -170,10 +170,26 @@
             </section>
 
             <!-- Pack Ripper Tab -->
-            <section id="pack-ripper-panel" class="tab-panel" role="tabpanel" aria-labelledby="pack-ripper-tab">
-                <div class="panel-content">
-                    <!-- Set Selection -->
-                    <div class="card section-card">
+            <section id="pack-ripper-panel" class="tab-panel active" role="tabpanel" aria-labelledby="pack-ripper-tab">
+                <div class="panel-content vertical-layout">
+                    <!-- Vertical Sub-Navigation -->
+                    <nav class="vertical-tabs-nav" role="tablist">
+                        <button class="vertical-tab-btn active" data-subtab="voice-recognition" role="tab" aria-selected="true" aria-controls="voice-recognition-panel">
+                            <span class="tab-icon">🎤</span>
+                            <span class="tab-label">Voice Recognition</span>
+                        </button>
+                        <button class="vertical-tab-btn" data-subtab="training-patterns" role="tab" aria-selected="false" aria-controls="training-patterns-panel">
+                            <span class="tab-icon">🎯</span>
+                            <span class="tab-label">Training Patterns</span>
+                        </button>
+                    </nav>
+                    
+                    <!-- Vertical Sub-Tab Content -->
+                    <div class="vertical-tabs-content">
+                        <!-- Voice Recognition Sub-Tab -->
+                        <div id="voice-recognition-panel" class="vertical-tab-panel active" role="tabpanel" aria-labelledby="voice-recognition-tab">
+                            <!-- Set Selection -->
+                            <div class="card section-card">
                         <h2>Pack Ripper Setup</h2>
                         <div class="form-grid">
                             <div class="form-group form-group-wide">
@@ -262,7 +278,7 @@
                         </div>
                     </div>
 
-                    <!-- Session Information & Tracker -->
+                            <!-- Session Information & Tracker -->
                     <div class="card section-card">
                         <div class="section-header">
                             <h2>Current Session</h2>
@@ -334,7 +350,57 @@
                             <!-- Cards will be populated dynamically -->
                         </div>
                     </div>
-                </div>
+                        </div> <!-- End Voice Recognition Sub-Tab -->
+                        
+                        <!-- Training Patterns Sub-Tab -->
+                        <div id="training-patterns-panel" class="vertical-tab-panel" role="tabpanel" aria-labelledby="training-patterns-tab">
+                            <!-- Training Patterns Management -->
+                            <div class="card section-card">
+                                <div class="section-header">
+                                    <h2>Training Patterns</h2>
+                                    <div class="header-actions">
+                                        <button id="refresh-patterns-btn" class="btn btn-secondary" title="Refresh patterns list">
+                                            <span class="btn-icon">🔄</span>
+                                            Refresh
+                                        </button>
+                                        <button id="reset-all-patterns-btn" class="btn btn-danger" title="Reset all training patterns">
+                                            <span class="btn-icon">🗑️</span>
+                                            Reset All
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="patterns-stats">
+                                    <div class="stat-item">
+                                        <span class="stat-label">Total Patterns:</span>
+                                        <span class="stat-value" id="patterns-count">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-label">Success Rate:</span>
+                                        <span class="stat-value" id="patterns-success-rate">N/A</span>
+                                    </div>
+                                </div>
+
+                                <!-- Search/Filter Patterns -->
+                                <div class="patterns-search">
+                                    <div class="form-group">
+                                        <input type="text" id="patterns-search-input" placeholder="Search patterns by voice input or card name..." class="form-control">
+                                    </div>
+                                </div>
+
+                                <!-- Patterns List -->
+                                <div class="patterns-list" id="patterns-list">
+                                    <div class="empty-state" id="empty-patterns">
+                                        <div class="empty-icon">🎯</div>
+                                        <h3>No training patterns found</h3>
+                                        <p>Voice recognition training patterns will appear here after you use the training feature.</p>
+                                    </div>
+                                    <!-- Patterns will be populated dynamically -->
+                                </div>
+                            </div>
+                        </div> <!-- End Training Patterns Sub-Tab -->
+                    </div> <!-- End Vertical Tabs Content -->
+                </div> <!-- End Panel Content -->
             </section>
 
 

@@ -1094,6 +1094,7 @@ export class SessionManager {
             return { cardName: voiceText, rarity: null };
         }
 
+        console.log(`🔴 RARITY EXTRACTION - Input: "${voiceText}"`);
         this.logger.debug(`[RARITY EXTRACT] Processing voice text: "${voiceText}"`);
 
         // Enhanced rarity patterns to catch YGO rarity types (exact match from oldIteration.py)
@@ -1116,16 +1117,17 @@ export class SessionManager {
         ];
 
         for (const pattern of rarityPatterns) {
-            this.logger.debug(`[RARITY EXTRACT] Testing pattern: ${pattern}`);
             const match = voiceText.match(pattern);
             if (match) {
                 const rarity = match[0];
                 const cardName = voiceText.replace(pattern, '').trim();
+                console.log(`🟡 RARITY MATCH! Pattern: ${pattern}, Matched: "${rarity}", Remaining: "${cardName}"`);
                 this.logger.info(`[RARITY EXTRACT] SUCCESS - Extracted rarity: '${rarity}', remaining card name: '${cardName}'`);
                 return { cardName, rarity };
             }
         }
 
+        console.log(`🟢 NO RARITY MATCH - Returning original: "${voiceText}"`);
         this.logger.debug(`[RARITY EXTRACT] No rarity patterns matched in: "${voiceText}"`);
         return { cardName: voiceText, rarity: null };
     }
@@ -1200,27 +1202,37 @@ export class SessionManager {
         let extractedRarity = null;
         let extractedArtVariant = null;
 
-        this.logger.debug(`[VOICE PROCESSING] Input transcript: "${processedTranscript}"`);
-        this.logger.debug(`[VOICE PROCESSING] Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
-        this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
+        console.log(`🔵 VOICE PROCESSING PIPELINE START`);
+        console.log(`🔵 Original transcript: "${transcript}"`);
+        console.log(`🔵 Enhanced transcript: "${processedTranscript}"`);
+        console.log(`🔵 Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
 
         // Extract rarity information
+        console.log(`🔵 STEP 1: Rarity extraction from: "${processedText}"`);
         const rarityResult = this.extractRarityFromVoice(processedText);
         processedText = rarityResult.cardName;
         extractedRarity = rarityResult.rarity;
+        console.log(`🔵 After rarity extraction: "${processedText}" (extracted rarity: "${extractedRarity}")`);
 
         // Extract art variant information
+        console.log(`🔵 STEP 2: Art variant extraction from: "${processedText}"`);
         const artResult = this.extractArtVariantFromVoice(processedText);
         processedText = artResult.cardName;
         extractedArtVariant = artResult.artVariant;
+        console.log(`🔵 After art variant extraction: "${processedText}" (extracted variant: "${extractedArtVariant}")`);
+
+        const cleanTranscript = processedText.toLowerCase().trim();
+        console.log(`🔵 FINAL: Clean transcript for search: "${cleanTranscript}"`);
+        
+        this.logger.debug(`[VOICE PROCESSING] Input transcript: "${processedTranscript}"`);
+        this.logger.debug(`[VOICE PROCESSING] Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
+        this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
 
         if (extractedRarity || extractedArtVariant) {
             this.logger.info(`[VOICE PROCESSING] Extracted from voice - Rarity: "${extractedRarity}", Art Variant: "${extractedArtVariant}", Card Name: "${processedText}"`);
         } else {
             this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using processed card name: "${processedText}"`);
         }
-
-        const cleanTranscript = processedText.toLowerCase().trim();
         
         try {
             // Use unified matching approach with enhanced fantasy name processing
@@ -1474,28 +1486,42 @@ export class SessionManager {
             }
         }
         
+        // Helper function to extract base card name (remove rarity info from name)
+        const extractBaseCardName = (fullCardName) => {
+            return fullCardName
+                .replace(/\s*\([^)]*\)$/, '') // Remove parenthetical at end (like "(Quarter Century Secret Rare)")
+                .replace(/\s*-\s*(Secret Rare|Ultra Rare|Super Rare|Rare|Common|Quarter Century Secret Rare|Starlight Rare|Ghost Rare|Collector's Rare|Prismatic Secret Rare|Ultimate Rare|Gold Rare|Platinum Rare|Silver Rare).*$/i, '')
+                .replace(/\s*\[\w+\]$/, '') // Remove bracketed info at end like [INFO]
+                .replace(/\s*#\d+.*$/, '') // Remove card numbers like #001
+                .replace(/\s*\d+st\s+Edition.*$/i, '') // Remove "1st Edition" etc
+                .trim();
+        };
+        
         // Second pass: Create variants for each matching card name with different rarities
         // Following the logic from oldIteration.py for proper rarity variant handling
         const allVariants = [];
-        const processedCardNames = new Set();
+        const processedBaseNames = new Set();
         
         for (const match of initialMatches) {
-            const cardName = match.name;
+            const baseCardName = extractBaseCardName(match.name);
             
-            // Skip if we already processed this card name
-            if (processedCardNames.has(cardName)) {
+            // Skip if we already processed this base card name
+            if (processedBaseNames.has(baseCardName.toLowerCase())) {
                 continue;
             }
-            processedCardNames.add(cardName);
+            processedBaseNames.add(baseCardName.toLowerCase());
             
-            // Find all cards with the same name (exact match)
-            const matchingCards = setCards.filter(card => card.name === cardName);
+            // Find all cards with the same base name (removing rarity/variant info)
+            const matchingCards = setCards.filter(card => {
+                const cardBaseName = extractBaseCardName(card.name);
+                return cardBaseName.toLowerCase() === baseCardName.toLowerCase();
+            });
             
-            this.logger.debug(`[VARIANT] Found ${matchingCards.length} cards with name: ${cardName}`);
+            this.logger.debug(`[VARIANT] Found ${matchingCards.length} cards with base name: ${baseCardName}`);
             
             // DEBUG: Log all matching cards with their rarities
             if (matchingCards.length > 0) {
-                this.logger.debug(`[VARIANT DEBUG] All cards with name "${cardName}":`, 
+                this.logger.debug(`[VARIANT DEBUG] All cards with base name "${baseCardName}":`, 
                     matchingCards.map(c => `"${c.name}" - ${c.rarity} [${c.set_code}] ID:${c.id}`)
                 );
             }
@@ -1565,6 +1591,7 @@ export class SessionManager {
                             setName: this.currentSet?.name || 'Unknown Set'
                         }
                     };
+                    
                     this.logger.debug(`[VARIANT] Variant object displayRarity: "${newVariant.displayRarity}", setInfo:`, newVariant.setInfo);
                     allVariants.push(newVariant);
                 } else {
@@ -1813,7 +1840,7 @@ export class SessionManager {
     }
 
     /**
-     * Calculate rarity matching score (similar to oldIteration.py)
+     * Calculate rarity matching score with improved specificity for Yu-Gi-Oh rarities
      */
     calculateRarityScore(inputRarity, cardSetRarity) {
         if (!inputRarity || !cardSetRarity) {
@@ -1828,14 +1855,41 @@ export class SessionManager {
             return 100;
         }
         
-        // Partial match gets good score
+        // Special handling for specific Yu-Gi-Oh rarity combinations to avoid confusion
+        
+        // If user said "secret rare" but card is "quarter century secret rare", penalize heavily
+        if (input === 'secret rare' && cardRarity === 'quarter century secret rare') {
+            return 25; // Low score to discourage this match
+        }
+        
+        // If user said "quarter century secret rare" but card is just "secret rare", penalize
+        if (input === 'quarter century secret rare' && cardRarity === 'secret rare') {
+            return 25; // Low score to discourage this match
+        }
+        
+        // If user said "ultra rare" but card is "super rare" or vice versa, penalize
+        if ((input === 'ultra rare' && cardRarity === 'super rare') ||
+            (input === 'super rare' && cardRarity === 'ultra rare')) {
+            return 30;
+        }
+        
+        // General partial match for other cases (more lenient for non-conflicting rarities)
         if (input.includes(cardRarity) || cardRarity.includes(input)) {
-            return 80;
+            // Check if it's a potentially confusing partial match
+            const inputWords = input.split(' ');
+            const cardWords = cardRarity.split(' ');
+            
+            // If the input is a subset of card rarity but missing key words, lower score
+            if (inputWords.every(word => cardWords.includes(word)) && inputWords.length < cardWords.length) {
+                return 40; // Lower score for incomplete rarity specification
+            }
+            
+            return 80; // Good score for other partial matches
         }
         
         // Fuzzy match as fallback
         const similarity = this.calculateSimilarity(input, cardRarity);
-        return similarity >= 70 ? similarity * 0.7 : 0;  // Scale down fuzzy matches
+        return similarity >= 0.70 ? similarity * 70 : 0;  // Scale down fuzzy matches
     }
 
     /**
@@ -1900,19 +1954,32 @@ export class SessionManager {
      * Handles common variations in Yu-Gi-Oh card naming
      */
     normalizeCardName(name) {
-        return name.toLowerCase()
+        const original = name;
+        const normalized = name.toLowerCase()
             .replace(/[\s-]+/g, ' ')  // Normalize spaces and hyphens
             .replace(/[^a-z0-9\s]/g, '') // Remove special characters except spaces and numbers
             .replace(/\s+/g, ' ')     // Normalize multiple spaces
             .trim();
+            
+        // Debug logging to see what's happening to card names
+        if (original !== normalized) {
+            console.log(`🔍 NORMALIZE: "${original}" → "${normalized}"`);
+        }
+        
+        return normalized;
     }
     
 
     /**
-     * Calculate similarity between two strings
+     * Calculate similarity between two strings with enhanced partial matching
      */
     calculateSimilarity(str1, str2) {
-        // Simple Levenshtein distance-based similarity
+        // Check for exact matches first
+        if (str1 === str2) {
+            return 1.0;
+        }
+        
+        // Check for substring matches (important for partial matching like "creation king" in "mementomictlan tecuhtlica creation king")
         const longer = str1.length > str2.length ? str1 : str2;
         const shorter = str1.length > str2.length ? str2 : str1;
         
@@ -1920,6 +1987,22 @@ export class SessionManager {
             return 1.0;
         }
         
+        // If the shorter string is contained in the longer string, give high similarity
+        if (longer.includes(shorter)) {
+            // Calculate how much of the longer string is covered by the shorter string
+            const coverage = shorter.length / longer.length;
+            // Give a high base score plus bonus for coverage
+            return Math.min(0.85 + (coverage * 0.15), 1.0); // Min 85% similarity for substring matches
+        }
+        
+        // Check if longer string ends or starts with shorter string (common in card names)
+        if (longer.endsWith(shorter) || longer.startsWith(shorter) || 
+            shorter.endsWith(longer) || shorter.startsWith(longer)) {
+            const coverage = shorter.length / longer.length;
+            return Math.min(0.80 + (coverage * 0.20), 1.0); // Min 80% for prefix/suffix matches
+        }
+        
+        // Fall back to Levenshtein distance for other cases
         const distance = this.levenshteinDistance(longer, shorter);
         return (longer.length - distance) / longer.length;
     }

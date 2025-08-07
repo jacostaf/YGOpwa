@@ -18,6 +18,7 @@ import { SessionManager } from './session/SessionManager.js';
 import { PriceChecker } from './price/PriceChecker.js';
 import { UIManager } from './ui/UIManager.js';
 import { TrainingUI } from './ui/TrainingUI.js';
+import { PatternManagerUI } from './ui/PatternManagerUI.js';
 import { Logger } from './utils/Logger.js';
 import { Storage } from './utils/Storage.js';
 
@@ -40,10 +41,11 @@ class YGORipperApp {
         this.priceChecker = new PriceChecker();
         this.uiManager = new UIManager();
         this.trainingUI = null; // Initialized after app setup
+        this.patternManagerUI = null; // Initialized after app setup
         
         // Application state
         this.isInitialized = false;
-        this.currentTab = 'price-checker';
+        this.currentTab = 'pack-ripper';  // Changed from 'price-checker' to make pack-ripper (which contains voice) the default tab
         this.settings = {};
         
         // Initialization promise
@@ -103,6 +105,9 @@ class YGORipperApp {
             // Initialize Training UI
             this.trainingUI = new TrainingUI(this, this.logger);
             
+            // Initialize Pattern Manager UI
+            this.patternManagerUI = new PatternManagerUI(this, this.logger);
+            
             this.updateLoadingProgress(40, 'Checking permissions...');
             
             // Initialize permission manager with error boundary
@@ -127,6 +132,17 @@ class YGORipperApp {
             
             // Set up event handlers with error boundary
             this.safeSetupEventHandlers();
+            
+            this.updateLoadingProgress(92, 'Initializing pattern management...');
+            
+            // Initialize pattern manager UI after voice engine is ready
+            if (this.patternManagerUI && this.voiceEngine) {
+                try {
+                    await this.patternManagerUI.initialize();
+                } catch (error) {
+                    this.logger.warn('Pattern manager UI initialization failed:', error);
+                }
+            }
             
             this.updateLoadingProgress(95, 'Loading initial data...');
             
@@ -354,7 +370,7 @@ class YGORipperApp {
                     // Sort cards by confidence for auto-confirm logic
                     const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
                     
-                    this.logger.info(`Found ${cards.length} card matches, best confidence: ${(sortedCards[0].confidence || 0) * 100}%`);
+                    this.logger.info(`Found ${cards.length} card matches, best confidence: ${(sortedCards[0].confidence || 0)}%`);
                     
                     // Check for auto-confirm with error boundary (non-blocking)
                     this.safeHandleAutoConfirm(sortedCards, result.transcript);

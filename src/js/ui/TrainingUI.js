@@ -242,54 +242,90 @@ export class TrainingUI {
      * Set up modal event listeners
      */
     setupModalEventListeners() {
-        const modal = this.trainingModal;
-        const modalOverlay = modal.parentElement;
-        
-        // Close button
-        modal.querySelector('.modal-close').addEventListener('click', () => {
-            this.closeTrainingModal();
-        });
-        
-        // Cancel button
-        modal.querySelector('.cancel-training').addEventListener('click', () => {
-            this.closeTrainingModal();
-        });
-        
-        // Confirm training button
-        modal.querySelector('.confirm-training').addEventListener('click', () => {
-            this.confirmTraining();
-        });
-        
-        // Click outside to close
-        modalOverlay.addEventListener('click', (e) => {
-            if (e.target === modalOverlay) {
-                this.closeTrainingModal();
+        try {
+            const modal = this.trainingModal;
+            const modalOverlay = modal.parentElement;
+            
+            // Close button
+            const closeButton = modal.querySelector('.modal-close');
+            if (closeButton) {
+                closeButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.logger.info('Modal close button clicked');
+                    this.closeTrainingModal();
+                });
+            } else {
+                this.logger.warn('Modal close button not found');
             }
-        });
-        
-        // Search input handlers
-        this.searchBox.addEventListener('input', (e) => {
-            this.handleSearchInput(e.target.value);
-        });
-        
-        this.searchBox.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                if (this.currentSearchResults.length > 0) {
-                    this.selectCard(this.currentSearchResults[0]);
-                }
-            } else if (e.key === 'Escape') {
-                this.closeTrainingModal();
+            
+            // Cancel button
+            const cancelButton = modal.querySelector('.cancel-training');
+            if (cancelButton) {
+                cancelButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.logger.info('Modal cancel button clicked');
+                    this.closeTrainingModal();
+                });
+            } else {
+                this.logger.warn('Modal cancel button not found');
             }
-        });
         
-        // Clear search button
-        const clearBtn = modal.querySelector('.search-clear-btn');
-        clearBtn.addEventListener('click', () => {
-            this.searchBox.value = '';
-            this.clearSearchResults();
-            this.searchBox.focus();
-        });
+            // Confirm training button
+            const confirmButton = modal.querySelector('.confirm-training');
+            if (confirmButton) {
+                confirmButton.addEventListener('click', () => {
+                    this.confirmTraining();
+                });
+            } else {
+                this.logger.warn('Modal confirm button not found');
+            }
+            
+            // Click outside to close
+            if (modalOverlay) {
+                modalOverlay.addEventListener('click', (e) => {
+                    if (e.target === modalOverlay) {
+                        this.logger.info('Modal overlay clicked - closing modal');
+                        this.closeTrainingModal();
+                    }
+                });
+            }
+            
+            // Search input handlers
+            if (this.searchBox) {
+                this.searchBox.addEventListener('input', (e) => {
+                    this.handleSearchInput(e.target.value);
+                });
+                
+                this.searchBox.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (this.currentSearchResults.length > 0) {
+                            this.selectCard(this.currentSearchResults[0]);
+                        }
+                    } else if (e.key === 'Escape') {
+                        this.logger.info('Escape key pressed - closing modal');
+                        this.closeTrainingModal();
+                    }
+                });
+            }
+            
+            // Clear search button
+            const clearBtn = modal.querySelector('.search-clear-btn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    this.searchBox.value = '';
+                    this.clearSearchResults();
+                    this.searchBox.focus();
+                });
+            }
+            
+        } catch (error) {
+            this.logger.error('Error setting up modal event listeners:', error);
+            // Try to close the modal if setup fails
+            this.closeTrainingModal();
+        }
     }
 
     /**
@@ -605,13 +641,15 @@ export class TrainingUI {
      * Train the voice recognition system with the user's correction
      */
     async trainVoiceRecognition(voiceInput, correctCard) {
+        let baseCardName = 'the selected card'; // Default fallback for toast message
+        
         try {
             // Get the voice engine and learning components
             const voiceEngine = this.app.voiceEngine;
             
             if (voiceEngine && voiceEngine.learningEngine) {
                 // Extract base card name (without rarity/variant info) for training
-                const baseCardName = this.extractBaseCardName(correctCard.name);
+                baseCardName = this.extractBaseCardName(correctCard.name);
                 
                 // Record this as a successful learning interaction using base card name
                 voiceEngine.learningEngine.learnFromSuccess(
@@ -649,14 +687,22 @@ export class TrainingUI {
                 this.logger.info(`Training completed: "${voiceInput}" -> "${baseCardName}" (from: "${correctCard.name}")`);
             } else {
                 this.logger.warn('Voice learning engine not available');
+                // Extract base name even if learning engine isn't available for the toast message
+                baseCardName = this.extractBaseCardName(correctCard.name);
             }
-            
-            // Show user-friendly confirmation
-            this.app.showToast(`Voice recognition trained! Next time you say "${voiceInput}", it will better recognize "${baseCardName}" and its variants.`, 'success');
             
         } catch (error) {
             this.logger.error('Failed to train voice recognition:', error);
+            // Ensure baseCardName is set even if training fails
+            try {
+                baseCardName = this.extractBaseCardName(correctCard.name);
+            } catch (extractError) {
+                baseCardName = correctCard.name || 'the selected card';
+            }
             throw error;
+        } finally {
+            // Show user-friendly confirmation (moved to finally to ensure it always shows)
+            this.app.showToast(`Voice recognition trained! Next time you say "${voiceInput}", it will better recognize "${baseCardName}" and its variants.`, 'success');
         }
     }
 
@@ -757,25 +803,45 @@ export class TrainingUI {
      * Close training modal
      */
     closeTrainingModal() {
-        if (this.trainingModal) {
-            const modalOverlay = this.trainingModal.parentElement;
-            modalOverlay.remove();
+        try {
+            // Find and remove modal overlay from DOM
+            const modalOverlays = document.querySelectorAll('.training-modal-overlay');
+            modalOverlays.forEach(overlay => {
+                overlay.remove();
+            });
+            
+            // Also check if trainingModal exists and has a parent
+            if (this.trainingModal) {
+                const modalOverlay = this.trainingModal.parentElement;
+                if (modalOverlay) {
+                    modalOverlay.remove();
+                } else {
+                    // If no parent, try to remove the modal directly
+                    this.trainingModal.remove();
+                }
+                this.trainingModal = null;
+            }
+            
+            this.isTrainingMode = false;
+            this.selectedCard = null;
+            this.currentSearchResults = [];
+            
+            if (this.searchTimeout) {
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = null;
+            }
+            
+            // Resume voice recognition when modal closes
+            this.resumeVoiceRecognition();
+            
+            this.logger.info('Training modal closed');
+        } catch (error) {
+            this.logger.error('Error closing training modal:', error);
+            // Force cleanup even if there's an error
+            this.isTrainingMode = false;
             this.trainingModal = null;
+            this.resumeVoiceRecognition();
         }
-        
-        this.isTrainingMode = false;
-        this.selectedCard = null;
-        this.currentSearchResults = [];
-        
-        if (this.searchTimeout) {
-            clearTimeout(this.searchTimeout);
-            this.searchTimeout = null;
-        }
-        
-        // Resume voice recognition when modal closes
-        this.resumeVoiceRecognition();
-        
-        this.logger.info('Training modal closed');
     }
 
     /**

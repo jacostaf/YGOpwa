@@ -732,11 +732,14 @@ export class VoiceEngine {
             { pattern: /m[ae]k[ou]?sh[aei]/gi, replacement: 'Mekk-Knight' },
             { pattern: /salamangreat/gi, replacement: 'Salamangreat' },
             
-            // Common prefixes and suffixes
-            { pattern: /\b(?:the|a|an)\s+/gi, replacement: '' }, // Remove articles
-            { pattern: /(?:monster|card|spell|trap)\b/gi, replacement: '' }, // Remove common generic terms
+            // Common prefixes and suffixes - be much more conservative
+            // Only remove standalone articles at the beginning
+            { pattern: /^(?:the|a|an)\s+/gi, replacement: '' },
+            // Only clean up extra spaces and trim
             { pattern: /\s{2,}/g, replacement: ' ' }, // Clean up extra spaces
             { pattern: /^\s+|\s+$/g, replacement: '' } // Trim spaces
+            // NOTE: Removed aggressive removal of "monster", "card", "spell", "trap" 
+            // as this was filtering out important parts of card names
         ];
         
         // Configure recognition settings for better fantasy name recognition
@@ -1030,22 +1033,35 @@ export class VoiceEngine {
         }
         
         let optimizedTranscript = result.transcript;
+        const originalTranscript = result.transcript;
         
-        // Apply pattern replacements
+        // Apply pattern replacements - log each step for debugging
         for (const term of this.commonCardTerms) {
+            const beforeReplace = optimizedTranscript;
             optimizedTranscript = optimizedTranscript.replace(term.pattern, term.replacement);
+            if (beforeReplace !== optimizedTranscript) {
+                console.log(`🔄 Pattern replacement: "${beforeReplace}" → "${optimizedTranscript}"`);
+            }
         }
         
-        // Clean up common issues
+        // Clean up common issues - be more conservative with special character removal
+        const beforeCleanup = optimizedTranscript;
         optimizedTranscript = optimizedTranscript
             .replace(/\s+/g, ' ') // Multiple spaces
-            .replace(/[^\w\s-]/g, '') // Special characters except hyphens
+            .replace(/["""''`]/g, '') // Only remove quotes and backticks
+            .replace(/[^\w\s-'"]/g, '') // Remove special chars but keep apostrophes and quotes
             .trim();
+            
+        if (beforeCleanup !== optimizedTranscript) {
+            console.log(`🧹 Cleanup: "${beforeCleanup}" → "${optimizedTranscript}"`);
+        }
+        
+        console.log(`🎯 Final optimization: "${originalTranscript}" → "${optimizedTranscript}"`);
         
         return {
             transcript: optimizedTranscript,
             confidence: result.confidence,
-            originalTranscript: result.transcript
+            originalTranscript: originalTranscript
         };
     }
 
