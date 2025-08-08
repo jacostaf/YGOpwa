@@ -269,8 +269,8 @@ export class SessionManager {
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
+                    'Content-Type': '*/*',
+                    'Accept': '*/*',
                 },
                 signal: controller.signal
             });
