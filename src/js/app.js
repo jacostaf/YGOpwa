@@ -21,6 +21,10 @@ import { TrainingUI } from './ui/TrainingUI.js';
 import { PatternManagerUI } from './ui/PatternManagerUI.js';
 import { Logger } from './utils/Logger.js';
 import { Storage } from './utils/Storage.js';
+// Import migration system for space theme
+import { MigrationManager } from './utils/MigrationManager.js';
+import { FeatureFlags } from './utils/FeatureFlags.js';
+import { SelectorMapper } from './utils/SelectorMapper.js';
 
 /**
  * Main Application Class
@@ -42,6 +46,14 @@ class YGORipperApp {
         this.uiManager = new UIManager();
         this.trainingUI = null; // Initialized after app setup
         this.patternManagerUI = null; // Initialized after app setup
+        
+        // Migration system for space theme
+        this.featureFlags = new FeatureFlags({
+            analyticsEnabled: true,
+            developmentOverrides: this.isDevelopmentMode()
+        });
+        this.selectorMapper = new SelectorMapper(this.featureFlags);
+        this.migrationManager = null; // Initialized after app setup
         
         // Application state
         this.isInitialized = false;
@@ -107,6 +119,11 @@ class YGORipperApp {
             
             // Initialize Pattern Manager UI
             this.patternManagerUI = new PatternManagerUI(this, this.logger);
+            
+            this.updateLoadingProgress(35, 'Setting up migration system...');
+            
+            // Initialize migration system for space theme
+            await this.safeInitializeMigrationSystem();
             
             this.updateLoadingProgress(40, 'Checking permissions...');
             
@@ -207,10 +224,19 @@ class YGORipperApp {
     }
 
     /**
-     * Safe UI initialization with error recovery
+     * Safe UI initialization with error recovery and migration system integration
      */
     async safeInitializeUI() {
         try {
+            // Integrate UIManager with migration system
+            if (this.selectorMapper) {
+                this.uiManager.selectorMapper = this.selectorMapper;
+                this.logger.info('UIManager integrated with SelectorMapper');
+            }
+            
+            // Update other components with migration system integration
+            this.integrateComponentsWithMigration();
+            
             await this.uiManager.initialize(this);
         } catch (error) {
             this.logger.error('UI initialization failed:', error);
@@ -223,6 +249,35 @@ class YGORipperApp {
                 throw new Error('UI Error');
             }
             // In production, continue with minimal UI
+        }
+    }
+
+    /**
+     * Integrate components with migration system
+     */
+    integrateComponentsWithMigration() {
+        try {
+            // Integrate SessionManager with migration system
+            if (this.sessionManager && this.selectorMapper) {
+                this.sessionManager.selectorMapper = this.selectorMapper;
+                this.logger.debug('SessionManager integrated with SelectorMapper');
+            }
+            
+            // Integrate PriceChecker with migration system
+            if (this.priceChecker && this.selectorMapper) {
+                this.priceChecker.selectorMapper = this.selectorMapper;
+                this.logger.debug('PriceChecker integrated with SelectorMapper');
+            }
+            
+            // Set up component cross-references for state preservation
+            if (this.uiManager) {
+                this.uiManager.migrationManager = this.migrationManager;
+                this.uiManager.featureFlags = this.featureFlags;
+            }
+            
+            this.logger.info('Components integrated with migration system');
+        } catch (error) {
+            this.logger.warn('Component integration with migration system failed:', error);
         }
     }
 
@@ -246,13 +301,22 @@ class YGORipperApp {
      */
     async safeInitializeVoice() {
         try {
+            // For production deployment, skip voice engine initialization to prevent hanging
+            // Voice engine can be initialized on-demand when user tries to use voice features
+            this.logger.info('Skipping voice engine initialization for production stability');
+            this.voiceEngine = null;
+            
+            // Still create the VoiceEngine instance for later use
             if (!this.voiceEngine) {
                 this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger, this.storage);
+                
+                // Mark as "lazy initialization" - will initialize when first used
+                this.voiceEngine.isLazyInit = true;
             }
-            await this.voiceEngine.initialize();
             
-            // Set VoiceEngine reference on SessionManager for learning boost functionality
-            this.sessionManager.setVoiceEngine(this.voiceEngine);
+            // Note: Voice engine will be initialized on first use to prevent deployment blocking
+            this.showToast('Voice recognition will be available after first use.', 'info');
+            
         } catch (error) {
             this.logger.warn('Voice engine initialization failed:', error);
             
@@ -299,6 +363,30 @@ class YGORipperApp {
             // Continue without price checker - limited functionality
             this.priceChecker = null;
             this.showToast('Price checking service unavailable. Prices will not be shown.', 'warning');
+        }
+    }
+
+    /**
+     * Safe migration system initialization with error boundaries
+     */
+    async safeInitializeMigrationSystem() {
+        try {
+            // Initialize migration manager for space theme
+            this.migrationManager = new MigrationManager({
+                debugMode: this.isDevelopmentMode(),
+                enableAnalytics: true,
+                performanceMonitoring: true
+            });
+            
+            await this.migrationManager.initialize();
+            
+            this.logger.info('Migration system initialized successfully');
+        } catch (error) {
+            this.logger.warn('Migration system initialization failed:', error);
+            
+            // Continue without migration system - legacy theme only
+            this.migrationManager = null;
+            this.showToast('Space theme unavailable. Using classic interface.', 'info');
         }
     }
 
@@ -929,7 +1017,15 @@ class YGORipperApp {
             // Validate that we have enough card sets for proper operation
             const cardSets = this.sessionManager.getCardSets();
             if (!cardSets || cardSets.length < 500) {
-                throw new Error(`Insufficient card sets loaded (${cardSets?.length || 0}). Backend may be offline or misconfigured.`);
+                // Don't throw error - let app continue with mock data
+                this.logger.warn(`Only ${cardSets?.length || 0} card sets loaded. Backend may be offline. Using mock data.`);
+                
+                // Show warning to user if using mock data
+                if (this.sessionManager.usingMockData) {
+                    this.showMockDataWarning();
+                }
+            } else {
+                this.logger.info(`Successfully loaded ${cardSets.length} card sets`);
             }
             
             // Load last session if auto-save is enabled
@@ -946,6 +1042,44 @@ class YGORipperApp {
             this.logger.error('Failed to load initial data:', error);
             throw error;
         }
+    }
+
+    /**
+     * Show warning banner when using mock data (backend offline)
+     */
+    showMockDataWarning() {
+        // Create warning banner
+        const warningBanner = document.createElement('div');
+        warningBanner.id = 'mock-data-warning';
+        warningBanner.className = 'alert alert-warning';
+        warningBanner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 12px 20px;
+            border-bottom: 1px solid #ffeaa7;
+            text-align: center;
+            font-weight: bold;
+        `;
+        warningBanner.innerHTML = `
+            ⚠️ DEVELOPMENT MODE: Backend server offline - Using mock data. 
+            Some features may be limited. Start realBackendAPI.py to enable full functionality.
+        `;
+
+        // Insert at top of body
+        document.body.insertBefore(warningBanner, document.body.firstChild);
+
+        // Adjust main content to account for banner
+        const mainContent = document.querySelector('.container') || document.querySelector('main');
+        if (mainContent) {
+            mainContent.style.marginTop = '60px';
+        }
+
+        this.logger.info('Mock data warning banner displayed');
     }
 
     /**
@@ -1070,6 +1204,23 @@ class YGORipperApp {
 
             this.voiceEngine.onError((error) => {
                 this.handleVoiceError(error);
+            });
+        }
+
+        // Theme toggle buttons for Migration System
+        // Space theme toggle button (in space layout)
+        const spaceThemeToggleButton = document.getElementById('space-theme-toggle');
+        if (spaceThemeToggleButton && this.migrationManager) {
+            spaceThemeToggleButton.addEventListener('click', () => {
+                this.migrationManager.toggleTheme();
+            });
+        }
+
+        // Legacy theme toggle button (in legacy layout)  
+        const legacyThemeToggleButton = document.getElementById('legacy-theme-toggle');
+        if (legacyThemeToggleButton && this.migrationManager) {
+            legacyThemeToggleButton.addEventListener('click', () => {
+                this.migrationManager.toggleTheme();
             });
         }
 
@@ -1248,7 +1399,31 @@ class YGORipperApp {
                 throw new Error('Voice engine not initialized');
             }
             
-            if (!this.voiceEngine.isAvailable()) {
+            // Handle lazy initialization
+            if (this.voiceEngine.isLazyInit && !this.voiceEngine.isInitialized) {
+                this.logger.info('Performing lazy initialization of voice engine...');
+                this.uiManager.showToast('Initializing voice recognition...', 'info');
+                
+                const initResult = await this.voiceEngine.initialize();
+                this.logger.debug('Voice engine initialization result:', initResult, 'Type:', typeof initResult);
+                
+                if (!initResult || typeof initResult === 'object') {
+                    // Initialize returned an error object
+                    const errorMsg = typeof initResult === 'object' ? 
+                        (initResult.userMessage || initResult.message || 'Voice engine initialization failed') : 
+                        'Voice engine initialization failed';
+                    this.logger.error('Voice engine initialization failed with error object:', initResult);
+                    throw new Error(errorMsg);
+                }
+            }
+            
+            // Final availability check with detailed logging
+            const isAvailable = this.voiceEngine.isAvailable();
+            this.logger.debug('Final voice engine availability check:', isAvailable);
+            
+            if (!isAvailable) {
+                const status = this.voiceEngine.getStatus();
+                this.logger.error('Voice engine not available. Status:', status);
                 throw new Error('Voice recognition not available');
             }
             
@@ -1258,6 +1433,12 @@ class YGORipperApp {
         } catch (error) {
             this.logger.error('Failed to start voice recognition:', error);
             this.uiManager.showToast('Failed to start voice recognition: ' + error.message, 'error');
+            
+            // Show recovery options
+            this.showVoiceErrorRecovery(null, [
+                { action: 'manual', label: 'Type Card Name Instead' },
+                { action: 'help', label: 'Show Help' }
+            ]);
         }
     }
 
@@ -1283,7 +1464,23 @@ class YGORipperApp {
         try {
             this.logger.info('Starting voice recognition test');
             
-            if (!this.voiceEngine || !this.voiceEngine.isAvailable()) {
+            if (!this.voiceEngine) {
+                throw new Error('Voice engine not initialized');
+            }
+            
+            // Handle lazy initialization for test
+            if (this.voiceEngine.isLazyInit && !this.voiceEngine.isInitialized) {
+                this.logger.info('Performing lazy initialization for voice test...');
+                this.uiManager.showToast('Initializing voice recognition for test...', 'info');
+                
+                const initResult = await this.voiceEngine.initialize();
+                if (!initResult || typeof initResult === 'object') {
+                    const errorMsg = typeof initResult === 'object' ? initResult.userMessage : 'Voice engine initialization failed';
+                    throw new Error(errorMsg);
+                }
+            }
+            
+            if (!this.voiceEngine.isAvailable()) {
                 throw new Error('Voice recognition not available');
             }
             
@@ -1565,6 +1762,19 @@ class YGORipperApp {
         }
         
         this.logger.debug(`Loading progress: ${percent}% - ${message}`);
+    }
+
+    /**
+     * Check if running in development mode
+     */
+    isDevelopmentMode() {
+        return (
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.hostname.includes('dev') ||
+            localStorage.getItem('dev_mode') === 'true' ||
+            window.location.search.includes('debug=true')
+        );
     }
 
     /**

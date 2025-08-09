@@ -17,6 +17,15 @@ import { PhoneticMapper } from './PhoneticMapper.js';
 import { AdaptiveConfidenceManager } from './AdaptiveConfidenceManager.js';
 import { ProgressiveLearningEngine } from './ProgressiveLearningEngine.js';
 
+/**
+ * Enhanced Voice Engine with Space Theme Integration
+ * 
+ * Phase 3 Implementation: Complete System Integration & Production Validation
+ * - Advanced voice recognition with space theme UI integration
+ * - Voice status display in Mission Control panel
+ * - Theme-aware voice controls and visualization
+ * - Cross-platform voice recognition consistency
+ */
 export class VoiceEngine {
     constructor(permissionManager, logger = null, storage = null) {
         this.permissionManager = permissionManager;
@@ -33,6 +42,12 @@ export class VoiceEngine {
         this.isListening = false;
         this.isPaused = false;
         this.shouldKeepListening = false; // Track if user wants continuous listening
+        
+        // Space theme integration
+        this.selectorMapper = null; // Will be set by app integration
+        this.currentTheme = 'legacy';
+        this.spaceUIElements = new Map();
+        this.voiceVisualization = null;
         
         // Enhanced fantasy name processing components
         this.phoneticMapper = new PhoneticMapper(this.logger);
@@ -87,6 +102,15 @@ export class VoiceEngine {
             sessionLength: 0,
             userPreferences: {}
         };
+        
+        // Initialize space theme integration
+        this.initializeSpaceThemeIntegration();
+        
+        // Support for lazy initialization
+        this.isLazyInit = false;
+        
+        // Error tracking
+        this.lastEngineError = null;
         
         this.logger.info('Enhanced VoiceEngine initialized for platform:', this.platform);
     }
@@ -162,6 +186,17 @@ export class VoiceEngine {
             
             // Initialize recognition engines
             await this.initializeEngines();
+            
+            // Validate that at least one engine was successfully initialized
+            if (this.engines.size === 0) {
+                let errorMsg = 'No recognition engines were successfully initialized.';
+                if (this.lastEngineError) {
+                    errorMsg += ` Last engine error: ${this.lastEngineError.message}`;
+                } else {
+                    errorMsg += ' This may be due to missing Web Speech API support or microphone permissions.';
+                }
+                throw new Error(errorMsg);
+            }
             
             // Select best engine
             this.selectBestEngine();
@@ -299,11 +334,19 @@ export class VoiceEngine {
                 this.logger.debug('Web Speech recognition started');
                 this.isListening = true;
                 this.emitStatusChange('listening');
+                
+                // Update theme-aware UI
+                this.updateVoiceStatusDisplay();
+                this.updateVoiceControlsVisibility();
             };
             
             recognition.onend = () => {
                 this.logger.debug('Web Speech recognition ended');
                 this.isListening = false;
+                
+                // Update theme-aware UI
+                this.updateVoiceStatusDisplay();
+                this.updateVoiceControlsVisibility();
                 
                 // Auto-restart if user wants continuous listening and not manually stopped
                 if (this.shouldKeepListening && !this.isPaused && this.isInitialized) {
@@ -342,6 +385,13 @@ export class VoiceEngine {
             
         } catch (error) {
             this.logger.error('Failed to initialize Web Speech API engine:', error);
+            
+            // Store the initialization error for better diagnostics
+            this.lastEngineError = {
+                type: 'webspeech-init-failed',
+                message: error.message,
+                timestamp: new Date().toISOString()
+            };
         }
     }
 
@@ -530,6 +580,9 @@ export class VoiceEngine {
                 // Show interim results (what's being heard in real-time)
                 this.logger.info(`[LIVE] Hearing: "${transcript}" (interim, ${(confidence * 100).toFixed(1)}%)`);
                 this.emitInterimResult(transcript, confidence);
+                
+                // Update transcript display for interim results in current theme
+                this.updateVoiceTranscriptDisplay(transcript, confidence);
                 return;
             } else {
                 // Show final results
@@ -577,6 +630,9 @@ export class VoiceEngine {
             
             this.lastResult = result;
             this.recognitionAttempts = 0; // Reset retry counter on success
+            
+            // Update transcript display for final result in current theme
+            this.updateVoiceTranscriptDisplay(result.transcript, result.confidence);
             
             this.logger.info('Voice recognition result:', result);
             console.log('🚀 ABOUT TO EMIT RESULT:', result.transcript);
@@ -1116,7 +1172,9 @@ export class VoiceEngine {
      * Check if voice recognition is available
      */
     isAvailable() {
-        return this.isInitialized && this.engines.size > 0;
+        const available = this.isInitialized && this.engines.size > 0;
+        this.logger.debug(`Voice availability check: isInitialized=${this.isInitialized}, engines.size=${this.engines.size}, available=${available}`);
+        return available;
     }
 
     /**
@@ -1377,5 +1435,352 @@ export class VoiceEngine {
     restoreListeners(originalListeners) {
         this.listeners.result = originalListeners.result;
         this.listeners.error = originalListeners.error;
+    }
+    
+    /**
+     * Initialize space theme integration
+     */
+    initializeSpaceThemeIntegration() {
+        // Set up theme detection
+        this.detectCurrentTheme();
+        
+        // Listen for theme changes
+        if (typeof window !== 'undefined') {
+            window.addEventListener('themeChanged', (event) => {
+                this.handleThemeChange(event.detail);
+            });
+        }
+        
+        this.logger.debug('Space theme integration initialized');
+    }
+    
+    /**
+     * Set selector mapper for theme-aware element access
+     */
+    setSelectorMapper(selectorMapper) {
+        this.selectorMapper = selectorMapper;
+        this.logger.info('VoiceEngine integrated with SelectorMapper');
+        
+        // Initialize space UI elements
+        this.initializeSpaceUIElements();
+    }
+    
+    /**
+     * Detect current active theme
+     */
+    detectCurrentTheme() {
+        if (typeof document !== 'undefined') {
+            if (document.body.classList.contains('space-theme') || 
+                document.querySelector('.space-layout.active')) {
+                this.currentTheme = 'space';
+            } else {
+                this.currentTheme = 'legacy';
+            }
+        }
+        this.logger.debug('Current theme detected:', this.currentTheme);
+    }
+    
+    /**
+     * Handle theme change events
+     */
+    handleThemeChange(themeInfo) {
+        this.logger.info('Handling theme change:', themeInfo);
+        
+        const oldTheme = this.currentTheme;
+        this.currentTheme = themeInfo.theme || 'legacy';
+        
+        // Update UI elements for new theme
+        this.updateUIElementsForTheme(oldTheme, this.currentTheme);
+        
+        // Preserve voice state across theme switches
+        this.preserveVoiceStateOnThemeSwitch();
+    }
+    
+    /**
+     * Initialize space UI elements
+     */
+    initializeSpaceUIElements() {
+        if (!this.selectorMapper) return;
+        
+        try {
+            this.spaceUIElements.set('voiceStatus', document.getElementById('space-voice-status'));
+            this.spaceUIElements.set('statusText', document.getElementById('space-status-text'));
+            this.spaceUIElements.set('voiceTranscript', document.getElementById('space-voice-transcript'));
+            this.spaceUIElements.set('startVoiceButton', document.getElementById('start-voice-space'));
+            this.spaceUIElements.set('stopVoiceButton', document.getElementById('stop-voice-space'));
+            this.spaceUIElements.set('testVoiceButton', document.getElementById('test-voice-space'));
+            
+            this.logger.debug('Space UI elements initialized');
+        } catch (error) {
+            this.logger.warn('Failed to initialize space UI elements:', error);
+        }
+    }
+    
+    /**
+     * Update UI elements when theme changes
+     */
+    updateUIElementsForTheme(oldTheme, newTheme) {
+        this.logger.debug(`Updating UI elements: ${oldTheme} → ${newTheme}`);
+        
+        // Re-initialize elements for new theme
+        this.initializeSpaceUIElements();
+        
+        // Update voice status display in new theme
+        this.updateVoiceStatusDisplay();
+        
+        // Update voice controls visibility
+        this.updateVoiceControlsVisibility();
+    }
+    
+    /**
+     * Preserve voice state when switching themes
+     */
+    preserveVoiceStateOnThemeSwitch() {
+        // Preserve listening state
+        if (this.isListening) {
+            this.logger.debug('Preserving voice listening state across theme switch');
+            // Voice engine continues running - just update UI
+            this.updateVoiceStatusDisplay();
+        }
+        
+        // Preserve last result
+        if (this.lastResult) {
+            this.updateVoiceTranscriptDisplay(this.lastResult.transcript, this.lastResult.confidence);
+        }
+    }
+    
+    /**
+     * Update voice status display for current theme
+     */
+    updateVoiceStatusDisplay() {
+        const status = this.getVoiceStatusText();
+        const statusColor = this.getVoiceStatusColor();
+        
+        if (this.currentTheme === 'space') {
+            this.updateSpaceVoiceStatus(status, statusColor);
+        } else {
+            this.updateLegacyVoiceStatus(status, statusColor);
+        }
+    }
+    
+    /**
+     * Update space theme voice status
+     */
+    updateSpaceVoiceStatus(status, statusColor) {
+        // Update Mission Control panel status
+        const spaceVoiceStatus = document.getElementById('space-voice-status');
+        if (spaceVoiceStatus) {
+            spaceVoiceStatus.textContent = status;
+            spaceVoiceStatus.className = `stat-value voice-status-space ${statusColor}`;
+        }
+        
+        // Update main interface status
+        const statusText = document.getElementById('space-status-text');
+        const statusIcon = document.querySelector('#space-status-indicator .status-icon');
+        
+        if (statusText) {
+            statusText.textContent = status;
+        }
+        
+        if (statusIcon) {
+            statusIcon.textContent = this.getVoiceStatusIcon();
+        }
+        
+        // Update voice visualization
+        this.updateVoiceVisualization();
+    }
+    
+    /**
+     * Update legacy theme voice status
+     */
+    updateLegacyVoiceStatus(status, statusColor) {
+        // Update legacy UI elements if they exist
+        const legacyStatus = document.getElementById('voice-status');
+        if (legacyStatus) {
+            legacyStatus.textContent = status;
+            legacyStatus.className = `voice-status ${statusColor}`;
+        }
+    }
+    
+    /**
+     * Get voice status text
+     */
+    getVoiceStatusText() {
+        if (!this.isInitialized) return 'Initializing...';
+        if (this.isListening) return 'Listening';
+        if (this.isPaused) return 'Paused';
+        if (this.isRecovering) return 'Recovering...';
+        return 'Ready';
+    }
+    
+    /**
+     * Get voice status color class
+     */
+    getVoiceStatusColor() {
+        if (!this.isInitialized) return 'status-warning';
+        if (this.isListening) return 'status-success';
+        if (this.isPaused) return 'status-warning';
+        if (this.isRecovering) return 'status-warning';
+        return 'status-ready';
+    }
+    
+    /**
+     * Get voice status icon
+     */
+    getVoiceStatusIcon() {
+        if (!this.isInitialized) return '⏳';
+        if (this.isListening) return '🟢';
+        if (this.isPaused) return '⏸️';
+        if (this.isRecovering) return '🔄';
+        return '⚪';
+    }
+    
+    /**
+     * Update voice controls visibility
+     */
+    updateVoiceControlsVisibility() {
+        if (this.currentTheme === 'space') {
+            this.updateSpaceVoiceControls();
+        } else {
+            this.updateLegacyVoiceControls();
+        }
+    }
+    
+    /**
+     * Update space theme voice controls
+     */
+    updateSpaceVoiceControls() {
+        // Mission Control panel controls
+        const startBtn = document.getElementById('start-voice-space');
+        const stopBtn = document.getElementById('stop-voice-space');
+        
+        // Main interface controls
+        const mainStartBtn = document.getElementById('main-start-voice-space');
+        const mainStopBtn = document.getElementById('main-stop-voice-space');
+        
+        const shouldShowStart = !this.isListening;
+        const shouldShowStop = this.isListening;
+        
+        // Update Mission Control controls
+        if (startBtn && stopBtn) {
+            startBtn.style.display = shouldShowStart ? 'inline-flex' : 'none';
+            stopBtn.style.display = shouldShowStop ? 'inline-flex' : 'none';
+            
+            if (!shouldShowStop) stopBtn.classList.add('hidden');
+            else stopBtn.classList.remove('hidden');
+        }
+        
+        // Update main interface controls
+        if (mainStartBtn && mainStopBtn) {
+            mainStartBtn.style.display = shouldShowStart ? 'inline-flex' : 'none';
+            mainStopBtn.style.display = shouldShowStop ? 'inline-flex' : 'none';
+            
+            if (!shouldShowStop) mainStopBtn.classList.add('hidden');
+            else mainStopBtn.classList.remove('hidden');
+        }
+    }
+    
+    /**
+     * Update legacy theme voice controls
+     */
+    updateLegacyVoiceControls() {
+        const startBtn = document.getElementById('start-voice-btn');
+        const stopBtn = document.getElementById('stop-voice-btn');
+        
+        if (startBtn && stopBtn) {
+            startBtn.style.display = this.isListening ? 'none' : 'inline-flex';
+            stopBtn.style.display = this.isListening ? 'inline-flex' : 'none';
+        }
+    }
+    
+    /**
+     * Update voice transcript display for current theme
+     */
+    updateVoiceTranscriptDisplay(transcript, confidence = 0) {
+        if (this.currentTheme === 'space') {
+            this.updateSpaceTranscriptDisplay(transcript, confidence);
+        } else {
+            this.updateLegacyTranscriptDisplay(transcript, confidence);
+        }
+    }
+    
+    /**
+     * Update space theme transcript display
+     */
+    updateSpaceTranscriptDisplay(transcript, confidence) {
+        // Update Mission Control panel transcript
+        const spaceTranscript = document.getElementById('space-voice-transcript');
+        if (spaceTranscript) {
+            spaceTranscript.textContent = transcript || 'None';
+        }
+        
+        // Update main interface transcript
+        const mainTranscript = document.getElementById('voice-transcript-space');
+        if (mainTranscript) {
+            if (transcript) {
+                mainTranscript.innerHTML = `<p class="transcript-text">${transcript}</p>`;
+            } else {
+                mainTranscript.innerHTML = '<p class="transcript-placeholder">Speak a card name to see it appear here...</p>';
+            }
+        }
+        
+        // Update confidence display
+        const confidenceDisplay = document.getElementById('voice-confidence-space');
+        if (confidenceDisplay) {
+            const confidencePercent = Math.round(confidence * 100);
+            confidenceDisplay.innerHTML = `<span>Confidence: <strong>${confidencePercent}%</strong></span>`;
+        }
+    }
+    
+    /**
+     * Update legacy theme transcript display
+     */
+    updateLegacyTranscriptDisplay(transcript, confidence) {
+        const legacyTranscript = document.getElementById('voice-transcript');
+        if (legacyTranscript) {
+            legacyTranscript.textContent = transcript || '';
+        }
+    }
+    
+    /**
+     * Update voice visualization (space theme)
+     */
+    updateVoiceVisualization() {
+        if (this.currentTheme !== 'space') return;
+        
+        const visualization = document.getElementById('space-voice-visualization');
+        if (!visualization) return;
+        
+        const waves = visualization.querySelectorAll('.wave');
+        
+        if (this.isListening) {
+            visualization.classList.add('active');
+            waves.forEach((wave, index) => {
+                wave.style.animationDelay = `${index * 0.1}s`;
+                wave.classList.add('animated');
+            });
+        } else {
+            visualization.classList.remove('active');
+            waves.forEach(wave => {
+                wave.classList.remove('animated');
+            });
+        }
+    }
+    
+    /**
+     * Get comprehensive voice status for UI integration
+     */
+    getEnhancedVoiceStatus() {
+        return {
+            ...this.getStatus(),
+            theme: this.currentTheme,
+            statusText: this.getVoiceStatusText(),
+            statusColor: this.getVoiceStatusColor(),
+            statusIcon: this.getVoiceStatusIcon(),
+            lastTranscript: this.lastResult?.transcript || null,
+            lastConfidence: this.lastResult?.confidence || 0,
+            spaceUIInitialized: this.spaceUIElements.size > 0,
+            supportsThemeSwitch: true
+        };
     }
 }
