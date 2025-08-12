@@ -482,14 +482,21 @@
                     <span>Pack Ripper</span>
                 </div>
                 
-                <!-- Theme Settings Section -->
-                <div class="theme-settings-section">
-                    <div class="theme-header">
-                        <span>🎨 Interface Themes</span>
-                        <span class="theme-toggle-icon">▼</span>
+                <!-- Theme Settings Button -->
+                <div class="nav-item theme-settings-btn" id="open-theme-modal">
+                    <span class="nav-icon">🎨</span>
+                    <span>Theme Settings</span>
+                </div>
+            </nav>
+
+            <!-- Theme Settings Modal (Hidden by default) -->
+            <div class="theme-modal hidden" id="theme-modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>🎨 Interface Themes</h2>
+                        <button class="modal-close" id="close-theme-modal">✕</button>
                     </div>
-                    
-                    <div class="theme-settings-content hidden" id="theme-settings">
+                    <div class="modal-body">
                         <div class="theme-preset-buttons">
                             <button class="theme-preset active" data-theme="space-blue">🌌 Deep Space</button>
                             <button class="theme-preset" data-theme="space-purple">🌸 Nebula</button>
@@ -548,7 +555,7 @@
                                 
                                 <div class="slider-group">
                                     <label>Panel Opacity</label>
-                                    <input type="range" id="panel-opacity-slider" min="0.5" max="1" step="0.05" value="0.8">
+                                    <input type="range" id="panel-opacity-slider" min="0" max="1" step="0.05" value="0.8">
                                     <span class="slider-value" id="opacity-value">80%</span>
                                 </div>
                                 
@@ -583,7 +590,7 @@
                         </div>
                     </div>
                 </div>
-            </nav>
+            </div>
 
             <!-- Center Workspace -->
             <main class="center-panel">

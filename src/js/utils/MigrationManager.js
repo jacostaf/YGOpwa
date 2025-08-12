@@ -563,21 +563,39 @@ export class MigrationManager {
       return;
     }
 
-    // Theme header toggle
-    const themeHeader = spaceLayout.querySelector('.theme-header');
-    if (themeHeader) {
-      // Remove any existing listeners
-      const newThemeHeader = themeHeader.cloneNode(true);
-      themeHeader.parentNode.replaceChild(newThemeHeader, themeHeader);
-      
-      newThemeHeader.addEventListener('click', (e) => {
+    // Theme modal open button
+    const openModalBtn = document.getElementById('open-theme-modal');
+    const modal = document.getElementById('theme-modal');
+    const closeModalBtn = document.getElementById('close-theme-modal');
+    
+    if (openModalBtn && modal) {
+      // Open modal
+      openModalBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.log('Theme header clicked');
-        this.toggleThemeSettings();
+        modal.classList.remove('hidden');
+        this.log('Theme modal opened');
       });
-      this.log('Theme header listener added');
+      
+      // Close modal
+      if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          modal.classList.add('hidden');
+          this.log('Theme modal closed');
+        });
+      }
+      
+      // Close on backdrop click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.classList.add('hidden');
+          this.log('Theme modal closed via backdrop');
+        }
+      });
+      
+      this.log('Theme modal listeners added');
     } else {
-      this.log('WARNING: Theme header not found');
+      this.log('WARNING: Theme modal or button not found');
     }
 
     // Theme preset buttons
@@ -1762,12 +1780,11 @@ class PanelManager {
     const container = document.createElement('div');
     container.className = 'left-panel-indicators';
     
-    // Create 4 dots for the navigation items
+    // Create dots for the actual navigation items in left panel
     const indicators = [
       { icon: '💰', label: 'Price Scanner', tab: 'price-checker' },
       { icon: '📦', label: 'Pack Ripper', tab: 'pack-ripper' },
-      { icon: '🎙️', label: 'Voice Recognition', tab: 'voice-recognition' },
-      { icon: '🧠', label: 'Neural Training', tab: 'training-patterns' }
+      { icon: '🎨', label: 'Theme Settings', tab: 'theme-settings' }
     ];
     
     indicators.forEach(item => {
@@ -1898,9 +1915,28 @@ class PanelManager {
    * Handle 4-dot indicator clicks (expand temporarily)
    */
   handleIndicatorClick(dot, side) {
+    const tabName = dot.dataset.tab;
+    
+    // Special handling for theme settings
+    if (tabName === 'theme-settings') {
+      const modal = document.getElementById('theme-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        this.migrationManager.log('Theme modal opened via indicator');
+      }
+      return;
+    }
+    
+    // For other tabs, handle navigation
     if (this.state[side + 'Collapsed'] && !this.state[side + 'Pinned']) {
       // Toggle temporary expansion
       this.toggleTemporaryExpansion(side);
+    }
+    
+    // Switch to the clicked tab
+    const navItem = document.querySelector(`.nav-item[data-tab="${tabName}"]`);
+    if (navItem) {
+      navItem.click();
     }
   }
 
