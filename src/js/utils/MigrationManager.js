@@ -525,26 +525,79 @@ export class MigrationManager {
   }
 
   /**
+   * Clean up navigation event listeners
+   */
+  cleanupNavigationListeners() {
+    const leftPanel = document.querySelector('.space-layout .left-panel');
+    const centerPanel = document.querySelector('.space-layout .center-panel');
+    
+    if (leftPanel && this.navClickHandler) {
+      leftPanel.removeEventListener('click', this.navClickHandler);
+      this.navClickHandler = null;
+    }
+    
+    if (centerPanel && this.centerTabHandler) {
+      centerPanel.removeEventListener('click', this.centerTabHandler);
+      this.centerTabHandler = null;
+    }
+    
+    this.log('Cleaned up navigation listeners');
+  }
+  
+  /**
    * Set up space navigation system
    */
   setupSpaceNavigation() {
-    // Main navigation items
-    const navItems = document.querySelectorAll('.space-layout .nav-item[data-tab]');
-    navItems.forEach(item => {
-      item.addEventListener('click', (e) => {
-        const tabId = e.currentTarget.dataset.tab;
-        this.switchSpaceTab(tabId);
-      });
-    });
+    // Clean up any existing listeners first
+    this.cleanupNavigationListeners();
+    
+    // Use event delegation for main navigation to avoid duplicates
+    const leftPanel = document.querySelector('.space-layout .left-panel');
+    if (leftPanel) {
+      // Remove old listener if exists
+      if (this.navClickHandler) {
+        leftPanel.removeEventListener('click', this.navClickHandler);
+      }
+      
+      // Create new handler
+      this.navClickHandler = (e) => {
+        const navItem = e.target.closest('.nav-item[data-tab]');
+        if (navItem && navItem.dataset.tab) {
+          e.stopPropagation();
+          e.preventDefault();
+          const tabId = navItem.dataset.tab;
+          // Skip if it's the theme settings button
+          if (tabId === 'theme-settings' || navItem.classList.contains('theme-settings-btn')) {
+            return;
+          }
+          this.log(`Navigation clicked: ${tabId}`);
+          this.switchSpaceTab(tabId);
+        }
+      };
+      
+      leftPanel.addEventListener('click', this.navClickHandler);
+    }
 
-    // Center panel tab navigation
-    const centerTabs = document.querySelectorAll('.space-layout .center-tab[data-center-tab]');
-    centerTabs.forEach(tab => {
-      tab.addEventListener('click', (e) => {
-        const tabId = e.currentTarget.dataset.centerTab;
-        this.switchCenterTab(tabId);
-      });
-    });
+    // Use event delegation for center panel tabs
+    const centerPanel = document.querySelector('.space-layout .center-panel');
+    if (centerPanel) {
+      // Remove old listener if exists
+      if (this.centerTabHandler) {
+        centerPanel.removeEventListener('click', this.centerTabHandler);
+      }
+      
+      // Create new handler
+      this.centerTabHandler = (e) => {
+        const centerTab = e.target.closest('.center-tab[data-center-tab]');
+        if (centerTab && centerTab.dataset.centerTab) {
+          e.stopPropagation();
+          const tabId = centerTab.dataset.centerTab;
+          this.switchCenterTab(tabId);
+        }
+      };
+      
+      centerPanel.addEventListener('click', this.centerTabHandler);
+    }
     
     // Initialize with voice recognition as default
     this.switchCenterTab('voice-recognition');
@@ -751,12 +804,67 @@ export class MigrationManager {
       this.log('WARNING: Random button not found');
     }
 
+    // Custom colors toggle
+    const customColorsToggle = document.getElementById('use-custom-colors');
+    if (customColorsToggle) {
+      customColorsToggle.addEventListener('change', (e) => {
+        const isEnabled = e.target.checked;
+        this.log(`Custom colors toggle: ${isEnabled}`);
+        this.toggleCustomColors(isEnabled);
+      });
+      
+      // Initialize state - start with custom colors disabled
+      this.toggleCustomColors(false);
+      this.log('Custom colors toggle listener added');
+    }
+
     // Initialize color previews and gradient
     this.initializeColorPreviews();
 
     this.log('Advanced theme settings set up');
   }
 
+  /**
+   * Toggle custom colors on/off
+   */
+  toggleCustomColors(enabled) {
+    const customColorSection = document.getElementById('custom-color-section');
+    if (customColorSection) {
+      if (enabled) {
+        customColorSection.classList.remove('disabled');
+        // Apply current custom colors
+        this.applyCustomColors();
+      } else {
+        customColorSection.classList.add('disabled');
+        // Revert to theme preset colors
+        const activePreset = document.querySelector('.theme-preset.active');
+        if (activePreset) {
+          const theme = activePreset.dataset.theme;
+          this.applyThemePreset(theme);
+        }
+      }
+    }
+    this.log(`Custom colors ${enabled ? 'enabled' : 'disabled'}`);
+  }
+  
+  /**
+   * Apply custom colors from color pickers
+   */
+  applyCustomColors() {
+    const colorPickers = [
+      { id: 'primary-color-picker', handler: 'primary-color-picker' },
+      { id: 'secondary-color-picker', handler: 'secondary-color-picker' },
+      { id: 'accent-color-picker', handler: 'accent-color-picker' }
+    ];
+    
+    colorPickers.forEach(({ id, handler }) => {
+      const picker = document.getElementById(id);
+      if (picker) {
+        this.enhancedColorChange(handler, picker.value);
+      }
+    });
+  }
+  
   /**
    * Toggle between legacy and space themes
    */
@@ -1054,22 +1162,77 @@ export class MigrationManager {
    * Handle color picker changes
    */
   handleColorChange(pickerId, color) {
+    // Check if custom colors are enabled
+    const useCustomColors = document.getElementById('use-custom-colors');
+    if (!useCustomColors || !useCustomColors.checked) {
+      this.log('Custom colors not enabled, skipping color change');
+      return;
+    }
+    
+    this.enhancedColorChange(pickerId, color);
+  }
+  
+  /**
+   * Enhanced color change that affects all UI elements
+   */
+  enhancedColorChange(pickerId, color) {
     const root = document.documentElement;
+    
+    // Helper to convert hex to RGB
+    const hexToRgb = (hex) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : null;
+    };
+    
+    // Helper to adjust brightness
+    const adjustBrightness = (hex, factor) => {
+      const rgb = hexToRgb(hex);
+      if (!rgb) return hex;
+      const r = Math.round(Math.min(255, Math.max(0, rgb.r * (1 + factor))));
+      const g = Math.round(Math.min(255, Math.max(0, rgb.g * (1 + factor))));
+      const b = Math.round(Math.min(255, Math.max(0, rgb.b * (1 + factor))));
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    
+    const rgb = hexToRgb(color);
+    const rgbString = rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : '255, 255, 255';
     
     switch (pickerId) {
       case 'primary-color-picker':
+        // Apply to all primary-related variables
         root.style.setProperty('--color-primary', color);
         root.style.setProperty('--space-primary', color);
+        root.style.setProperty('--color-primary-rgb', rgbString);
+        // Update backgrounds based on primary
+        root.style.setProperty('--color-background', adjustBrightness(color, -0.85));
+        root.style.setProperty('--color-background-dark', adjustBrightness(color, -0.8));
+        root.style.setProperty('--color-background-medium', adjustBrightness(color, -0.6));
+        root.style.setProperty('--color-surface', adjustBrightness(color, -0.4));
+        root.style.setProperty('--bg-primary', adjustBrightness(color, -0.85));
+        root.style.setProperty('--bg-secondary', adjustBrightness(color, -0.7));
         this.updateColorPreview('primary-color-preview', color);
         break;
       case 'secondary-color-picker':
         root.style.setProperty('--color-secondary', color);
         root.style.setProperty('--space-secondary', color);
+        root.style.setProperty('--color-secondary-rgb', rgbString);
+        // Update glass effects based on secondary
+        root.style.setProperty('--color-glass-bg', `${color}15`);
+        root.style.setProperty('--color-glass-bg-light', `${color}25`);
         this.updateColorPreview('secondary-color-preview', color);
         break;
       case 'accent-color-picker':
         root.style.setProperty('--color-accent', color);
         root.style.setProperty('--space-accent', color);
+        root.style.setProperty('--color-accent-rgb', rgbString);
+        // Update borders and highlights based on accent
+        root.style.setProperty('--color-border', `${color}40`);
+        root.style.setProperty('--color-border-light', `${color}20`);
+        root.style.setProperty('--border-color', `${color}50`);
         this.updateColorPreview('accent-color-preview', color);
         break;
     }
