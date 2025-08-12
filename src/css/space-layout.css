@@ -541,20 +541,21 @@ body.animations-disabled .cosmic-elements {
 }
 
 /* === Collapse/Expand Button System === */
-/* Perfect square button fixed to viewport vertically */
+/* Perfect square button fixed to viewport vertically - right edge aligned */
 .space-layout .panel-collapse-btn[data-side="left"] {
   position: fixed !important;
   top: 50vh !important;
   transform: translateY(-50%) !important;
-  width: 26px !important;
-  height: 26px !important;
-  min-width: 26px !important;
-  min-height: 26px !important;
-  max-width: 26px !important;
-  max-height: 26px !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
   background: rgba(26, 32, 44, 0.9) !important;
   border: 1px solid rgba(76, 159, 255, 0.5) !important;
-  border-radius: 3px 0 0 3px !important;
+  border-left: none !important; /* Remove left border for seamless attachment */
+  border-radius: 0 3px 3px 0 !important; /* Rounded on right side only */
   color: rgba(255, 255, 255, 0.8) !important;
   cursor: pointer !important;
   display: flex !important;
@@ -564,13 +565,13 @@ body.animations-disabled .cosmic-elements {
   font-weight: normal !important;
   transition: left 0.3s ease, background 0.3s ease !important;
   z-index: 10000 !important;
-  box-shadow: -1px 1px 5px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 2px 1px 5px rgba(0, 0, 0, 0.3) !important;
   padding: 0 !important;
   margin: 0 !important;
   opacity: 1 !important;
   visibility: visible !important;
   left: -100px; /* Start off-screen until positioned */
-  aspect-ratio: 1 / 1 !important; /* Force square aspect ratio */
+  aspect-ratio: 1 / 1 !important; /* Force perfect square */
   box-sizing: border-box !important;
 }
 
@@ -589,15 +590,15 @@ body.animations-disabled .cosmic-elements {
   border-color: rgba(76, 159, 255, 0.7) !important;
   color: white !important;
   transform: translateY(-50%) scale(1.1) !important;
-  box-shadow: -1px 1px 8px rgba(76, 159, 255, 0.4) !important;
-  width: 26px !important;
-  height: 26px !important;
+  box-shadow: 2px 1px 8px rgba(76, 159, 255, 0.4) !important;
+  width: 20px !important;
+  height: 20px !important;
 }
 
 .space-layout .panel-collapse-btn[data-side="left"]:active {
   transform: translateY(-50%) scale(0.95) !important;
-  width: 26px !important;
-  height: 26px !important;
+  width: 20px !important;
+  height: 20px !important;
 }
 
 /* Hamburger icon for collapse button */
@@ -615,12 +616,12 @@ body.animations-disabled .cosmic-elements {
 
 /* Size adjustments for collapsed state - keep square */
 .space-layout .left-panel.collapsed ~ .panel-collapse-btn[data-side="left"] {
-  width: 22px !important;
-  height: 22px !important;
-  min-width: 22px !important;
-  min-height: 22px !important;
-  max-width: 22px !important;
-  max-height: 22px !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
 }
 
 .space-layout .left-panel.collapsed ~ .panel-collapse-btn[data-side="left"]::before {

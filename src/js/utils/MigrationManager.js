@@ -1655,6 +1655,16 @@ class PanelManager {
       // Apply initial state
       this.restoreState();
       
+      // Ensure button is positioned correctly after DOM settles
+      setTimeout(() => {
+        this.updateButtonPosition('left');
+      }, 100);
+      
+      // Also update on next animation frame for immediate visual correction
+      requestAnimationFrame(() => {
+        this.updateButtonPosition('left');
+      });
+      
       this.log('Panel management initialized successfully');
     } catch (error) {
       console.error('Panel management initialization failed:', error);
@@ -2055,8 +2065,8 @@ class PanelManager {
     const panelRect = panel.getBoundingClientRect();
     const isCollapsed = this.state.leftCollapsed;
     
-    // Position button at right edge of panel (half overlapping)
-    const buttonLeft = panelRect.right - 13; // Half the button width (26px / 2)
+    // Position button at right edge of panel (button fully on the right edge)
+    const buttonLeft = panelRect.right; // Button starts exactly at panel's right edge
     button.style.left = `${buttonLeft}px`;
     
     this.migrationManager.log(`Updated button position: ${buttonLeft}px (panel right: ${panelRect.right})`);
