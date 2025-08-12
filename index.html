@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="description" content="Cross-platform Yu-Gi-Oh card price checker and pack ripper with robust voice recognition">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+    <meta name="description" content="VoxRip - Advanced voice-powered Yu-Gi-Oh card collection and pricing toolkit with intelligent recognition">
     <meta name="theme-color" content="#ffd700">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="YGO Ripper">
+    <meta name="apple-mobile-web-app-title" content="VoxRip">
     
-    <title>YGO Ripper UI v2 - Card Price Checker & Pack Ripper</title>
+    <title>VoxRip - Voice-Powered Card Collection & Pricing Toolkit</title>
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -24,6 +24,10 @@
     <link rel="stylesheet" href="src/css/main.css">
     <link rel="stylesheet" href="src/css/components.css">
     <link rel="stylesheet" href="src/css/responsive.css">
+    <!-- Space Theme Bridge CSS -->
+    <link rel="stylesheet" href="src/css/space-theme-bridge.css">
+    <!-- Space Theme Layout (will be enabled via feature flags) -->
+    <link rel="stylesheet" href="src/css/space-layout.css" disabled id="space-layout-css">
     
     <!-- Preload critical resources -->
     <link rel="preload" href="src/js/app.js" as="script" crossorigin="anonymous">
@@ -34,7 +38,7 @@
     <div id="loading-screen" class="loading-screen">
         <div class="loading-content">
             <div class="app-logo">
-                <h1>YGO Ripper UI v2</h1>
+                <h1>VoxRip</h1>
                 <div class="loading-spinner"></div>
             </div>
             <p class="loading-text">Initializing application...</p>
@@ -51,9 +55,12 @@
             <div class="header-content">
                 <h1 class="app-title">
                     <span class="title-icon">🃏</span>
-                    YGO Ripper UI v2
+                    VoxRip
                 </h1>
                 <div class="header-actions">
+                    <button id="legacy-theme-toggle" class="icon-btn" title="Switch to Space Theme" aria-label="Switch to Space Theme">
+                        <span>🚀</span>
+                    </button>
                     <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Open Settings">
                         <span>⚙️</span>
                     </button>
@@ -423,6 +430,394 @@
         </footer>
     </div>
 
+    <!-- Space Theme Layout (Hidden by default, enabled via feature flags) -->
+    <div id="space-app" class="space-layout hidden">
+        <!-- Deep Space Background -->
+        <div class="deep-space-bg"></div>
+        
+        <!-- Multi-layer star field -->
+        <div class="star-layers">
+            <div class="star-layer star-layer-1"></div>
+            <div class="star-layer star-layer-2"></div>
+            <div class="star-layer star-layer-3"></div>
+        </div>
+
+        <!-- Cosmic elements -->
+        <div class="cosmic-elements">
+            <!-- Cosmic clouds and galaxies will be added by AnimationManager -->
+        </div>
+
+        <!-- Main Container Grid -->
+        <div class="container">
+            <!-- Holographic Header -->
+            <header class="header">
+                <div class="logo">
+                    <div class="logo-icon">🃏</div>
+                    <div class="logo-text">
+                        <h1>VOXRIP</h1>
+                        <p>Voice-Powered Collection Toolkit</p>
+                    </div>
+                </div>
+                <!-- Theme controls -->
+                <div class="theme-controls">
+                    <button class="theme-toggle-btn" id="animation-toggle-btn" title="Toggle Animations">
+                        <span>🎬</span>
+                    </button>
+                    <button class="theme-toggle-btn" id="space-theme-toggle" title="Toggle Theme">
+                        <span>🌌</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Left Navigation Panel -->
+            <nav class="left-panel">
+                
+                <!-- Main Navigation Items -->
+                <div class="nav-item active" data-tab="price-checker" role="tab" aria-selected="true">
+                    <span class="nav-icon">💰</span>
+                    <span>Price Scanner</span>
+                </div>
+                <div class="nav-item" data-tab="pack-ripper" role="tab" aria-selected="false">
+                    <span class="nav-icon">📦</span>
+                    <span>Pack Ripper</span>
+                </div>
+                
+                <!-- Theme Settings Section -->
+                <div class="theme-settings-section">
+                    <div class="theme-header">
+                        <span>🎨 Interface Themes</span>
+                        <span class="theme-toggle-icon">▼</span>
+                    </div>
+                    
+                    <div class="theme-settings-content hidden" id="theme-settings">
+                        <div class="theme-preset-buttons">
+                            <button class="theme-preset active" data-theme="space-blue">🌌 Deep Space</button>
+                            <button class="theme-preset" data-theme="space-purple">🌸 Nebula</button>
+                            <button class="theme-preset" data-theme="space-green">🌿 Matrix</button>
+                            <button class="theme-preset" data-theme="ygo-classic">👑 Classic YGO</button>
+                        </div>
+                        
+                        <div class="theme-customization">
+                            <!-- Advanced Color Customization -->
+                            <div class="color-customization-section">
+                                <h4 class="customization-section-title">🎨 Color Palette</h4>
+                                
+                                <div class="color-picker-grid">
+                                    <div class="color-picker-group">
+                                        <label>Primary Color</label>
+                                        <input type="color" id="primary-color-picker" value="#4c9fff">
+                                        <div class="color-preview" id="primary-color-preview"></div>
+                                    </div>
+                                    
+                                    <div class="color-picker-group">
+                                        <label>Secondary Color</label>
+                                        <input type="color" id="secondary-color-picker" value="#7c3aed">
+                                        <div class="color-preview" id="secondary-color-preview"></div>
+                                    </div>
+                                    
+                                    <div class="color-picker-group">
+                                        <label>Accent Color</label>
+                                        <input type="color" id="accent-color-picker" value="#00d4ff">
+                                        <div class="color-preview" id="accent-color-preview"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Color Harmony Generator -->
+                                <div class="color-harmony-section">
+                                    <button id="generate-harmony-btn" class="harmony-btn">✨ Generate Harmony</button>
+                                    <select id="harmony-type" class="harmony-selector">
+                                        <option value="complementary">Complementary</option>
+                                        <option value="triadic">Triadic</option>
+                                        <option value="analogous">Analogous</option>
+                                        <option value="monochromatic">Monochromatic</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Gradient Preview -->
+                                <div class="gradient-preview-section">
+                                    <h5>Gradient Preview</h5>
+                                    <div class="gradient-preview-container">
+                                        <div class="gradient-preview" id="gradient-preview"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Panel & Effects Customization -->
+                            <div class="effects-customization-section">
+                                <h4 class="customization-section-title">⚡ Effects & Opacity</h4>
+                                
+                                <div class="slider-group">
+                                    <label>Panel Opacity</label>
+                                    <input type="range" id="panel-opacity-slider" min="0.5" max="1" step="0.05" value="0.8">
+                                    <span class="slider-value" id="opacity-value">80%</span>
+                                </div>
+                                
+                                <div class="slider-group">
+                                    <label>Glow Intensity</label>
+                                    <input type="range" id="glow-intensity-slider" min="0" max="2" step="0.1" value="1">
+                                    <span class="slider-value" id="glow-value">100%</span>
+                                </div>
+                                
+                                <div class="slider-group">
+                                    <label>Background Blur</label>
+                                    <input type="range" id="blur-intensity-slider" min="0" max="20" step="1" value="10">
+                                    <span class="slider-value" id="blur-value">10px</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Color Temperature -->
+                            <div class="temperature-section">
+                                <h4 class="customization-section-title">🌡️ Color Temperature</h4>
+                                <div class="temperature-controls">
+                                    <button class="temp-preset" data-temp="cool">❄️ Cool</button>
+                                    <button class="temp-preset active" data-temp="neutral">⚖️ Neutral</button>
+                                    <button class="temp-preset" data-temp="warm">🔥 Warm</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Reset Controls -->
+                            <div class="reset-controls">
+                                <button id="reset-theme-btn" class="reset-btn">🔄 Reset to Default</button>
+                                <button id="random-theme-btn" class="random-btn">🎲 Random Theme</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Center Workspace -->
+            <main class="center-panel">
+                <!-- Center Panel Tab Navigation (Only visible in Pack Ripper mode) -->
+                <div class="center-panel-tabs" id="center-panel-tabs">
+                    <button class="center-tab active" data-center-tab="voice-recognition">
+                        <span class="tab-icon">🎙️</span>
+                        <span>Voice Recognition</span>
+                    </button>
+                    <button class="center-tab" data-center-tab="training-patterns">
+                        <span class="tab-icon">🧠</span>
+                        <span>Pattern Training</span>
+                    </button>
+                </div>
+                
+                <div class="function-interface" id="space-function-interface">
+                    <!-- Content will be dynamically populated based on active tab -->
+                    
+                    <!-- Price Checker Interface -->
+                    <div class="interface-content" id="space-price-checker-content">
+                        <div class="form-grid" id="space-form-content">
+                            <!-- Price Checker Form (Space Theme) -->
+                            <div class="form-group">
+                                <label for="card-number-space">🔍 Card Identifier</label>
+                                <input type="text" id="card-number-space" placeholder="Enter card number">
+                            </div>
+                            <div class="form-group">
+                                <label for="rarity-space">⭐ Rarity Class</label>
+                                <select id="rarity-space">
+                                    <option value="">Select rarity...</option>
+                                    <option value="common">Common</option>
+                                    <option value="rare">Rare</option>
+                                    <option value="super rare">Super Rare</option>
+                                    <option value="ultra rare">Ultra Rare</option>
+                                    <option value="ultimate rare">Ultimate Rare</option>
+                                    <option value="secret rare">Secret Rare</option>
+                                    <option value="prismatic secret rare">Prismatic Secret Rare</option>
+                                    <option value="platinum secret rare">Platinum Secret Rare</option>
+                                    <option value="quarter century secret rare">Quarter Century Secret Rare</option>
+                                    <option value="ghost rare">Ghost Rare</option>
+                                    <option value="starlight rare">Starlight Rare</option>
+                                    <option value="collector rare">Collector Rare</option>
+                                    <option value="parallel rare">Parallel Rare</option>
+                                    <option value="gold rare">Gold Rare</option>
+                                    <option value="mosaic rare">Mosaic Rare</option>
+                                    <option value="short print">Short Print</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="card-name-space">🎴 Card Name</label>
+                                <input type="text" id="card-name-space" placeholder="Enter card name (optional)">
+                            </div>
+                            <div class="form-group">
+                                <label for="condition-space">📊 Condition</label>
+                                <select id="condition-space">
+                                    <option value="near-mint">Near Mint</option>
+                                    <option value="lightly-played">Lightly Played</option>
+                                    <option value="moderately-played">Moderately Played</option>
+                                    <option value="heavily-played">Heavily Played</option>
+                                    <option value="damaged">Damaged</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button class="btn btn-primary" id="space-check-price-btn">
+                                <span>🔍 Scan Price</span>
+                            </button>
+                            <button class="btn btn-secondary" id="space-clear-form-btn">
+                                <span>🗑️ Clear</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    
+                    <!-- Voice Recognition Interface -->
+                    <div class="interface-content hidden" id="space-voice-recognition-content">
+                        <!-- Set Selection for Space Theme -->
+                        <div class="space-set-selection">
+                            <h3>🚀 Set Selection Interface</h3>
+                            <div class="form-grid">
+                                <div class="form-group form-group-wide">
+                                    <label for="set-search-space">🔍 Search Card Sets</label>
+                                    <input type="text" id="set-search-space" name="setSearchSpace" 
+                                           placeholder="Type set name or code to filter..." 
+                                           aria-describedby="set-search-space-help">
+                                    <small id="set-search-space-help">Filter through 992+ card sets by name or code</small>
+                                </div>
+                                <div class="form-group form-group-wide">
+                                    <label for="set-select-space">📦 Card Set</label>
+                                    <select id="set-select-space" name="cardSetSpace" size="6" 
+                                            aria-describedby="set-select-space-help">
+                                        <option value="">Loading card sets...</option>
+                                        <!-- Options will be populated dynamically -->
+                                    </select>
+                                    <small id="set-select-space-help">Select a card set to start ripping packs</small>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button id="refresh-sets-space-btn" class="btn btn-secondary">
+                                    <span class="btn-icon">🔄</span>
+                                    <span>Refresh Sets</span>
+                                </button>
+                                <button id="load-all-sets-space-btn" class="btn btn-secondary">
+                                    <span class="btn-icon">📥</span>
+                                    <span>Load All Sets</span>
+                                </button>
+                                <button id="start-session-space-btn" class="btn btn-primary" disabled>
+                                    <span class="btn-icon">▶️</span>
+                                    <span>Start Session</span>
+                                </button>
+                                <button id="swap-set-space-btn" class="btn btn-secondary hidden" disabled>
+                                    <span class="btn-icon">🔄</span>
+                                    <span>Swap Set & Continue</span>
+                                </button>
+                            </div>
+                            <div class="set-info">
+                                <div class="info-item">
+                                    <span class="info-label">Sets shown:</span>
+                                    <span class="info-value" id="sets-count-space">0</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">Total available:</span>
+                                    <span class="info-value" id="total-sets-count-space">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="voice-interface">
+                            <div class="voice-status-display">
+                                <div class="status-indicator-space" id="space-status-indicator">
+                                    <span class="status-icon">🔴</span>
+                                    <span class="status-text-space" id="space-status-text">Voice Recognition Offline</span>
+                                </div>
+                                
+                                <div class="voice-visualization" id="space-voice-visualization">
+                                    <div class="sound-waves">
+                                        <div class="wave wave-1"></div>
+                                        <div class="wave wave-2"></div>
+                                        <div class="wave wave-3"></div>
+                                        <div class="wave wave-4"></div>
+                                        <div class="wave wave-5"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="voice-transcript-section">
+                                <h4>🎯 Live Transcript</h4>
+                                <div class="voice-transcript-display" id="voice-transcript-space">
+                                    <p class="transcript-placeholder">Speak a card name to see it appear here...</p>
+                                </div>
+                                <div class="voice-confidence" id="voice-confidence-space">
+                                    <span>Confidence: <strong>0%</strong></span>
+                                </div>
+                            </div>
+                            
+                            <div class="voice-controls-main">
+                                <button class="btn btn-voice btn-large" id="main-start-voice-space">
+                                    <span class="btn-icon">🎙️</span>
+                                    <span>Start Listening</span>
+                                </button>
+                                <button class="btn btn-voice-stop btn-large hidden" id="main-stop-voice-space">
+                                    <span class="btn-icon">⏹️</span>
+                                    <span>Stop Listening</span>
+                                </button>
+                                <button class="btn btn-secondary" id="main-test-voice-space">
+                                    <span class="btn-icon">🧪</span>
+                                    <span>Test Microphone</span>
+                                </button>
+                            </div>
+                            
+                            <div class="voice-help-space">
+                                <h4>💡 Voice Commands</h4>
+                                <div class="help-grid">
+                                    <div class="help-item">
+                                        <strong>Card Names:</strong>
+                                        <p>Say card names clearly, e.g., "Blue-Eyes White Dragon"</p>
+                                    </div>
+                                    <div class="help-item">
+                                        <strong>Numbers:</strong>
+                                        <p>Speak card numbers, e.g., "L-O-B dash zero-zero-one"</p>
+                                    </div>
+                                    <div class="help-item">
+                                        <strong>Controls:</strong>
+                                        <p>Say "stop listening" to pause voice recognition</p>
+                                    </div>
+                                    <div class="help-item">
+                                        <strong>Tips:</strong>
+                                        <p>Speak clearly and avoid background noise</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Training Patterns Interface -->
+                    <div class="interface-content hidden" id="space-training-patterns-content">
+                        <div class="training-interface">
+                            <div class="pattern-controls">
+                                <div class="form-group">
+                                    <label for="pattern-search-space">🔍 Search Patterns</label>
+                                    <input type="text" id="pattern-search-space" placeholder="Search learned patterns...">
+                                </div>
+                                <button class="btn btn-danger" id="clear-patterns-space">
+                                    <span>🗑️ Clear All Patterns</span>
+                                </button>
+                            </div>
+                            
+                            <div class="pattern-list-space" id="space-pattern-list">
+                                <!-- Patterns will be populated dynamically -->
+                                <div class="empty-state">
+                                    <div class="empty-icon">🧠</div>
+                                    <h4>No learned patterns yet</h4>
+                                    <p>Use voice recognition to build training patterns</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="results-area" id="space-results-area">
+                    <!-- Results will be populated dynamically -->
+                    <div class="empty-state" id="space-empty-results">
+                        <div class="empty-icon">🌌</div>
+                        <h3>Awaiting scan results</h3>
+                        <p>Enter card details above to begin scanning</p>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Panel Removed - Content moved to center panel or removed -->
+        </div>
+    </div>
+
     <!-- Floating Voice Submenu (visible only during voice recognition) -->
     <div id="floating-voice-submenu" class="floating-voice-submenu hidden">
         <button id="floating-stop-voice-btn" class="submenu-btn" title="Stop Voice Recognition">
@@ -444,7 +839,7 @@
     </div>
 
     <!-- Scripts -->
-    <script type="module" src="src/js/app.js"></script>
+    <script type="module" src="src/js/app.js?v=2024120801"></script>
 
     <!-- Service Worker Registration -->
     <script>

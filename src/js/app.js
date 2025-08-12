@@ -1,5 +1,5 @@
 /**
- * YGO Ripper UI v2 - Main Application Controller
+ * VoxRip - Main Application Controller
  * 
  * This is the main entry point for the application, providing:
  * - Cross-platform compatibility (Mac, Windows, iOS)
@@ -8,7 +8,7 @@
  * - AI agent testability
  * 
  * @version 2.1.0
- * @author YGORipperUI Team
+ * @author VoxRip Team
  */
 
 // Import core modules
@@ -30,14 +30,14 @@ import { SelectorMapper } from './utils/SelectorMapper.js';
  * Main Application Class
  * Coordinates all components and manages application state
  */
-class YGORipperApp {
+class VoxRipApp {
     constructor(options = {}) {
         // Application metadata
         this.version = '2.1.0';
-        this.name = 'YGO Ripper UI v2';
+        this.name = 'VoxRip';
         
         // Component instances
-        this.logger = new Logger('YGORipperApp');
+        this.logger = new Logger('VoxRipApp');
         this.storage = new Storage();
         this.permissionManager = new PermissionManager();
         this.voiceEngine = null; // Initialized after permissions
@@ -91,7 +91,7 @@ class YGORipperApp {
      */
     async _performInitialization() {
         try {
-            this.logger.info('Initializing YGO Ripper UI v2...');
+            this.logger.info('Initializing VoxRip...');
             
             // Check if online (required for this app)
             if (!navigator.onLine) {
@@ -177,7 +177,7 @@ class YGORipperApp {
             // Show success message
             this.showToast(`Successfully loaded ${this.sessionManager.getCardSets().length} card sets`, 'success');
             
-            this.logger.info('YGO Ripper UI v2 initialized successfully');
+            this.logger.info('VoxRip initialized successfully');
             
         } catch (error) {
             this.logger.error('Critical initialization error:', error);
@@ -314,8 +314,8 @@ class YGORipperApp {
                 this.voiceEngine.isLazyInit = true;
             }
             
-            // Note: Voice engine will be initialized on first use to prevent deployment blocking
-            this.showToast('Voice recognition will be available after first use.', 'info');
+            // Voice engine created and ready for lazy initialization
+            // Don't show a toast here - it will initialize seamlessly on first use
             
         } catch (error) {
             this.logger.warn('Voice engine initialization failed:', error);
@@ -1857,17 +1857,17 @@ class YGORipperApp {
     }
 }
 
-// Export the YGORipperApp class as default export
-export default YGORipperApp;
+// Export the VoxRipApp class as default export
+export default VoxRipApp;
 
 // Initialize the application when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     try {
         // Create and start the application
-        window.ygoApp = new YGORipperApp();
-        console.log('YGO Ripper UI v2 starting...');
+        window.voxRipApp = new VoxRipApp();
+        console.log('VoxRip starting...');
     } catch (error) {
-        console.error('Failed to initialize YGO Ripper UI:', error);
+        console.error('Failed to initialize VoxRip:', error);
         
         // Show error message to user
         const loadingText = document.querySelector('.loading-text');

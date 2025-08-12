@@ -1,0 +1,265 @@
+/**
+ * Space Theme Bridge - CSS Custom Properties for VoxRip Space UI Migration
+ * 
+ * This file bridges the existing YGOpwa theme with the new VoxRip space theme
+ * while maintaining backward compatibility and enabling gradual migration.
+ * 
+ * Strategy:
+ * - Preserve existing YGOpwa variables for backward compatibility
+ * - Introduce VoxRip space theme variables
+ * - Create hybrid mapping system for smooth transition
+ * - Enable theme switching via CSS custom properties
+ */
+
+/* Preserve existing YGOpwa variables for backward compatibility */
+:root {
+  /* === YGOpwa Legacy Variables (Preserved) === */
+  --ygo-primary: #ffd700;          /* Golden yellow */
+  --ygo-primary-dark: #ffb000;     /* Darker gold */
+  --ygo-primary-light: #fff176;    /* Light gold */
+  --ygo-secondary: #1a1a2e;        /* Dark blue-purple */
+  --ygo-secondary-light: #2d2d4a;  /* Lighter dark blue */
+  --ygo-secondary-dark: #0f0f1a;   /* Darker blue */
+  --ygo-background: #0f0f1a;       /* Very dark background */
+  --ygo-surface: #1a1a2e;          /* Card/surface background */
+  --ygo-text: #ffffff;             /* Primary text */
+  --ygo-border: #404066;           /* Border color */
+  
+  /* === VoxRip Space Theme Variables === */
+  /* Blue Space Theme (Default Space Theme) */
+  --space-primary: #4c9fff;              /* Space blue */
+  --space-primary-light: #70b3ff;        /* Light space blue */
+  --space-primary-dark: #2980ff;         /* Dark space blue */
+  --space-secondary: #7c3aed;            /* Space purple */
+  --space-secondary-light: #9966ff;      /* Light space purple */
+  --space-secondary-dark: #5b21b6;       /* Dark space purple */
+  --space-accent: #00d4ff;               /* Cyan accent */
+  --space-accent-rgb: 0, 212, 255;       /* RGB values for rgba() usage */
+  --space-background: #000000;           /* Deep space black */
+  --space-background-light: #1a202c;     /* Lighter space background */
+  --space-background-medium: #2d3748;    /* Medium space background */
+  --space-surface: #101828;              /* Space surface */
+  --space-surface-light: #1a2744;        /* Light space surface */
+  --space-text: #e0e0e0;                 /* Space text */
+  --space-text-light: #ffffff;           /* Light space text */
+  --space-text-medium: #a0aec0;          /* Medium space text */
+  --space-text-muted: #718096;           /* Muted space text */
+  --space-border: rgba(76, 159, 255, 0.2);      /* Space border */
+  --space-border-light: rgba(76, 159, 255, 0.3); /* Light space border */
+  --space-glass-bg: rgba(26, 32, 44, 0.8);      /* Glassmorphism background */
+  --space-glass-bg-light: rgba(45, 55, 72, 0.6); /* Light glassmorphism */
+  
+  /* Panel opacity for glassmorphism effects */
+  --panel-opacity: 0.8;
+  
+  /* === Theme Control Variables === */
+  --theme-mode: 'ygo'; /* 'ygo' or 'space' - controls which theme is active */
+  
+  /* === Hybrid Mapping System === */
+  /* These variables automatically switch based on theme mode */
+  /* Default to YGOpwa theme for backward compatibility */
+  --color-primary: var(--ygo-primary);
+  --color-primary-light: var(--ygo-primary-light);
+  --color-primary-dark: var(--ygo-primary-dark);
+  --color-secondary: var(--ygo-secondary);
+  --color-secondary-light: var(--ygo-secondary-light);  
+  --color-secondary-dark: var(--ygo-secondary-dark);
+  --color-accent: var(--ygo-primary); /* YGO uses gold as accent */
+  --color-accent-rgb: 255, 215, 0; /* Gold RGB */
+  --color-background: var(--ygo-background);
+  --color-background-light: var(--ygo-secondary);
+  --color-background-medium: var(--ygo-secondary-light);
+  --color-surface: var(--ygo-surface);
+  --color-surface-light: var(--ygo-secondary-light);
+  --color-text: var(--ygo-text);
+  --color-text-light: var(--ygo-text);
+  --color-text-medium: #b0b0b0;
+  --color-text-muted: #888888;
+  --color-border: var(--ygo-border);
+  --color-border-light: #555577;
+  --color-glass-bg: rgba(26, 26, 46, 0.8); /* YGO glassmorphism */
+  --color-glass-bg-light: rgba(45, 45, 74, 0.6);
+}
+
+/* === Space Theme Activation === */
+/* When space theme is activated, override the hybrid variables */
+body.space-theme,
+.space-theme {
+  --theme-mode: 'space';
+  
+  /* Override hybrid variables with space theme values */
+  --color-primary: var(--space-primary);
+  --color-primary-light: var(--space-primary-light);
+  --color-primary-dark: var(--space-primary-dark);
+  --color-secondary: var(--space-secondary);
+  --color-secondary-light: var(--space-secondary-light);
+  --color-secondary-dark: var(--space-secondary-dark);
+  --color-accent: var(--space-accent);
+  --color-accent-rgb: var(--space-accent-rgb);
+  --color-background: var(--space-background);
+  --color-background-light: var(--space-background-light);
+  --color-background-medium: var(--space-background-medium);
+  --color-surface: var(--space-surface);
+  --color-surface-light: var(--space-surface-light);
+  --color-text: var(--space-text);
+  --color-text-light: var(--space-text-light);
+  --color-text-medium: var(--space-text-medium);
+  --color-text-muted: var(--space-text-muted);
+  --color-border: var(--space-border);
+  --color-border-light: var(--space-border-light);
+  --color-glass-bg: var(--space-glass-bg);
+  --color-glass-bg-light: var(--space-glass-bg-light);
+}
+
+/* === Theme Variant Support === */
+/* Additional space theme variants for customization */
+
+/* Nebula Purple Theme */
+body.space-theme.nebula-theme {
+  --space-primary: #9d4edd;
+  --space-primary-light: #c77dff;
+  --space-primary-dark: #7209b7;
+  --space-secondary: #240046;
+  --space-secondary-light: #3c096c;
+  --space-secondary-dark: #10002b;
+  --space-accent: #f72585;
+  --space-accent-rgb: 247, 37, 133;
+  --space-background: #10002b;
+  --space-background-light: #240046;
+  --space-background-medium: #3c096c;
+}
+
+/* Matrix Green Theme */
+body.space-theme.matrix-theme {
+  --space-primary: #00ff41;
+  --space-primary-light: #39ff74;
+  --space-primary-dark: #00cc33;
+  --space-secondary: #001100;
+  --space-secondary-light: #003300;
+  --space-secondary-dark: #000800;
+  --space-accent: #00ffcc;
+  --space-accent-rgb: 0, 255, 204;
+  --space-background: #000800;
+  --space-background-light: #001100;
+  --space-background-medium: #003300;
+}
+
+/* Classic YGO Theme (Enhanced) */
+body.ygo-classic-theme {
+  --color-primary: var(--ygo-primary);
+  --color-accent: #ff6b35; /* Orange accent for classic YGO */
+  --color-accent-rgb: 255, 107, 53;
+  /* Add subtle glassmorphism to classic theme */
+  --color-glass-bg: rgba(26, 26, 46, 0.9);
+  --color-glass-bg-light: rgba(45, 45, 74, 0.7);
+}
+
+/* === Transition Support === */
+/* Smooth transitions when switching themes */
+* {
+  transition: 
+    color 0.4s ease,
+    background-color 0.4s ease,
+    border-color 0.4s ease,
+    box-shadow 0.4s ease,
+    backdrop-filter 0.4s ease;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* === Custom Property Fallbacks === */
+/* Ensure compatibility with older browsers */
+@supports not (color: var(--color-primary)) {
+  :root {
+    /* Fallback values for browsers without CSS custom properties support */
+    color: #ffffff;
+    background-color: #0f0f1a;
+  }
+  
+  body {
+    color: #ffffff;
+    background-color: #0f0f1a;
+  }
+}
+
+/* === Development and Debug Utilities === */
+/* Theme indicator for development (hidden in production) */
+.theme-debug-indicator {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  font-size: 12px;
+  font-family: monospace;
+  border-radius: 4px;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.theme-debug-indicator::after {
+  content: 'YGO Theme';
+}
+
+.space-theme .theme-debug-indicator::after {
+  content: 'Space Theme';
+}
+
+.nebula-theme .theme-debug-indicator::after {
+  content: 'Nebula Theme';
+}
+
+.matrix-theme .theme-debug-indicator::after {
+  content: 'Matrix Theme';
+}
+
+.ygo-classic-theme .theme-debug-indicator::after {
+  content: 'YGO Classic Theme';
+}
+
+/* Hide debug indicator in production */
+body:not(.development) .theme-debug-indicator {
+  display: none;
+}
+
+/* === Accessibility Enhancements === */
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --space-primary: #ffffff;
+    --space-secondary: #000000;
+    --space-accent: #ffff00;
+    --space-background: #000000;
+    --space-text: #ffffff;
+    --space-border: #ffffff;
+  }
+  
+  .space-theme {
+    --color-primary: #ffffff;
+    --color-secondary: #000000;
+    --color-accent: #ffff00;
+    --color-background: #000000;
+    --color-text: #ffffff;
+    --color-border: #ffffff;
+  }
+}
+
+/* === Print Styles === */
+@media print {
+  body.space-theme,
+  .space-theme {
+    /* Revert to high contrast for printing */
+    --color-background: #ffffff;
+    --color-text: #000000;
+    --color-primary: #000000;
+    --color-secondary: #666666;
+    --color-border: #cccccc;
+  }
+}

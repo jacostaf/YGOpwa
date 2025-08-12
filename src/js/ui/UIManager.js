@@ -14,8 +14,9 @@ import { Logger } from '../utils/Logger.js';
 import { config } from '../utils/config.js';
 
 export class UIManager {
-    constructor(logger = null) {
+    constructor(logger = null, selectorMapper = null) {
         this.logger = logger || new Logger('UIManager');
+        this.selectorMapper = selectorMapper;
         
         // DOM element references
         this.elements = {};
@@ -80,7 +81,394 @@ export class UIManager {
         this.domBatchTimer = null;
         this.isProcessingBatch = false;
         
-        this.logger.info('UIManager initialized');
+        // Integration with migration system
+        this.setupMigrationIntegration();
+        
+        this.logger.info('UIManager initialized with migration integration');
+    }
+
+    /**
+     * Set up migration system integration
+     */
+    setupMigrationIntegration() {
+        // Listen for theme changes to refresh DOM elements and preserve state
+        if (typeof window !== 'undefined') {
+            window.addEventListener('themeChanged', (event) => {
+                this.logger.info('Theme changed, preserving state and refreshing DOM elements', event.detail);
+                this.handleThemeChange(event.detail);
+            });
+        }
+    }
+
+    /**
+     * Handle theme change with state preservation
+     */
+    async handleThemeChange(themeChangeDetails) {
+        try {
+            // Step 1: Preserve form state before theme change
+            const formState = this.preserveFormState();
+            
+            // Step 2: Refresh DOM elements for new theme
+            this.refreshDOMElements();
+            
+            // Step 3: Restore form state in new theme
+            await this.restoreFormState(formState);
+            
+            // Step 4: Preserve session display state
+            await this.preserveSessionState();
+            
+            this.logger.info('Theme change completed with state preservation');
+        } catch (error) {
+            this.logger.error('Error during theme change state preservation:', error);
+        }
+    }
+
+    /**
+     * Preserve form state before theme switch
+     */
+    preserveFormState() {
+        const formState = {
+            timestamp: Date.now(),
+            theme: this.selectorMapper ? (this.selectorMapper.isSpaceThemeActive() ? 'space' : 'legacy') : 'unknown'
+        };
+
+        try {
+            // Preserve price checker form data
+            formState.priceForm = this.preservePriceFormState();
+            
+            // Preserve pack ripper form data  
+            formState.packRipperForm = this.preservePackRipperFormState();
+            
+            // Preserve voice settings
+            formState.voiceSettings = this.preserveVoiceSettingsState();
+            
+            this.logger.debug('Form state preserved:', formState);
+        } catch (error) {
+            this.logger.warn('Error preserving form state:', error);
+        }
+
+        return formState;
+    }
+
+    /**
+     * Preserve price checker form state
+     */
+    preservePriceFormState() {
+        const state = {};
+        
+        try {
+            // Get form elements using theme-aware access
+            const cardNumber = this.getElement('cardNumberInput');
+            const cardName = this.getElement('cardNameInput');
+            const rarity = this.getElement('raritySelect');
+            const artVariant = this.getElement('artVariantCheckbox');
+            const condition = this.getElement('conditionSelect');
+            const forceRefresh = this.getElement('forceRefreshCheckbox');
+
+            if (cardNumber) state.cardNumber = cardNumber.value;
+            if (cardName) state.cardName = cardName.value;
+            if (rarity) state.rarity = rarity.value;
+            if (artVariant) state.artVariant = artVariant.checked;
+            if (condition) state.condition = condition.value;
+            if (forceRefresh) state.forceRefresh = forceRefresh.checked;
+
+            this.logger.debug('Price form state preserved:', state);
+        } catch (error) {
+            this.logger.warn('Error preserving price form state:', error);
+        }
+
+        return state;
+    }
+
+    /**
+     * Preserve pack ripper form state
+     */
+    preservePackRipperFormState() {
+        const state = {};
+        
+        try {
+            const setSearch = this.getElement('setSearch');
+            const setSelect = this.getElement('setSelect');
+
+            if (setSearch) state.setSearch = setSearch.value;
+            if (setSelect) state.selectedSet = setSelect.value;
+
+            this.logger.debug('Pack ripper form state preserved:', state);
+        } catch (error) {
+            this.logger.warn('Error preserving pack ripper form state:', error);
+        }
+
+        return state;
+    }
+
+    /**
+     * Preserve voice settings state
+     */
+    preserveVoiceSettingsState() {
+        const state = {};
+        
+        try {
+            // Preserve voice-related settings and UI state
+            const voiceStatus = this.getElement('voiceStatus');
+            if (voiceStatus) {
+                state.voiceActive = voiceStatus.classList.contains('active');
+            }
+
+            this.logger.debug('Voice settings state preserved:', state);
+        } catch (error) {
+            this.logger.warn('Error preserving voice settings state:', error);
+        }
+
+        return state;
+    }
+
+    /**
+     * Restore form state after theme switch
+     */
+    async restoreFormState(formState) {
+        if (!formState) {
+            this.logger.debug('No form state to restore');
+            return;
+        }
+
+        try {
+            // Wait for DOM elements to be available in new theme
+            await this.waitForThemeElements();
+
+            // Restore price checker form
+            if (formState.priceForm) {
+                await this.restorePriceFormState(formState.priceForm);
+            }
+
+            // Restore pack ripper form
+            if (formState.packRipperForm) {
+                await this.restorePackRipperFormState(formState.packRipperForm);
+            }
+
+            // Restore voice settings
+            if (formState.voiceSettings) {
+                await this.restoreVoiceSettingsState(formState.voiceSettings);
+            }
+
+            this.logger.info('Form state restored successfully');
+        } catch (error) {
+            this.logger.error('Error restoring form state:', error);
+        }
+    }
+
+    /**
+     * Wait for theme elements to be available
+     */
+    async waitForThemeElements() {
+        const maxWait = 2000; // 2 seconds timeout
+        const startTime = Date.now();
+
+        return new Promise((resolve, reject) => {
+            const checkElements = () => {
+                if (Date.now() - startTime > maxWait) {
+                    reject(new Error('Timeout waiting for theme elements'));
+                    return;
+                }
+
+                // Check if critical elements are available
+                const cardNumberInput = this.getElement('cardNumberInput');
+                const priceForm = this.getElement('priceForm');
+
+                if (cardNumberInput || priceForm) {
+                    resolve();
+                } else {
+                    setTimeout(checkElements, 100);
+                }
+            };
+
+            checkElements();
+        });
+    }
+
+    /**
+     * Restore price form state
+     */
+    async restorePriceFormState(state) {
+        try {
+            const cardNumber = this.getElement('cardNumberInput');
+            const cardName = this.getElement('cardNameInput');
+            const rarity = this.getElement('raritySelect');
+            const artVariant = this.getElement('artVariantCheckbox');
+            const condition = this.getElement('conditionSelect');
+            const forceRefresh = this.getElement('forceRefreshCheckbox');
+
+            if (cardNumber && state.cardNumber) cardNumber.value = state.cardNumber;
+            if (cardName && state.cardName) cardName.value = state.cardName;
+            if (rarity && state.rarity) rarity.value = state.rarity;
+            if (artVariant && state.artVariant !== undefined) artVariant.checked = state.artVariant;
+            if (condition && state.condition) condition.value = state.condition;
+            if (forceRefresh && state.forceRefresh !== undefined) forceRefresh.checked = state.forceRefresh;
+
+            this.logger.debug('Price form state restored:', state);
+        } catch (error) {
+            this.logger.warn('Error restoring price form state:', error);
+        }
+    }
+
+    /**
+     * Restore pack ripper form state
+     */
+    async restorePackRipperFormState(state) {
+        try {
+            const setSearch = this.getElement('setSearch');
+            const setSelect = this.getElement('setSelect');
+
+            if (setSearch && state.setSearch) setSearch.value = state.setSearch;
+            if (setSelect && state.selectedSet) setSelect.value = state.selectedSet;
+
+            this.logger.debug('Pack ripper form state restored:', state);
+        } catch (error) {
+            this.logger.warn('Error restoring pack ripper form state:', error);
+        }
+    }
+
+    /**
+     * Restore voice settings state
+     */
+    async restoreVoiceSettingsState(state) {
+        try {
+            const voiceStatus = this.getElement('voiceStatus');
+            if (voiceStatus && state.voiceActive) {
+                voiceStatus.classList.add('active');
+            }
+
+            this.logger.debug('Voice settings state restored:', state);
+        } catch (error) {
+            this.logger.warn('Error restoring voice settings state:', error);
+        }
+    }
+
+    /**
+     * Preserve session state during theme change
+     */
+    async preserveSessionState() {
+        try {
+            // Trigger session data refresh in the new theme
+            if (this.app && this.app.sessionManager) {
+                await this.app.sessionManager.refreshSessionDisplay();
+            }
+
+            this.logger.debug('Session state preserved');
+        } catch (error) {
+            this.logger.warn('Error preserving session state:', error);
+        }
+    }
+
+    /**
+     * Theme-aware element access - core integration method
+     * @param {string} selectorKey - The key from SelectorMapper
+     * @param {boolean} multiple - Whether to return multiple elements
+     * @returns {Element|NodeList|null} The DOM element(s)
+     */
+    getElement(selectorKey, multiple = false) {
+        if (this.selectorMapper) {
+            return this.selectorMapper.getElement(selectorKey, multiple);
+        }
+        
+        // Fallback for backward compatibility when no SelectorMapper
+        this.logger.warn(`No SelectorMapper available, using fallback for ${selectorKey}`);
+        return null;
+    }
+
+    /**
+     * Theme-aware multiple elements access
+     * @param {string} selectorKey - The key from SelectorMapper
+     * @returns {NodeList} The DOM elements
+     */
+    getElements(selectorKey) {
+        if (this.selectorMapper) {
+            return this.selectorMapper.getElements(selectorKey);
+        }
+        
+        // Fallback for backward compatibility
+        return document.querySelectorAll(':not(*)'); // Empty NodeList
+    }
+
+    /**
+     * Check if element exists in current theme
+     * @param {string} selectorKey - The key from SelectorMapper
+     * @returns {boolean} True if element exists
+     */
+    elementExists(selectorKey) {
+        if (this.selectorMapper) {
+            return this.selectorMapper.exists(selectorKey);
+        }
+        return false;
+    }
+
+    /**
+     * Get element by ID with theme awareness (backward compatibility helper)
+     * @param {string} id - Element ID
+     * @returns {Element|null} The DOM element
+     */
+    getElementById(id) {
+        // Try to map common IDs to SelectorMapper keys
+        const idToKeyMap = {
+            'cardNumber': 'cardNumberInput',
+            'card-number': 'cardNumberInput',
+            'card-number-space': 'cardNumberInput',
+            'rarity': 'raritySelect',
+            'card-rarity': 'raritySelect',
+            'rarity-space': 'raritySelect',
+            'cardName': 'cardNameInput',
+            'card-name': 'cardNameInput',
+            'card-name-space': 'cardNameInput',
+            'artVariant': 'artVariantCheckbox',
+            'art-variant': 'artVariantCheckbox',
+            'art-variant-space': 'artVariantCheckbox',
+            'condition': 'conditionSelect',
+            'condition-space': 'conditionSelect',
+            'forceRefresh': 'forceRefreshCheckbox',
+            'force-refresh': 'forceRefreshCheckbox',
+            'force-refresh-space': 'forceRefreshCheckbox',
+            'check-price-btn': 'priceCheckButton',
+            'clear-form-btn': 'clearFormButton',
+            'price-results': 'priceResults',
+            'session-cards': 'sessionCards',
+            'voice-status': 'voiceStatus',
+            'start-voice-btn': 'startVoiceButton',
+            'stop-voice-btn': 'stopVoiceButton',
+            'test-voice-btn': 'testVoiceButton'
+        };
+
+        if (this.selectorMapper && idToKeyMap[id]) {
+            return this.selectorMapper.getElement(idToKeyMap[id]);
+        }
+
+        // Fallback to standard DOM access
+        return document.getElementById(id);
+    }
+
+    /**
+     * Refresh DOM elements after theme change
+     */
+    refreshDOMElements() {
+        this.logger.info('Refreshing DOM elements for current theme');
+        
+        // Clear existing element references
+        this.elements = {};
+        
+        // Re-get DOM elements with current theme
+        this.getDOMElements();
+        
+        // Refresh event listeners if needed
+        this.refreshEventListeners();
+    }
+
+    /**
+     * Refresh event listeners after theme change
+     */
+    refreshEventListeners() {
+        // Re-setup event listeners for new theme elements
+        this.logger.debug('Refreshing event listeners for current theme');
+        
+        // This would typically re-run the event listener setup
+        // For now, we'll handle this in the main setupEventListeners method
     }
 
     /**
@@ -119,24 +507,189 @@ export class UIManager {
     }
 
     /**
-     * Get references to DOM elements
+     * Get references to DOM elements using theme-aware SelectorMapper
      */
     getDOMElements() {
+        if (!this.selectorMapper) {
+            this.logger.warn('No SelectorMapper available, using fallback DOM access');
+            this.getDOMElementsFallback();
+            return;
+        }
+
         // Main app elements
-        this.elements.app = document.getElementById('app');
-        this.elements.loadingScreen = document.getElementById('loading-screen');
+        this.elements.app = this.getElementById('app') || document.getElementById('app');
+        this.elements.loadingScreen = this.getElement('loadingScreen');
         
-        // Navigation
-        this.elements.tabBtns = document.querySelectorAll('.tab-btn');
-        this.elements.tabPanels = document.querySelectorAll('.tab-panel');
+        // Navigation - works across both themes
+        this.elements.tabBtns = this.getElements('tabButton');
+        this.elements.tabPanels = this.getElements('tabPanel');
         
-        // Vertical tabs (sub-tabs under pack ripper)
+        // Space theme navigation 
+        this.elements.spaceNavItems = this.getElements('tabButton');
+        this.elements.spaceNavSubItems = document.querySelectorAll('.space-layout .nav-item[data-vertical-tab]');
+        
+        // Vertical tabs (sub-tabs under pack ripper) - legacy specific
         this.elements.verticalTabBtns = document.querySelectorAll('.vertical-tab-btn');
         this.elements.verticalTabPanels = document.querySelectorAll('.vertical-tab-panel');
         this.elements.verticalTabsToggle = document.querySelector('.vertical-tabs-toggle');
         this.elements.verticalTabsNav = document.querySelector('.vertical-tabs-nav');
         
-        // Price checker elements
+        // Price checker elements - theme aware
+        this.elements.priceForm = this.getElement('priceForm');
+        this.elements.cardNumber = this.getElement('cardNumberInput');
+        this.elements.cardName = this.getElement('cardNameInput');
+        this.elements.cardRarity = this.getElement('raritySelect');
+        this.elements.artVariant = this.getElement('artVariantCheckbox');
+        this.elements.condition = this.getElement('conditionSelect');
+        this.elements.forceRefresh = this.getElement('forceRefreshCheckbox');
+        this.elements.checkPriceBtn = this.getElement('priceCheckButton');
+        this.elements.clearFormBtn = this.getElement('clearFormButton');
+        this.elements.priceResults = this.getElement('priceResults');
+        this.elements.priceContent = this.getElement('priceResults'); // Map to same element
+        
+        // Pack ripper elements - CRITICAL FIX: Get BOTH legacy and space theme elements
+        this.elements.setSearch = this.getElement('setSearch');
+        this.elements.setSelect = this.getElement('setSelect'); // Current theme dropdown
+        
+        // CRITICAL FIX: Get BOTH dropdowns explicitly for dual-theme support
+        this.elements.setSelectLegacy = document.getElementById('set-select');
+        this.elements.setSelectSpace = document.getElementById('set-select-space');
+        this.elements.setSearchLegacy = document.getElementById('set-search');
+        this.elements.setSearchSpace = document.getElementById('set-search-space');
+        
+        // Get buttons for both themes
+        this.elements.refreshSetsBtn = this.getElement('refreshSetsButton');
+        this.elements.loadAllSetsBtn = this.getElement('loadAllSetsButton');
+        this.elements.refreshSetsBtnLegacy = document.getElementById('refresh-sets-btn');
+        this.elements.refreshSetsBtnSpace = document.getElementById('refresh-sets-space-btn');
+        this.elements.loadAllSetsBtnLegacy = document.getElementById('load-all-sets-btn');
+        this.elements.loadAllSetsBtnSpace = document.getElementById('load-all-sets-space-btn');
+        
+        this.elements.startSessionBtn = this.getElementById('start-session-btn') || document.getElementById('start-session-btn');
+        this.elements.startSessionBtnSpace = document.getElementById('start-session-space-btn');
+        
+        // Session statistics - theme aware using SelectorMapper
+        this.elements.currentSet = this.getElement('spaceCurrentSet');
+        this.elements.cardsCount = this.getElement('spaceTotalCards');
+        this.elements.tcgLowTotal = this.getElement('spaceTcgLowTotal');
+        this.elements.tcgMarketTotal = this.getElement('spaceTcgMarketTotal');
+        this.elements.sessionStatus = this.getElement('spaceSessionStatus');
+        this.elements.setsCount = this.getElementById('sets-count') || document.getElementById('sets-count');
+        this.elements.totalSetsCount = this.getElementById('total-sets-count') || document.getElementById('total-sets-count');
+        
+        // CRITICAL FIX: Voice recognition elements - BOTH themes
+        // Current theme voice elements (using SelectorMapper)
+        this.elements.voiceStatus = this.getElement('voiceStatus');
+        this.elements.voiceIndicator = this.getElement('statusIndicator');
+        this.elements.voiceStatusText = this.getElement('statusText');
+        this.elements.startVoiceBtn = this.getElement('startVoiceButton');
+        this.elements.stopVoiceBtn = this.getElement('stopVoiceButton');
+        this.elements.testVoiceBtn = this.getElement('testVoiceButton');
+        
+        // Legacy theme voice elements
+        this.elements.voiceStatusLegacy = document.getElementById('voice-status');
+        this.elements.voiceIndicatorLegacy = document.querySelector('.status-indicator');
+        this.elements.voiceStatusTextLegacy = document.querySelector('.status-text');
+        this.elements.startVoiceBtnLegacy = document.getElementById('start-voice-btn');
+        this.elements.stopVoiceBtnLegacy = document.getElementById('stop-voice-btn');
+        this.elements.testVoiceBtnLegacy = document.getElementById('test-voice-btn');
+        this.elements.voiceTranscriptLegacy = document.getElementById('voice-transcript');
+        
+        // Space theme voice elements
+        this.elements.voiceStatusSpace = document.getElementById('space-voice-status');
+        this.elements.voiceIndicatorSpace = document.getElementById('space-status-indicator');
+        this.elements.voiceStatusTextSpace = document.getElementById('space-status-text');
+        this.elements.startVoiceBtnSpace = document.getElementById('start-voice-space');
+        this.elements.stopVoiceBtnSpace = document.getElementById('stop-voice-space');
+        this.elements.testVoiceBtnSpace = document.getElementById('test-voice-space');
+        this.elements.voiceTranscriptSpace = document.getElementById('voice-transcript-space');
+        this.elements.voiceConfidenceSpace = document.getElementById('voice-confidence-space');
+        this.elements.voiceVisualizationSpace = document.getElementById('space-voice-visualization');
+        
+        // Main space theme voice controls (in center panel)
+        this.elements.mainStartVoiceSpace = document.getElementById('main-start-voice-space');
+        this.elements.mainStopVoiceSpace = document.getElementById('main-stop-voice-space');
+        this.elements.mainTestVoiceSpace = document.getElementById('main-test-voice-space');
+        
+        // Floating voice submenu elements - legacy specific
+        this.elements.floatingVoiceSubmenu = document.getElementById('floating-voice-submenu');
+        this.elements.floatingStopVoiceBtn = document.getElementById('floating-stop-voice-btn');
+        this.elements.floatingSettingsBtn = document.getElementById('floating-settings-btn');
+        
+        // CRITICAL FIX: Session tracker elements - BOTH themes
+        this.elements.sessionCards = this.getElement('sessionCards'); // Current theme
+        this.elements.sessionCardsLegacy = document.getElementById('session-cards');
+        this.elements.sessionCardsSpace = document.querySelector('.cards-list'); // Space theme cards list
+        
+        this.elements.emptySession = document.getElementById('empty-session');
+        this.elements.emptySessionSpace = document.querySelector('.empty-state');
+        
+        this.elements.refreshPricingBtn = document.getElementById('refresh-pricing-btn');
+        this.elements.refreshPricingBtnSpace = document.getElementById('refresh-pricing-space-btn');
+        
+        // Export/Import buttons for both themes
+        this.elements.exportSessionBtn = this.getElement('exportSessionButton');
+        this.elements.importSessionBtn = this.getElement('importSessionButton');
+        this.elements.clearSessionBtn = this.getElement('clearSessionButton');
+        this.elements.exportSessionBtnLegacy = document.getElementById('export-session-btn');
+        this.elements.importSessionBtnLegacy = document.getElementById('import-session-btn');
+        this.elements.clearSessionBtnLegacy = document.getElementById('clear-session-btn');
+        this.elements.exportSessionBtnSpace = document.getElementById('export-session-space');
+        this.elements.importSessionBtnSpace = document.getElementById('import-session-space');
+        this.elements.clearSessionBtnSpace = document.getElementById('clear-session-space');
+        
+        // Session management - basic IDs
+        this.elements.startSessionBtn = document.getElementById('start-session-btn');
+        this.elements.swapSetBtn = document.getElementById('swap-set-btn');
+        this.elements.swapSetBtnSpace = document.getElementById('swap-set-space-btn');
+        this.elements.stopSessionBtn = document.getElementById('stop-session-btn');
+        
+        // Space theme session elements - specific space IDs
+        this.elements.spaceTotalCards = document.getElementById('space-total-cards');
+        this.elements.spaceCurrentSet = document.getElementById('space-current-set');
+        
+        // Training patterns elements - space theme
+        this.elements.patternSearchSpace = document.getElementById('pattern-search-space');
+        this.elements.clearPatternsSpace = document.getElementById('clear-patterns-space');
+        this.elements.spaceTcgLowTotal = document.getElementById('space-tcg-low-total');
+        this.elements.spaceTcgMarketTotal = document.getElementById('space-tcg-market-total');
+        this.elements.spaceSessionStatus = document.getElementById('space-session-status');
+        
+        // View control elements - not mapped yet
+        this.elements.consolidatedViewToggle = document.getElementById('consolidated-view-toggle');
+        this.elements.cardSizeSlider = document.getElementById('card-size-slider');
+        this.elements.cardSizeValue = document.getElementById('card-size-value');
+        this.elements.cardSizeSection = document.getElementById('card-size-section');
+        
+        // Status and utility elements - theme aware where available
+        this.elements.appStatus = document.getElementById('app-status');
+        this.elements.connectionStatus = document.getElementById('connection-status');
+        this.elements.appVersion = document.getElementById('app-version');
+        this.elements.modalOverlay = this.getElement('modalOverlay');
+        this.elements.toastContainer = this.getElement('toastContainer');
+        
+        // Settings and help - not mapped yet
+        this.elements.settingsBtn = document.getElementById('settings-btn');
+        this.elements.helpBtn = document.getElementById('help-btn');
+        
+        this.logger.debug('DOM elements referenced with SelectorMapper integration');
+    }
+
+    /**
+     * Fallback method for DOM element access when SelectorMapper is not available
+     */
+    getDOMElementsFallback() {
+        // Original hardcoded implementation as fallback
+        this.elements.app = document.getElementById('app');
+        this.elements.loadingScreen = document.getElementById('loading-screen');
+        this.elements.tabBtns = document.querySelectorAll('.tab-btn');
+        this.elements.tabPanels = document.querySelectorAll('.tab-panel');
+        this.elements.spaceNavItems = document.querySelectorAll('.space-layout .nav-item[data-tab]');
+        this.elements.spaceNavSubItems = document.querySelectorAll('.space-layout .nav-item[data-vertical-tab]');
+        this.elements.verticalTabBtns = document.querySelectorAll('.vertical-tab-btn');
+        this.elements.verticalTabPanels = document.querySelectorAll('.vertical-tab-panel');
+        this.elements.verticalTabsToggle = document.querySelector('.vertical-tabs-toggle');
+        this.elements.verticalTabsNav = document.querySelector('.vertical-tabs-nav');
         this.elements.priceForm = document.getElementById('price-form');
         this.elements.cardNumber = document.getElementById('card-number');
         this.elements.cardName = document.getElementById('card-name');
@@ -149,71 +702,14 @@ export class UIManager {
         this.elements.priceResults = document.getElementById('price-results');
         this.elements.priceContent = document.getElementById('price-content');
         
-        // Pack ripper elements
-        this.elements.setSearch = document.getElementById('set-search');
-        this.elements.setSelect = document.getElementById('set-select');
-        this.elements.refreshSetsBtn = document.getElementById('refresh-sets-btn');
-        this.elements.loadAllSetsBtn = document.getElementById('load-all-sets-btn');
-        this.elements.startSessionBtn = document.getElementById('start-session-btn');
-        this.elements.currentSet = document.getElementById('current-set');
-        this.elements.cardsCount = document.getElementById('cards-count');
-        this.elements.tcgLowTotal = document.getElementById('tcg-low-total');
-        this.elements.tcgMarketTotal = document.getElementById('tcg-market-total');
-        this.elements.sessionStatus = document.getElementById('session-status');
-        this.elements.setsCount = document.getElementById('sets-count');
-        this.elements.totalSetsCount = document.getElementById('total-sets-count');
-        
-        // Voice recognition elements
-        this.elements.voiceStatus = document.getElementById('voice-status');
-        this.elements.voiceIndicator = document.getElementById('voice-indicator');
-        this.elements.voiceStatusText = document.getElementById('voice-status-text');
-        this.elements.startVoiceBtn = document.getElementById('start-voice-btn');
-        this.elements.stopVoiceBtn = document.getElementById('stop-voice-btn');
-        this.elements.testVoiceBtn = document.getElementById('test-voice-btn');
-        
-        // Floating voice submenu elements
-        this.elements.floatingVoiceSubmenu = document.getElementById('floating-voice-submenu');
-        this.elements.floatingStopVoiceBtn = document.getElementById('floating-stop-voice-btn');
-        this.elements.floatingSettingsBtn = document.getElementById('floating-settings-btn');
-        
-        // Session tracker elements
-        this.elements.sessionCards = document.getElementById('session-cards');
-        this.elements.emptySession = document.getElementById('empty-session');
-        this.elements.refreshPricingBtn = document.getElementById('refresh-pricing-btn');
-        this.elements.exportSessionBtn = document.getElementById('export-session-btn');
-        this.elements.importSessionBtn = document.getElementById('import-session-btn');
-        this.elements.clearSessionBtn = document.getElementById('clear-session-btn');
-        
-        // Session management
-        this.elements.startSessionBtn = document.getElementById('start-session-btn');
-        this.elements.swapSetBtn = document.getElementById('swap-set-btn');
-        this.elements.stopSessionBtn = document.getElementById('stop-session-btn');
-        
-        // View control elements
-        this.elements.consolidatedViewToggle = document.getElementById('consolidated-view-toggle');
-        this.elements.cardSizeSlider = document.getElementById('card-size-slider');
-        this.elements.cardSizeValue = document.getElementById('card-size-value');
-        this.elements.cardSizeSection = document.getElementById('card-size-section');
-        
-        // Status and utility elements
-        this.elements.appStatus = document.getElementById('app-status');
-        this.elements.connectionStatus = document.getElementById('connection-status');
-        this.elements.appVersion = document.getElementById('app-version');
-        this.elements.modalOverlay = document.getElementById('modal-overlay');
-        this.elements.toastContainer = document.getElementById('toast-container');
-        
-        // Settings and help
-        this.elements.settingsBtn = document.getElementById('settings-btn');
-        this.elements.helpBtn = document.getElementById('help-btn');
-        
-        this.logger.debug('DOM elements referenced successfully');
+        this.logger.debug('Using fallback DOM element references');
     }
 
     /**
      * Set up event listeners
      */
     setupEventListeners() {
-        // Tab navigation
+        // Tab navigation (Legacy theme)
         this.elements.tabBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const tabId = e.currentTarget.dataset.tab;
@@ -221,10 +717,26 @@ export class UIManager {
             });
         });
 
-        // Vertical tab navigation (sub-tabs)
+        // Tab navigation (Space theme)
+        this.elements.spaceNavItems.forEach(navItem => {
+            navItem.addEventListener('click', (e) => {
+                const tabId = e.currentTarget.dataset.tab;
+                this.switchTab(tabId);
+            });
+        });
+
+        // Vertical tab navigation (sub-tabs) - Legacy theme
         this.elements.verticalTabBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const subtabId = e.currentTarget.dataset.subtab;
+                this.switchVerticalTab(subtabId);
+            });
+        });
+
+        // Vertical tab navigation (sub-tabs) - Space theme
+        this.elements.spaceNavSubItems.forEach(subNavItem => {
+            subNavItem.addEventListener('click', (e) => {
+                const subtabId = e.currentTarget.dataset.verticalTab;
                 this.switchVerticalTab(subtabId);
             });
         });
@@ -250,11 +762,22 @@ export class UIManager {
             });
         }
 
-        // Pack ripper controls
-        if (this.elements.setSearch) {
-            // Debounced search input
+        // CRITICAL FIX: Pack ripper controls for BOTH themes
+        // Legacy theme set search
+        if (this.elements.setSearchLegacy) {
             let searchTimeout;
-            this.elements.setSearch.addEventListener('input', (e) => {
+            this.elements.setSearchLegacy.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    this.handleSetSearch(e.target.value);
+                }, this.config.debounceDelay);
+            });
+        }
+        
+        // Space theme set search
+        if (this.elements.setSearchSpace) {
+            let searchTimeout;
+            this.elements.setSearchSpace.addEventListener('input', (e) => {
                 clearTimeout(searchTimeout);
                 searchTimeout = setTimeout(() => {
                     this.handleSetSearch(e.target.value);
@@ -262,26 +785,58 @@ export class UIManager {
             });
         }
 
-        if (this.elements.setSelect) {
-            this.elements.setSelect.addEventListener('change', () => {
+        // Legacy theme set dropdown
+        if (this.elements.setSelectLegacy) {
+            this.elements.setSelectLegacy.addEventListener('change', () => {
+                this.handleSetSelection();
+            });
+        }
+        
+        // Space theme set dropdown
+        if (this.elements.setSelectSpace) {
+            this.elements.setSelectSpace.addEventListener('change', () => {
                 this.handleSetSelection();
             });
         }
 
-        if (this.elements.refreshSetsBtn) {
-            this.elements.refreshSetsBtn.addEventListener('click', () => {
+        // Legacy theme buttons
+        if (this.elements.refreshSetsBtnLegacy) {
+            this.elements.refreshSetsBtnLegacy.addEventListener('click', () => {
+                this.handleRefreshSets();
+            });
+        }
+        
+        // Space theme buttons
+        if (this.elements.refreshSetsBtnSpace) {
+            this.elements.refreshSetsBtnSpace.addEventListener('click', () => {
                 this.handleRefreshSets();
             });
         }
 
-        if (this.elements.loadAllSetsBtn) {
-            this.elements.loadAllSetsBtn.addEventListener('click', () => {
+        // Legacy theme load all sets button
+        if (this.elements.loadAllSetsBtnLegacy) {
+            this.elements.loadAllSetsBtnLegacy.addEventListener('click', () => {
+                this.handleLoadAllSets();
+            });
+        }
+        
+        // Space theme load all sets button
+        if (this.elements.loadAllSetsBtnSpace) {
+            this.elements.loadAllSetsBtnSpace.addEventListener('click', () => {
                 this.handleLoadAllSets();
             });
         }
 
+        // Legacy theme start session button
         if (this.elements.startSessionBtn) {
             this.elements.startSessionBtn.addEventListener('click', () => {
+                this.handleSessionStart();
+            });
+        }
+        
+        // Space theme start session button
+        if (this.elements.startSessionBtnSpace) {
+            this.elements.startSessionBtnSpace.addEventListener('click', () => {
                 this.handleSessionStart();
             });
         }
@@ -297,7 +852,37 @@ export class UIManager {
             });
         }
 
-        // Voice controls
+        // Space theme swap set button
+        if (this.elements.swapSetBtnSpace) {
+            this.elements.swapSetBtnSpace.addEventListener('click', () => {
+                const newSetId = this.elements.setSelectSpace?.value || this.elements.setSelect?.value;
+                if (newSetId) {
+                    this.emitSetSwitched({ newSetId });
+                } else {
+                    this.showToast('Please select a card set first', 'warning');
+                }
+            });
+        }
+
+        // Training patterns controls - Space theme
+        if (this.elements.patternSearchSpace) {
+            this.elements.patternSearchSpace.addEventListener('input', (e) => {
+                if (this.app?.patternManagerUI) {
+                    this.app.patternManagerUI.searchQuery = e.target.value.toLowerCase().trim();
+                    this.app.patternManagerUI.filterAndDisplayPatterns();
+                }
+            });
+        }
+
+        if (this.elements.clearPatternsSpace) {
+            this.elements.clearPatternsSpace.addEventListener('click', () => {
+                if (this.app?.patternManagerUI) {
+                    this.app.patternManagerUI.showResetAllConfirmation();
+                }
+            });
+        }
+
+        // Voice controls - Legacy theme
         if (this.elements.startVoiceBtn) {
             this.elements.startVoiceBtn.addEventListener('click', () => {
                 this.emitVoiceStart();
@@ -312,6 +897,44 @@ export class UIManager {
 
         if (this.elements.testVoiceBtn) {
             this.elements.testVoiceBtn.addEventListener('click', () => {
+                this.emitVoiceTest();
+            });
+        }
+        
+        // CRITICAL FIX: Voice controls - Space theme (right panel)
+        if (this.elements.startVoiceBtnSpace) {
+            this.elements.startVoiceBtnSpace.addEventListener('click', () => {
+                this.emitVoiceStart();
+            });
+        }
+
+        if (this.elements.stopVoiceBtnSpace) {
+            this.elements.stopVoiceBtnSpace.addEventListener('click', () => {
+                this.emitVoiceStop();
+            });
+        }
+
+        if (this.elements.testVoiceBtnSpace) {
+            this.elements.testVoiceBtnSpace.addEventListener('click', () => {
+                this.emitVoiceTest();
+            });
+        }
+        
+        // CRITICAL FIX: Main voice controls - Space theme (center panel)
+        if (this.elements.mainStartVoiceSpace) {
+            this.elements.mainStartVoiceSpace.addEventListener('click', () => {
+                this.emitVoiceStart();
+            });
+        }
+
+        if (this.elements.mainStopVoiceSpace) {
+            this.elements.mainStopVoiceSpace.addEventListener('click', () => {
+                this.emitVoiceStop();
+            });
+        }
+
+        if (this.elements.mainTestVoiceSpace) {
+            this.elements.mainTestVoiceSpace.addEventListener('click', () => {
                 this.emitVoiceTest();
             });
         }
@@ -336,6 +959,7 @@ export class UIManager {
             });
         }
 
+        // Legacy theme session management buttons
         if (this.elements.exportSessionBtn) {
             this.elements.exportSessionBtn.addEventListener('click', () => {
                 this.emitSessionExport();
@@ -350,6 +974,25 @@ export class UIManager {
 
         if (this.elements.clearSessionBtn) {
             this.elements.clearSessionBtn.addEventListener('click', () => {
+                this.emitSessionClear();
+            });
+        }
+        
+        // CRITICAL FIX: Space theme session management buttons
+        if (this.elements.exportSessionBtnSpace) {
+            this.elements.exportSessionBtnSpace.addEventListener('click', () => {
+                this.emitSessionExport();
+            });
+        }
+
+        if (this.elements.importSessionBtnSpace) {
+            this.elements.importSessionBtnSpace.addEventListener('click', () => {
+                this.emitSessionImport();
+            });
+        }
+
+        if (this.elements.clearSessionBtnSpace) {
+            this.elements.clearSessionBtnSpace.addEventListener('click', () => {
                 this.emitSessionClear();
             });
         }
@@ -485,11 +1128,18 @@ export class UIManager {
     switchTab(tabId) {
         this.logger.debug(`Switching to tab: ${tabId}`);
         
-        // Update tab buttons
+        // Update tab buttons (Legacy theme)
         this.elements.tabBtns.forEach(btn => {
             const isActive = btn.dataset.tab === tabId;
             btn.classList.toggle('active', isActive);
             btn.setAttribute('aria-selected', isActive);
+        });
+
+        // Update navigation items (Space theme)
+        this.elements.spaceNavItems.forEach(navItem => {
+            const isActive = navItem.dataset.tab === tabId;
+            navItem.classList.toggle('active', isActive);
+            navItem.setAttribute('aria-selected', isActive);
         });
         
         // Update tab panels - fix the selector to match actual HTML structure
@@ -524,11 +1174,18 @@ export class UIManager {
     switchVerticalTab(subtabId) {
         this.logger.debug(`Switching to vertical sub-tab: ${subtabId}`);
         
-        // Update vertical tab buttons
+        // Update vertical tab buttons (Legacy theme)
         this.elements.verticalTabBtns.forEach(btn => {
             const isActive = btn.dataset.subtab === subtabId;
             btn.classList.toggle('active', isActive);
             btn.setAttribute('aria-selected', isActive);
+        });
+
+        // Update space theme sub-navigation items
+        this.elements.spaceNavSubItems.forEach(subNavItem => {
+            const isActive = subNavItem.dataset.verticalTab === subtabId;
+            subNavItem.classList.toggle('active', isActive);
+            subNavItem.setAttribute('aria-selected', isActive);
         });
         
         // Update vertical tab panels
@@ -960,12 +1617,33 @@ export class UIManager {
      * Handle set selection
      */
     handleSetSelection() {
-        const setId = this.elements.setSelect?.value;
+        // CRITICAL FIX: Get selected value from whichever dropdown was changed
+        let setId = null;
+        const legacyValue = this.elements.setSelectLegacy?.value;
+        const spaceValue = this.elements.setSelectSpace?.value;
         
+        // Use the non-empty value, or legacy if both are empty
+        if (legacyValue && legacyValue !== '') {
+            setId = legacyValue;
+            // Sync space dropdown to match legacy selection
+            if (this.elements.setSelectSpace && this.elements.setSelectSpace.value !== legacyValue) {
+                this.elements.setSelectSpace.value = legacyValue;
+            }
+        } else if (spaceValue && spaceValue !== '') {
+            setId = spaceValue;
+            // Sync legacy dropdown to match space selection
+            if (this.elements.setSelectLegacy && this.elements.setSelectLegacy.value !== spaceValue) {
+                this.elements.setSelectLegacy.value = spaceValue;
+            }
+        }
+        
+        // Enable/disable start session buttons for both themes
         if (setId) {
             this.elements.startSessionBtn?.removeAttribute('disabled');
+            this.elements.startSessionBtnSpace?.removeAttribute('disabled');
         } else {
             this.elements.startSessionBtn?.setAttribute('disabled', '');
+            this.elements.startSessionBtnSpace?.setAttribute('disabled', '');
         }
     }
 
@@ -973,9 +1651,12 @@ export class UIManager {
      * Handle refresh sets
      */
     handleRefreshSets() {
-        // Clear search and reload all sets
-        if (this.elements.setSearch) {
-            this.elements.setSearch.value = '';
+        // CRITICAL FIX: Clear search in BOTH themes and reload all sets
+        if (this.elements.setSearchLegacy) {
+            this.elements.setSearchLegacy.value = '';
+        }
+        if (this.elements.setSearchSpace) {
+            this.elements.setSearchSpace.value = '';
         }
         
         // Trigger refresh through the app's session manager
@@ -1065,7 +1746,15 @@ export class UIManager {
      * Update card sets dropdown with enhanced data handling
      */
     updateCardSets(sets, searchTerm = '', totalSets = 0) {
-        if (!this.elements.setSelect) return;
+        // CRITICAL FIX: Get BOTH legacy and space theme dropdowns
+        const legacyDropdown = document.getElementById('set-select');
+        const spaceDropdown = document.getElementById('set-select-space');
+        const dropdowns = [legacyDropdown, spaceDropdown].filter(Boolean);
+        
+        if (dropdowns.length === 0) {
+            this.logger.warn('No set dropdowns found - neither legacy nor space theme dropdown exists');
+            return;
+        }
         
         // Defensive check for undefined sets
         if (!sets || !Array.isArray(sets)) {
@@ -1073,57 +1762,71 @@ export class UIManager {
             sets = [];
         }
         
-        // Clear existing options
-        this.elements.setSelect.innerHTML = '';
-        
-        if (sets.length === 0) {
-            const option = document.createElement('option');
-            option.value = '';
-            option.textContent = searchTerm ? 
-                `No sets found matching "${searchTerm}"` : 
-                'Loading card sets... (Ensure backend is running on port 8081)';
-            this.elements.setSelect.appendChild(option);
-        } else {
-            // Add default option with helpful text
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = searchTerm ?
-                `Select from ${sets.length} filtered sets...` :
-                `Select a card set... (${sets.length} available)`;
-            this.elements.setSelect.appendChild(defaultOption);
+        // Helper function to populate a single dropdown
+        const populateDropdown = (dropdown) => {
+            // Clear existing options
+            dropdown.innerHTML = '';
             
-            // Sort sets by code for better UX
-            const sortedSets = [...sets].sort((a, b) => {
-                const codeA = (a.code || a.set_code || '').toUpperCase();
-                const codeB = (b.code || b.set_code || '').toUpperCase();
-                return codeA.localeCompare(codeB);
-            });
-            
-            // Add set options
-            sortedSets.forEach(set => {
+            if (sets.length === 0) {
                 const option = document.createElement('option');
-                const setCode = set.code || set.set_code || set.id || 'UNK';
-                const setName = set.name || set.set_name || 'Unknown Set';
+                option.value = '';
+                option.textContent = searchTerm ? 
+                    `No sets found matching "${searchTerm}"` : 
+                    'Loading card sets... (Ensure backend is running on port 8081)';
+                dropdown.appendChild(option);
+            } else {
+                // Add default option with helpful text
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = searchTerm ?
+                    `Select from ${sets.length} filtered sets...` :
+                    `Select a card set... (${sets.length} available)`;
+                dropdown.appendChild(defaultOption);
                 
-                option.value = set.id || set.code || set.set_code;
-                option.textContent = `${setCode} - ${setName}`;
-                option.dataset.setName = set.set_name || set.name;
-                option.dataset.setCode = set.set_code || set.code;
-                option.title = `${setCode}: ${setName}`; // Tooltip for long names
+                // Sort sets by code for better UX
+                const sortedSets = [...sets].sort((a, b) => {
+                    const codeA = (a.code || a.set_code || '').toUpperCase();
+                    const codeB = (b.code || b.set_code || '').toUpperCase();
+                    return codeA.localeCompare(codeB);
+                });
                 
-                this.elements.setSelect.appendChild(option);
-            });
-        }
+                // Add set options
+                sortedSets.forEach(set => {
+                    const option = document.createElement('option');
+                    const setCode = set.code || set.set_code || set.id || 'UNK';
+                    const setName = set.name || set.set_name || 'Unknown Set';
+                    
+                    option.value = set.id || set.code || set.set_code;
+                    option.textContent = `${setCode} - ${setName}`;
+                    option.dataset.setName = set.set_name || set.name;
+                    option.dataset.setCode = set.set_code || set.code;
+                    option.title = `${setCode}: ${setName}`; // Tooltip for long names
+                    
+                    dropdown.appendChild(option);
+                });
+            }
+        };
         
-        // Update counters with enhanced information
-        if (this.elements.setsCount) {
-            this.elements.setsCount.textContent = sets.length.toString();
-        }
+        // CRITICAL FIX: Populate ALL available dropdowns (both legacy and space)
+        dropdowns.forEach(dropdown => {
+            populateDropdown(dropdown);
+        });
         
-        if (this.elements.totalSetsCount) {
-            const total = totalSets || sets.length;
-            this.elements.totalSetsCount.textContent = total.toString();
-        }
+        // Update counters with enhanced information for both themes
+        const updateCounter = (elementId, value) => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = value.toString();
+            }
+        };
+        
+        // Update legacy theme counters
+        updateCounter('sets-count', sets.length);
+        updateCounter('total-sets-count', totalSets || sets.length);
+        
+        // Update space theme counters
+        updateCounter('sets-count-space', sets.length);
+        updateCounter('total-sets-count-space', totalSets || sets.length);
         
         // Only show status messages when not filtering/searching
         if (!searchTerm) {
@@ -1140,7 +1843,7 @@ export class UIManager {
             this.logger.info(`Found ${sets.length} sets matching "${searchTerm}"`);
         }
         
-        this.logger.info(`Updated card sets dropdown: ${sets.length} displayed, ${totalSets || sets.length} total available`);
+        this.logger.info(`Updated card sets dropdowns: ${sets.length} displayed, ${totalSets || sets.length} total available, populated ${dropdowns.length} dropdowns`);
     }
 
     /**
@@ -1154,6 +1857,15 @@ export class UIManager {
         if (this.elements.cardsCount) {
             this.elements.cardsCount.textContent = sessionInfo.cardCount?.toString() || '0';
         }
+
+        // Update space theme session elements
+        if (this.elements.spaceCurrentSet) {
+            this.elements.spaceCurrentSet.textContent = sessionInfo.currentSet || sessionInfo.setName || 'No set selected';
+        }
+        
+        if (this.elements.spaceTotalCards) {
+            this.elements.spaceTotalCards.textContent = sessionInfo.cardCount?.toString() || '0';
+        }
         
         // Update separate pricing totals
         if (this.elements.tcgLowTotal) {
@@ -1165,11 +1877,28 @@ export class UIManager {
             const tcgMarketTotal = sessionInfo.tcgMarketTotal || sessionInfo.statistics?.tcgMarketTotal || 0;
             this.elements.tcgMarketTotal.textContent = `$${tcgMarketTotal.toFixed(2)}`;
         }
+
+        // Update space theme pricing totals
+        if (this.elements.spaceTcgLowTotal) {
+            const tcgLowTotal = sessionInfo.tcgLowTotal || sessionInfo.statistics?.tcgLowTotal || 0;
+            this.elements.spaceTcgLowTotal.textContent = `$${tcgLowTotal.toFixed(2)}`;
+        }
+        
+        if (this.elements.spaceTcgMarketTotal) {
+            const tcgMarketTotal = sessionInfo.tcgMarketTotal || sessionInfo.statistics?.tcgMarketTotal || 0;
+            this.elements.spaceTcgMarketTotal.textContent = `$${tcgMarketTotal.toFixed(2)}`;
+        }
         
         if (this.elements.sessionStatus) {
             const status = sessionInfo.isActive ? 'Active' : 'Inactive';
             this.elements.sessionStatus.textContent = status;
             this.elements.sessionStatus.className = `status-badge ${sessionInfo.isActive ? 'active' : 'inactive'}`;
+        }
+
+        // Update space theme session status
+        if (this.elements.spaceSessionStatus) {
+            const status = sessionInfo.isActive ? 'Active' : 'Ready';
+            this.elements.spaceSessionStatus.textContent = status;
         }
         
         // Update session tracker controls
@@ -1715,72 +2444,379 @@ export class UIManager {
     }
 
     /**
-     * Update voice status
+     * Update voice status - FIXED TO TARGET ALL THEMES AND PROVIDE CLEAR PROGRESSION
      */
     updateVoiceStatus(status) {
-        if (!this.elements.voiceStatusText) return;
+        // Prevent duplicate updates
+        if (this.lastVoiceStatus === status) {
+            return;
+        }
+        this.lastVoiceStatus = status;
+        
+        this.logger.info(`🎤 VOICE STATUS UPDATE: ${status}`);
         
         let statusText = '';
         let statusClass = '';
+        let statusIcon = '🔴';
         
         switch (status) {
             case 'ready':
-                statusText = 'Voice recognition ready';
+                statusText = '🎙️ READY - Voice Recognition Available';
                 statusClass = 'ready';
+                statusIcon = '🟢';
                 this.updateVoiceButtons(false);
                 break;
             case 'listening':
-                statusText = 'Listening for card names...';
+                statusText = '🎤 LISTENING - Speak card names now...';
                 statusClass = 'listening';
+                statusIcon = '🔵';
                 this.updateVoiceButtons(true);
                 break;
             case 'processing':
-                statusText = 'Processing voice input...';
+                statusText = '⚡ PROCESSING - Analyzing your voice...';
                 statusClass = 'processing';
+                statusIcon = '🟡';
                 break;
             case 'error':
-                statusText = 'Voice recognition error';
+                statusText = '❌ ERROR - Voice recognition failed';
                 statusClass = 'error';
+                statusIcon = '🔴';
                 this.updateVoiceButtons(false);
                 break;
             case 'not-available':
-                statusText = 'Voice recognition not available';
+                statusText = '🚫 UNAVAILABLE - Voice recognition not supported';
                 statusClass = 'error';
+                statusIcon = '⚫';
+                this.updateVoiceButtons(false, true);
+                break;
+            case 'initializing':
+                statusText = '🔄 INITIALIZING - Setting up voice recognition...';
+                statusClass = 'initializing';
+                statusIcon = '🟠';
                 this.updateVoiceButtons(false, true);
                 break;
             default:
-                statusText = status;
+                statusText = `📢 ${status.toUpperCase()}`;
                 statusClass = 'unknown';
+                statusIcon = '❓';
         }
         
-        this.elements.voiceStatusText.textContent = statusText;
+        // Update ALL status text elements across all themes
+        const statusTextElements = [
+            // Current theme (SelectorMapper)
+            this.elements.voiceStatusText,
+            // Legacy theme elements
+            this.elements.voiceStatusTextLegacy,
+            document.getElementById('voice-status-text'),
+            document.querySelector('#voice-status .status-text'),
+            // Space theme elements
+            this.elements.voiceStatusTextSpace,
+            document.getElementById('space-status-text'),
+            document.getElementById('space-voice-status'),
+            document.querySelector('#space-status-indicator .status-text-space'),
+            // Additional locations
+            document.querySelector('.voice-status-space'),
+            document.querySelector('.status-text')
+        ].filter(el => el);
         
-        if (this.elements.voiceIndicator) {
-            this.elements.voiceIndicator.className = `status-indicator ${statusClass}`;
-        }
+        statusTextElements.forEach((el, index) => {
+            if (el) {
+                el.textContent = statusText;
+                el.title = statusText; // Tooltip for accessibility
+                this.logger.debug(`🎤 Updated status text ${index}: ${statusText}`);
+            }
+        });
+        
+        // Update ALL status indicator elements
+        const statusIndicators = [
+            this.elements.voiceIndicator,
+            this.elements.voiceIndicatorLegacy,
+            document.getElementById('voice-indicator'),
+            document.querySelector('#voice-status .status-indicator'),
+            this.elements.voiceIndicatorSpace,
+            document.getElementById('space-status-indicator'),
+            document.querySelector('.status-indicator-space')
+        ].filter(el => el);
+        
+        statusIndicators.forEach((el, index) => {
+            if (el) {
+                el.className = `status-indicator ${statusClass}`;
+                
+                // Update status icon if it has a status-icon child
+                const iconEl = el.querySelector('.status-icon');
+                if (iconEl) {
+                    iconEl.textContent = statusIcon;
+                }
+                
+                this.logger.debug(`🎤 Updated status indicator ${index}: ${statusClass}`);
+            }
+        });
+        
+        // Apply enhanced visual feedback based on status
+        this.applyVoiceStatusVisualFeedback(status, statusClass);
+        
+        this.logger.info(`🎤 VOICE STATUS UPDATED SUCCESSFULLY: ${status} -> ${statusText}`);
     }
 
     /**
-     * Update voice control buttons
+     * Update voice control buttons - FIXED TO TARGET ALL THEMES
      */
     updateVoiceButtons(isListening, disabled = false) {
-        if (this.elements.startVoiceBtn) {
-            this.elements.startVoiceBtn.classList.toggle('hidden', isListening || disabled);
-            this.elements.startVoiceBtn.disabled = disabled;
-        }
+        this.logger.info(`🔧 VOICE BUTTONS UPDATE: isListening=${isListening}, disabled=${disabled}`);
         
-        if (this.elements.stopVoiceBtn) {
-            this.elements.stopVoiceBtn.classList.toggle('hidden', !isListening || disabled);
-        }
+        // Get all voice buttons across all themes using comprehensive selectors
+        const startButtons = [
+            // Current theme (SelectorMapper)
+            this.elements.startVoiceBtn,
+            // Legacy theme buttons
+            this.elements.startVoiceBtnLegacy,
+            document.getElementById('start-voice-btn'),
+            // Space theme buttons  
+            this.elements.startVoiceBtnSpace,
+            document.getElementById('start-voice-space'),
+            document.getElementById('main-start-voice-space'),
+            // Additional space theme locations
+            document.querySelector('#space-voice-recognition-content .btn-voice'),
+            document.querySelector('.voice-controls-space .btn-voice')
+        ].filter(btn => btn); // Remove null/undefined
         
-        if (this.elements.testVoiceBtn) {
-            this.elements.testVoiceBtn.disabled = isListening || disabled;
-        }
+        const stopButtons = [
+            // Current theme (SelectorMapper)
+            this.elements.stopVoiceBtn,
+            // Legacy theme buttons
+            this.elements.stopVoiceBtnLegacy,
+            document.getElementById('stop-voice-btn'),
+            // Space theme buttons
+            this.elements.stopVoiceBtnSpace, 
+            document.getElementById('stop-voice-space'),
+            document.getElementById('main-stop-voice-space'),
+            // Additional space theme locations
+            document.querySelector('#space-voice-recognition-content .btn-voice-stop'),
+            document.querySelector('.voice-controls-space .btn-voice-stop')
+        ].filter(btn => btn); // Remove null/undefined
+        
+        const testButtons = [
+            this.elements.testVoiceBtn,
+            this.elements.testVoiceBtnLegacy,
+            document.getElementById('test-voice-btn'),
+            this.elements.testVoiceBtnSpace,
+            document.getElementById('test-voice-space'),
+            document.getElementById('main-test-voice-space')
+        ].filter(btn => btn);
+        
+        this.logger.info(`🔧 Found ${startButtons.length} start buttons, ${stopButtons.length} stop buttons`);
+        
+        // Update START buttons - show when NOT listening and NOT disabled
+        startButtons.forEach((btn, index) => {
+            if (btn) {
+                const shouldHide = isListening || disabled;
+                btn.classList.toggle('hidden', shouldHide);
+                btn.disabled = disabled;
+                
+                // Use setProperty with !important to override any conflicting CSS
+                if (shouldHide) {
+                    btn.style.setProperty('display', 'none', 'important');
+                    btn.style.setProperty('visibility', 'hidden', 'important');
+                    btn.style.setProperty('opacity', '0', 'important');
+                } else {
+                    btn.style.removeProperty('display');
+                    btn.style.removeProperty('visibility');
+                    btn.style.removeProperty('opacity');
+                }
+                
+                this.logger.debug(`🔧 Start button ${index}: hidden=${shouldHide}, disabled=${disabled}`);
+            }
+        });
+        
+        // Update STOP buttons - show when listening and NOT disabled  
+        stopButtons.forEach((btn, index) => {
+            if (btn) {
+                const shouldHide = !isListening || disabled;
+                btn.classList.toggle('hidden', shouldHide);
+                
+                // Use setProperty with !important to override any conflicting CSS
+                if (shouldHide) {
+                    btn.style.setProperty('display', 'none', 'important');
+                    btn.style.setProperty('visibility', 'hidden', 'important');
+                    btn.style.setProperty('opacity', '0', 'important');
+                } else {
+                    btn.style.removeProperty('display');
+                    btn.style.removeProperty('visibility');
+                    btn.style.removeProperty('opacity');
+                }
+                
+                this.logger.debug(`🔧 Stop button ${index}: hidden=${shouldHide}`);
+            }
+        });
+        
+        // Update TEST buttons - disable when listening or disabled
+        testButtons.forEach((btn, index) => {
+            if (btn) {
+                btn.disabled = isListening || disabled;
+                this.logger.debug(`🔧 Test button ${index}: disabled=${isListening || disabled}`);
+            }
+        });
+        
+        // Apply dramatic visual feedback
+        this.applyVoiceVisualFeedback(isListening, disabled);
         
         // Update floating submenu visibility
         this.updateFloatingSubmenu(isListening, disabled);
+        
+        // Buttons updated
     }
 
+    /**
+     * Apply dramatic visual feedback for voice recognition state
+     */
+    applyVoiceVisualFeedback(isListening, disabled = false) {
+        // Apply visual feedback efficiently
+        
+        // Get all voice-related containers for visual feedback
+        const voiceContainers = [
+            document.querySelector('.voice-controls'),
+            document.querySelector('.voice-interface'),
+            document.querySelector('.voice-controls-main'),
+            document.querySelector('.voice-controls-space'),
+            document.getElementById('voice-recognition-panel'),
+            document.getElementById('space-voice-recognition-content')
+        ].filter(el => el);
+        
+        voiceContainers.forEach((container, index) => {
+            if (!container) return;
+            
+            // Remove existing voice state classes
+            container.classList.remove('voice-listening', 'voice-ready', 'voice-disabled', 'voice-pulsing');
+            
+            if (disabled) {
+                container.classList.add('voice-disabled');
+                container.style.opacity = '0.6';
+                container.style.filter = 'grayscale(50%)';
+            } else if (isListening) {
+                container.classList.add('voice-listening', 'voice-pulsing');
+                container.style.opacity = '1';
+                container.style.filter = 'none';
+                container.style.backgroundColor = 'rgba(76, 159, 255, 0.1)';
+                container.style.border = '2px solid rgba(76, 159, 255, 0.8)';
+                container.style.boxShadow = '0 0 20px rgba(76, 159, 255, 0.6), inset 0 0 20px rgba(76, 159, 255, 0.2)';
+                container.style.animation = 'voicePulsing 1.5s ease-in-out infinite';
+            } else {
+                container.classList.add('voice-ready');
+                container.style.opacity = '1';
+                container.style.filter = 'none';
+                container.style.backgroundColor = '';
+                container.style.border = '';
+                container.style.boxShadow = '';
+                container.style.animation = '';
+            }
+            
+            // Removed debug logging for performance
+        });
+        
+        // Add CSS animation for pulsing effect if not already exists
+        if (!document.getElementById('voice-feedback-styles')) {
+            const style = document.createElement('style');
+            style.id = 'voice-feedback-styles';
+            style.textContent = `
+                @keyframes voicePulsing {
+                    0%, 100% { 
+                        box-shadow: 0 0 20px rgba(76, 159, 255, 0.6), inset 0 0 20px rgba(76, 159, 255, 0.2);
+                        border-color: rgba(76, 159, 255, 0.8);
+                    }
+                    50% { 
+                        box-shadow: 0 0 40px rgba(76, 159, 255, 0.9), inset 0 0 30px rgba(76, 159, 255, 0.4);
+                        border-color: rgba(76, 159, 255, 1);
+                    }
+                }
+                
+                .voice-listening {
+                    position: relative;
+                }
+                
+                .voice-listening::before {
+                    content: '🎤 LISTENING';
+                    position: absolute;
+                    top: -30px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: rgba(76, 159, 255, 0.9);
+                    color: white;
+                    padding: 5px 15px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    z-index: 1000;
+                    animation: voiceIndicatorPulse 1s ease-in-out infinite;
+                }
+                
+                @keyframes voiceIndicatorPulse {
+                    0%, 100% { opacity: 0.8; transform: translateX(-50%) scale(1); }
+                    50% { opacity: 1; transform: translateX(-50%) scale(1.05); }
+                }
+                
+                .voice-disabled {
+                    pointer-events: none;
+                }
+                
+                .voice-ready {
+                    transition: all 0.3s ease;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+    
+    /**
+     * Apply enhanced status-specific visual feedback
+     */
+    applyVoiceStatusVisualFeedback(status, statusClass) {
+        this.logger.info(`🌟 APPLYING STATUS VISUAL FEEDBACK: ${status}`);
+        
+        // Get main app container for global status indication
+        const appContainer = document.getElementById('app') || document.querySelector('.app');
+        const spaceContainer = document.getElementById('space-app') || document.querySelector('.space-layout');
+        
+        // Remove existing status classes
+        [appContainer, spaceContainer].forEach(container => {
+            if (container) {
+                container.classList.remove('voice-ready', 'voice-listening', 'voice-processing', 'voice-error', 'voice-initializing');
+            }
+        });
+        
+        // Apply new status class and effects
+        [appContainer, spaceContainer].forEach(container => {
+            if (!container) return;
+            
+            container.classList.add(`voice-${statusClass}`);
+            
+            // Apply status-specific visual effects
+            switch (statusClass) {
+                case 'listening':
+                    container.style.setProperty('--voice-glow-color', 'rgba(76, 159, 255, 0.8)');
+                    break;
+                case 'processing':
+                    container.style.setProperty('--voice-glow-color', 'rgba(255, 193, 7, 0.8)');
+                    break;
+                case 'error':
+                    container.style.setProperty('--voice-glow-color', 'rgba(220, 53, 69, 0.8)');
+                    break;
+                case 'ready':
+                    container.style.setProperty('--voice-glow-color', 'rgba(40, 167, 69, 0.8)');
+                    break;
+                default:
+                    container.style.setProperty('--voice-glow-color', 'rgba(108, 117, 125, 0.5)');
+            }
+        });
+        
+        // Show toast for important status changes (but not on initial ready)
+        if (status === 'listening') {
+            this.showToast('🎤 LISTENING - Speak card names now!', 'info', { duration: 3000, important: true });
+        } else if (status === 'error') {
+            this.showToast('❌ ERROR - Voice recognition encountered an error', 'error', { duration: 4000 });
+        }
+        // Removed the 'ready' toast to reduce spam
+    }
+    
     /**
      * Update floating submenu visibility and position
      */
@@ -1922,7 +2958,7 @@ export class UIManager {
             this.removeToast(toast);
         }, toastDuration);
         
-        this.logger.debug(`Toast shown: ${message} (${type})`);
+        // Toast displayed
     }
 
     /**

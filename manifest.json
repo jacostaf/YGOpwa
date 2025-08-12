@@ -1,7 +1,7 @@
 {
-  "name": "YGO Ripper UI v2",
-  "short_name": "YGO Ripper",
-  "description": "Cross-platform Yu-Gi-Oh card price checker and pack ripper with robust voice recognition",
+  "name": "VoxRip - Voice-Powered Card Collection",
+  "short_name": "VoxRip",
+  "description": "VoxRip - Advanced voice-powered Yu-Gi-Oh card collection and pricing toolkit with intelligent recognition",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",

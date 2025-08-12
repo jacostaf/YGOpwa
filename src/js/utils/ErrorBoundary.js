@@ -18,6 +18,41 @@ export class AppErrorBoundary {
         this.retryQueue = new Map();
         this.offlineMode = false;
         
+        // Initialize error statistics (was previously undefined)
+        this.errorStats = {
+            totalErrors: 0,
+            criticalErrors: 0,
+            recoveredErrors: 0,
+            errorsByType: new Map(),
+            errorsByComponent: new Map(),
+            lastError: null,
+            startTime: Date.now()
+        };
+        
+        // Initialize memory tracker (was previously undefined)
+        this.memoryTracker = {
+            cleanupCallbacks: new Set(),
+            lastCleanup: Date.now(),
+            cleanupInterval: 300000, // 5 minutes
+            memoryThreshold: 100 // MB
+        };
+        
+        // Initialize performance thresholds (was previously undefined)
+        this.performanceThresholds = {
+            memoryUsage: 100, // MB
+            cpuUsage: 80, // %
+            responseTime: 2000, // ms
+            errorRate: 5 // %
+        };
+        
+        // Initialize network state (was previously undefined) 
+        this.networkState = {
+            isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+            lastOnlineTime: Date.now(),
+            failedRequests: [],
+            retryAttempts: 0
+        };
+        
         // Error types and their configurations
         this.errorTypes = {
             VOICE_RECOGNITION_ERROR: {
@@ -58,17 +93,21 @@ export class AppErrorBoundary {
             }
         };
         
-        this.setupGlobalErrorHandlers();
+        // Initialize enhanced error handling
+        this.initializeEnhancedErrorHandling();
     }
 
     /**
      * Set up global error handlers for unhandled errors
      */
     setupGlobalErrorHandlers() {
+        if (typeof window === 'undefined') return;
+        
         // Handle unhandled promise rejections
         window.addEventListener('unhandledrejection', (event) => {
             this.logger.error('Unhandled promise rejection:', event.reason);
             this.handleError(event.reason, 'PROMISE_REJECTION');
+            this.handleGlobalError(event.reason, 'unhandled-promise');
             event.preventDefault();
         });
 
@@ -76,15 +115,22 @@ export class AppErrorBoundary {
         window.addEventListener('error', (event) => {
             this.logger.error('Global JavaScript error:', event.error);
             this.handleError(event.error, 'JAVASCRIPT_ERROR');
+            this.handleGlobalError(event.error, 'global-error', {
+                filename: event.filename,
+                lineno: event.lineno,
+                colno: event.colno
+            });
         });
 
         // Handle network status changes
         window.addEventListener('online', () => {
             this.handleNetworkReconnect();
+            this.handleNetworkStateChange(true);
         });
 
         window.addEventListener('offline', () => {
             this.handleNetworkDisconnect();
+            this.handleNetworkStateChange(false);
         });
     }
 
@@ -645,7 +691,365 @@ export class AppErrorBoundary {
      */
     clearErrorHistory() {
         this.retryQueue.clear();
+        this.errorStats.totalErrors = 0;
+        this.errorStats.criticalErrors = 0;
+        this.errorStats.recoveredErrors = 0;
+        this.errorStats.errorsByType.clear();
+        this.errorStats.errorsByComponent.clear();
         this.logger.info('Error history cleared');
+    }
+    
+    /**
+     * Initialize enhanced error handling features
+     */
+    initializeEnhancedErrorHandling() {
+        // Set up global error handlers (calls existing method, no duplicate)
+        this.setupGlobalErrorHandlers();
+        
+        // Initialize memory cleanup
+        this.initializeMemoryCleanup();
+        
+        // Set up network monitoring
+        this.initializeNetworkMonitoring();
+        
+        this.logger.info('Enhanced error handling initialized');
+    }
+    
+    /**
+     * Initialize memory cleanup system
+     */
+    initializeMemoryCleanup() {
+        // Set up periodic cleanup
+        setInterval(() => {
+            this.performMemoryCleanup();
+        }, this.memoryTracker.cleanupInterval);
+        
+        // Monitor memory usage
+        if (performance.memory) {
+            setInterval(() => {
+                const memoryMB = performance.memory.usedJSHeapSize / 1024 / 1024;
+                if (memoryMB > this.performanceThresholds.memoryUsage) {
+                    this.handleMemoryPressure();
+                }
+            }, 10000);
+        }
+    }
+    
+    /**
+     * Initialize network monitoring
+     */
+    initializeNetworkMonitoring() {
+        if (typeof window === 'undefined') return;
+        
+        window.addEventListener('online', () => {
+            this.handleNetworkStateChange(true);
+        });
+        
+        window.addEventListener('offline', () => {
+            this.handleNetworkStateChange(false);
+        });
+        
+        // Initial state
+        this.networkState.isOnline = navigator.onLine;
+    }
+    
+    /**
+     * Handle global errors with enhanced context
+     */
+    handleGlobalError(error, type, context = {}) {
+        this.errorStats.totalErrors++;
+        
+        // Determine if this is a critical error
+        const isCritical = type.includes('unhandled') || type.includes('global') || 
+                          (error && error.name === 'TypeError') ||
+                          (error && error.name === 'ReferenceError');
+        
+        if (isCritical) {
+            this.errorStats.criticalErrors++;
+        }
+        
+        const errorInfo = {
+            type,
+            error: error ? error.toString() : 'Unknown error',
+            timestamp: new Date().toISOString(),
+            url: typeof window !== 'undefined' ? window.location.href : 'unknown',
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+            context,
+            isCritical,
+            stackTrace: error && error.stack ? error.stack.substring(0, 500) : null
+        };
+        
+        this.logger.error(`Global ${type} error:`, errorInfo);
+        
+        // Store last error for debugging
+        this.errorStats.lastError = errorInfo;
+        
+        // Update error statistics
+        this.updateErrorStatistics(type, error);
+        
+        // Emit error event for external monitoring
+        if (typeof window !== 'undefined') {
+            const customEvent = new CustomEvent('errorBoundaryError', {
+                detail: errorInfo
+            });
+            window.dispatchEvent(customEvent);
+        }
+    }
+    
+    /**
+     * Perform memory cleanup
+     */
+    performMemoryCleanup() {
+        const startTime = performance.now();
+        
+        // Execute registered cleanup callbacks
+        this.memoryTracker.cleanupCallbacks.forEach(callback => {
+            try {
+                callback();
+            } catch (error) {
+                this.logger.warn('Cleanup callback failed:', error);
+            }
+        });
+        
+        // Clear old cache entries
+        this.clearOldCacheEntries();
+        
+        // Force garbage collection if available
+        if (window.gc) {
+            window.gc();
+        }
+        
+        this.memoryTracker.lastCleanup = Date.now();
+        
+        const cleanupTime = performance.now() - startTime;
+        this.logger.debug(`Memory cleanup completed in ${cleanupTime.toFixed(2)}ms`);
+    }
+    
+    /**
+     * Handle memory pressure
+     */
+    handleMemoryPressure() {
+        this.logger.warn('Memory pressure detected, initiating aggressive cleanup');
+        
+        // Request performance reduction
+        this.requestPerformanceReduction('memory');
+        
+        // Perform immediate cleanup
+        this.performEmergencyCleanup();
+    }
+    
+    /**
+     * Handle network state changes
+     */
+    handleNetworkStateChange(isOnline) {
+        const previousState = this.networkState.isOnline;
+        this.networkState.isOnline = isOnline;
+        
+        if (isOnline && !previousState) {
+            this.logger.info('Network connection restored');
+            this.networkState.lastOnlineTime = Date.now();
+            this.offlineMode = false;
+            
+            // Retry failed requests
+            this.retryFailedRequests();
+        } else if (!isOnline && previousState) {
+            this.logger.warn('Network connection lost, entering offline mode');
+            this.offlineMode = true;
+        }
+    }
+    
+    /**
+     * Retry failed network requests
+     */
+    async retryFailedRequests() {
+        const failedRequests = [...this.networkState.failedRequests];
+        this.networkState.failedRequests = [];
+        
+        for (const request of failedRequests) {
+            try {
+                await this.retryRequest(request);
+                this.logger.info('Successfully retried failed request');
+            } catch (error) {
+                this.logger.warn('Failed to retry request:', error);
+                // Re-add to failed requests if still failing
+                this.networkState.failedRequests.push(request);
+            }
+        }
+    }
+    
+    /**
+     * Request performance reduction from components
+     */
+    requestPerformanceReduction(reason) {
+        if (typeof window !== 'undefined') {
+            const event = new CustomEvent('performanceReduction', {
+                detail: { reason, timestamp: Date.now() }
+            });
+            
+            window.dispatchEvent(event);
+        }
+        
+        this.logger.info(`Performance reduction requested: ${reason}`);
+    }
+    
+    /**
+     * Register cleanup callback
+     */
+    registerCleanupCallback(callback) {
+        if (typeof callback === 'function') {
+            this.memoryTracker.cleanupCallbacks.add(callback);
+        }
+    }
+    
+    /**
+     * Unregister cleanup callback
+     */
+    unregisterCleanupCallback(callback) {
+        this.memoryTracker.cleanupCallbacks.delete(callback);
+    }
+    
+    /**
+     * Clear old cache entries
+     */
+    clearOldCacheEntries() {
+        if (typeof window !== 'undefined') {
+            const event = new CustomEvent('clearOldCaches', {
+                detail: { maxAge: 3600000 } // 1 hour
+            });
+            
+            window.dispatchEvent(event);
+        }
+    }
+    
+    /**
+     * Perform emergency cleanup
+     */
+    performEmergencyCleanup() {
+        // Clear all possible caches
+        this.clearOldCacheEntries();
+        
+        // Execute all cleanup callbacks
+        this.performMemoryCleanup();
+        
+        // Request immediate garbage collection
+        if (typeof window !== 'undefined' && window.gc) {
+            window.gc();
+        }
+        
+        this.logger.warn('Emergency cleanup performed');
+    }
+    
+    /**
+     * Update error statistics
+     */
+    updateErrorStatistics(type, error) {
+        // Update error count by type
+        const currentCount = this.errorStats.errorsByType.get(type) || 0;
+        this.errorStats.errorsByType.set(type, currentCount + 1);
+        
+        // Track error by component if available
+        if (error && error.componentStack) {
+            const component = this.extractComponentFromStack(error.componentStack);
+            if (component) {
+                const componentCount = this.errorStats.errorsByComponent.get(component) || 0;
+                this.errorStats.errorsByComponent.set(component, componentCount + 1);
+            }
+        }
+        
+        // Update error rate calculation
+        const timeRunning = Date.now() - this.errorStats.startTime;
+        const errorRate = (this.errorStats.totalErrors / (timeRunning / 1000 / 60)) || 0; // errors per minute
+        
+        // Check if error rate is too high
+        if (errorRate > this.performanceThresholds.errorRate) {
+            this.logger.warn(`High error rate detected: ${errorRate.toFixed(2)} errors/minute`);
+        }
+    }
+    
+    /**
+     * Get enhanced error statistics
+     */
+    getEnhancedErrorStats() {
+        const timeRunning = Date.now() - this.errorStats.startTime;
+        const errorRate = (this.errorStats.totalErrors / (timeRunning / 1000 / 60)) || 0;
+        
+        return {
+            ...this.errorStats,
+            runtime: {
+                startTime: this.errorStats.startTime,
+                timeRunningMs: timeRunning,
+                errorRatePerMinute: Math.round(errorRate * 100) / 100
+            },
+            networkState: { ...this.networkState },
+            memoryTracker: {
+                lastCleanup: this.memoryTracker.lastCleanup,
+                cleanupCallbackCount: this.memoryTracker.cleanupCallbacks.size,
+                memoryThreshold: this.memoryTracker.memoryThreshold
+            },
+            thresholds: { ...this.performanceThresholds },
+            summary: {
+                totalErrors: this.errorStats.totalErrors,
+                criticalErrors: this.errorStats.criticalErrors,
+                recoveredErrors: this.errorStats.recoveredErrors,
+                errorsByTypeCount: this.errorStats.errorsByType.size,
+                errorsByComponentCount: this.errorStats.errorsByComponent.size
+            }
+        };
+    }
+    
+    /**
+     * Extract component name from error stack
+     */
+    extractComponentFromStack(componentStack) {
+        if (!componentStack) return null;
+        
+        // Try to extract component name from stack trace
+        const match = componentStack.match(/in (\w+)/i);
+        return match ? match[1] : 'Unknown';
+    }
+    
+    /**
+     * Retry request with exponential backoff
+     */
+    async retryRequest(request) {
+        if (!request || typeof request !== 'object') {
+            throw new Error('Invalid request object for retry');
+        }
+        
+        const maxRetries = request.maxRetries || 3;
+        const baseDelay = request.baseDelay || 1000;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // If request has a retry function, call it
+                if (typeof request.retryFunction === 'function') {
+                    const result = await request.retryFunction();
+                    this.errorStats.recoveredErrors++;
+                    return { success: true, result, attempt };
+                }
+                
+                // If request has URL, try to fetch it
+                if (request.url) {
+                    const response = await fetch(request.url, request.options || {});
+                    if (response.ok) {
+                        this.errorStats.recoveredErrors++;
+                        return { success: true, response, attempt };
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                throw new Error('No retry method available');
+                
+            } catch (error) {
+                if (attempt === maxRetries) {
+                    throw error;
+                }
+                
+                // Exponential backoff with jitter
+                const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 100;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
     }
 }
 

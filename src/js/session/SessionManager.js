@@ -1,13 +1,13 @@
 /**
- * Session Manager - Pack Ripper Session Management
+ * Enhanced Session Manager with Advanced Data Workflows
  * 
- * Provides comprehensive session management with feature parity to ygo_ripper.py:
- * - Pack ripper sessions with card tracking
- * - Voice input processing and card recognition
- * - Session persistence and recovery
- * - Statistics and analytics
- * - Import/export functionality
- * - Card set management
+ * Phase 3 Implementation: Complete System Integration & Production Validation
+ * - Advanced session management with theme-aware data workflows
+ * - Card import/export functionality in both themes
+ * - Session persistence during theme switches
+ * - Bulk operations and batch processing
+ * - Comprehensive session statistics and analytics
+ * - Cross-platform session recovery
  */
 
 import { Logger } from '../utils/Logger.js';
@@ -39,6 +39,7 @@ export class SessionManager {
         this.currentSet = null;
         this.setCards = new Map(); // Cache for set-specific card data
         this.searchTerm = '';
+        this.usingMockData = false; // Deprecated - mock data support has been removed
         
         // Pricing data loading tracking
         this.loadingPriceData = new Set(); // Track cards with pending price requests
@@ -63,7 +64,7 @@ export class SessionManager {
             maxSessionHistory: 50,
             cardMatchThreshold: 0.35,
             enableFuzzyMatching: true,
-            apiTimeout: 120000 // 30 second timeout for API calls
+            apiTimeout: 10000 // 10 second timeout for API calls
         };
         
         // Auto-save timer
@@ -72,7 +73,272 @@ export class SessionManager {
         // Common card names cache for optimization
         this.commonCardNames = new Map();
         
-        this.logger.info('SessionManager initialized');
+        // Session metrics tracking
+        this.sessionMetrics = {
+            startTime: null,
+            totalOperations: 0,
+            exportCount: 0,
+            importCount: 0,
+            cardsAdded: 0,
+            cardsRemoved: 0,
+            themeSwitches: 0,
+            voiceCommands: 0,
+            averageConfidence: 0
+        };
+        
+        // Initialize advanced session management
+        this.initializeAdvancedFeatures();
+        
+        this.logger.info('Enhanced SessionManager initialized with advanced data workflows');
+    }
+
+    /**
+     * Integration with migration system - set after initialization
+     * @param {SelectorMapper} selectorMapper - The SelectorMapper instance
+     */
+    setSelectorMapper(selectorMapper) {
+        this.selectorMapper = selectorMapper;
+        this.logger.info('SessionManager integrated with SelectorMapper');
+    }
+
+    /**
+     * Theme-aware element access
+     * @param {string} selectorKey - The key from SelectorMapper
+     * @returns {Element|null} The DOM element
+     */
+    getElement(selectorKey) {
+        if (this.selectorMapper) {
+            return this.selectorMapper.getElement(selectorKey);
+        }
+        
+        // Fallback for backward compatibility
+        this.logger.warn(`No SelectorMapper available for ${selectorKey}`);
+        return null;
+    }
+
+    /**
+     * Theme-aware multiple elements access
+     * @param {string} selectorKey - The key from SelectorMapper
+     * @returns {NodeList} The DOM elements
+     */
+    getElements(selectorKey) {
+        if (this.selectorMapper) {
+            return this.selectorMapper.getElements(selectorKey);
+        }
+        
+        // Fallback for backward compatibility
+        return document.querySelectorAll(':not(*)'); // Empty NodeList
+    }
+
+    /**
+     * Refresh session display after theme change
+     */
+    async refreshSessionDisplay() {
+        try {
+            this.logger.info('Refreshing session display for current theme');
+            
+            // Update session statistics display
+            this.updateSessionStatsDisplay();
+            
+            // Refresh session cards list
+            if (this.currentSession) {
+                this.updateSessionCardsDisplay();
+            }
+            
+            this.logger.debug('Session display refreshed');
+        } catch (error) {
+            this.logger.error('Error refreshing session display:', error);
+        }
+    }
+
+    /**
+     * Update session statistics display in current theme
+     */
+    updateSessionStatsDisplay() {
+        try {
+            if (!this.currentSession) return;
+
+            // Get session stats elements using theme-aware access
+            const sessionStats = this.getElement('sessionStats');
+            const totalCardsElement = this.getElement('spaceTotalCards') || document.getElementById('space-total-cards');
+            const currentSetElement = this.getElement('spaceCurrentSet') || document.getElementById('space-current-set');
+            const tcgLowTotalElement = this.getElement('spaceTcgLowTotal') || document.getElementById('space-tcg-low-total');
+            const tcgMarketTotalElement = this.getElement('spaceTcgMarketTotal') || document.getElementById('space-tcg-market-total');
+            const sessionStatusElement = this.getElement('spaceSessionStatus') || document.getElementById('space-session-status');
+
+            // Update elements if they exist
+            if (totalCardsElement) {
+                totalCardsElement.textContent = this.currentSession.totalCards || '0';
+            }
+            
+            if (currentSetElement) {
+                currentSetElement.textContent = this.currentSession.setName || 'No Set Selected';
+            }
+            
+            if (tcgLowTotalElement) {
+                const tcgLowTotal = this.calculateTotalValue('tcg_low');
+                tcgLowTotalElement.textContent = `$${tcgLowTotal.toFixed(2)}`;
+            }
+            
+            if (tcgMarketTotalElement) {
+                const tcgMarketTotal = this.calculateTotalValue('tcg_market');
+                tcgMarketTotalElement.textContent = `$${tcgMarketTotal.toFixed(2)}`;
+            }
+            
+            if (sessionStatusElement) {
+                sessionStatusElement.textContent = this.sessionActive ? 'Active' : 'Inactive';
+                sessionStatusElement.className = this.sessionActive ? 'status-active' : 'status-inactive';
+            }
+
+            this.logger.debug('Session stats display updated');
+        } catch (error) {
+            this.logger.warn('Error updating session stats display:', error);
+        }
+    }
+
+    /**
+     * Update session cards display in current theme
+     */
+    updateSessionCardsDisplay() {
+        try {
+            const sessionCards = this.getElement('sessionCards');
+            if (!sessionCards) {
+                this.logger.debug('No session cards container found in current theme');
+                return;
+            }
+
+            // Clear existing cards
+            sessionCards.innerHTML = '';
+
+            // Add cards to display
+            if (this.currentSession && this.currentSession.cards) {
+                this.currentSession.cards.forEach(card => {
+                    const cardElement = this.createSessionCardElement(card);
+                    if (cardElement) {
+                        sessionCards.appendChild(cardElement);
+                    }
+                });
+            }
+
+            this.logger.debug('Session cards display updated');
+        } catch (error) {
+            this.logger.warn('Error updating session cards display:', error);
+        }
+    }
+
+    /**
+     * Create session card element for current theme
+     */
+    createSessionCardElement(card) {
+        try {
+            const cardDiv = document.createElement('div');
+            cardDiv.className = 'session-card card-item'; // Support both legacy and space classes
+            cardDiv.dataset.cardId = card.id || card.card_number;
+
+            cardDiv.innerHTML = `
+                <div class="card-info">
+                    <h4 class="card-name">${card.card_name || 'Unknown Card'}</h4>
+                    <p class="card-details">
+                        <span class="card-number">${card.card_number || 'N/A'}</span> - 
+                        <span class="card-rarity">${card.card_rarity || 'N/A'}</span>
+                    </p>
+                    <div class="card-pricing">
+                        <span class="tcg-low">TCG Low: $${(card.tcg_low || 0).toFixed(2)}</span>
+                        <span class="tcg-market">Market: $${(card.tcg_market || 0).toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <input type="number" class="card-quantity" value="${card.quantity || 1}" min="1">
+                    <button class="remove-card-btn" data-card-id="${card.id || card.card_number}">Remove</button>
+                </div>
+            `;
+
+            // Add event listeners for quantity and remove buttons
+            this.attachSessionCardEventListeners(cardDiv, card);
+
+            return cardDiv;
+        } catch (error) {
+            this.logger.warn('Error creating session card element:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Attach event listeners to session card elements
+     */
+    attachSessionCardEventListeners(cardElement, card) {
+        try {
+            const quantityInput = cardElement.querySelector('.card-quantity');
+            const removeBtn = cardElement.querySelector('.remove-card-btn');
+
+            if (quantityInput) {
+                quantityInput.addEventListener('change', (e) => {
+                    this.updateCardQuantity(card.id || card.card_number, parseInt(e.target.value) || 1);
+                });
+            }
+
+            if (removeBtn) {
+                removeBtn.addEventListener('click', () => {
+                    this.removeCard(card.id || card.card_number);
+                });
+            }
+        } catch (error) {
+            this.logger.warn('Error attaching session card event listeners:', error);
+        }
+    }
+
+    /**
+     * Calculate total value for a pricing field
+     */
+    calculateTotalValue(priceField) {
+        if (!this.currentSession || !this.currentSession.cards) {
+            return 0;
+        }
+
+        return this.currentSession.cards.reduce((total, card) => {
+            const price = parseFloat(card[priceField]) || 0;
+            const quantity = parseInt(card.quantity) || 1;
+            return total + (price * quantity);
+        }, 0);
+    }
+
+    /**
+     * Update card quantity in current session
+     */
+    updateCardQuantity(cardId, newQuantity) {
+        try {
+            if (!this.currentSession || !this.currentSession.cards) return;
+
+            const card = this.currentSession.cards.find(c => (c.id || c.card_number) === cardId);
+            if (card) {
+                card.quantity = Math.max(1, newQuantity);
+                this.updateSessionStatsDisplay();
+                this.saveSession();
+                this.logger.debug(`Updated card quantity: ${cardId} = ${newQuantity}`);
+            }
+        } catch (error) {
+            this.logger.warn('Error updating card quantity:', error);
+        }
+    }
+
+    /**
+     * Remove card from current session
+     */
+    removeCard(cardId) {
+        try {
+            if (!this.currentSession || !this.currentSession.cards) return;
+
+            const cardIndex = this.currentSession.cards.findIndex(c => (c.id || c.card_number) === cardId);
+            if (cardIndex !== -1) {
+                this.currentSession.cards.splice(cardIndex, 1);
+                this.updateSessionCardsDisplay();
+                this.updateSessionStatsDisplay();
+                this.saveSession();
+                this.logger.debug(`Removed card: ${cardId}`);
+            }
+        } catch (error) {
+            this.logger.warn('Error removing card:', error);
+        }
     }
 
     /**
@@ -264,8 +530,6 @@ export class SessionManager {
             
             this.logger.info(`[API DEBUG] Making fetch request with timeout: ${this.config.apiTimeout}ms`);
             
-            
-
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
@@ -343,29 +607,34 @@ export class SessionManager {
         } catch (error) {
             if (error.name === 'AbortError') {
                 this.logger.error('[API DEBUG] Request timed out after', this.config.apiTimeout, 'ms');
-                throw new Error('Request timed out. Please check if the backend is running');
+            } else {
+                this.logger.error('[API DEBUG] Failed to fetch card sets from API:', error);
+                this.logger.error('[API DEBUG] Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
             }
             
-            this.logger.error('[API DEBUG] Failed to fetch card sets from API:', error);
-            this.logger.error('[API DEBUG] Error details:', {
-                name: error.name,
-                message: error.message,
-                stack: error.stack
-            });
+            // Throw error instead of using mock data
+            this.logger.error('Failed to fetch card sets from API');
+            this.usingMockData = false;
             
-            // Provide more specific error messages for debugging
-            if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
-                this.logger.error('[API DEBUG] Network error detected - backend may not be running or accessible');
-                throw new Error('Cannot connect to backend API. Please ensure realBackendAPI.py backend is running on');
-            }
+            // Provide user-friendly error message
+            const errorMessage = error.name === 'AbortError' 
+                ? 'Request timed out. Please check your internet connection and try again.'
+                : 'Unable to fetch card sets. Please try again later.';
             
-            if (error.message.includes('ECONNREFUSED')) {
-                this.logger.error('[API DEBUG] Connection refused - backend server is not listening on port 8081');
-                throw new Error('Connection refused: Backend server is not running on port 8081. Please start realBackendAPI.py');
-            }
-            
-            throw error;
+            throw new Error(errorMessage);
         }
+    }
+
+    /**
+     * Check if the app is currently using mock data (should always be false now)
+     * @deprecated Mock data has been removed - only real API data is supported
+     */
+    isUsingMockData() {
+        return false; // Always return false as we no longer support mock data
     }
 
     /**
@@ -469,6 +738,11 @@ export class SessionManager {
             if (this.setCards.has(setIdentifier)) {
                 this.logger.info(`Using cached cards for set: ${setIdentifier}`);
                 return this.setCards.get(setIdentifier);
+            }
+            
+            // Ensure we have real API data, not mock data
+            if (this.usingMockData) {
+                throw new Error('Cannot load set cards: API connection required. Please check your internet connection.');
             }
             
             // The backend expects the set_name, not set_code
@@ -3161,5 +3435,565 @@ export class SessionManager {
         
         this.logger.info('Import pricing validation report:', report);
         return report;
+    }
+    
+    /**
+     * Initialize advanced session management features
+     */
+    initializeAdvancedFeatures() {
+        // Initialize theme state caching system
+        this.themeStateCache = new Map();
+        this.currentTheme = 'legacy'; // Default theme
+        
+        // Set up theme detection
+        this.detectCurrentTheme();
+        
+        // Initialize session metrics
+        this.sessionMetrics.startTime = new Date().toISOString();
+        
+        // Set up theme change listeners
+        if (typeof window !== 'undefined') {
+            window.addEventListener('themeChanged', (event) => {
+                this.handleThemeChange(event.detail);
+            });
+        }
+        
+        // Initialize bulk operations system
+        this.setupBulkOperations();
+        
+        this.logger.debug('Advanced session management features initialized');
+    }
+    
+    /**
+     * Detect current active theme
+     */
+    detectCurrentTheme() {
+        if (typeof document !== 'undefined') {
+            if (document.body.classList.contains('space-theme') || 
+                document.querySelector('.space-layout.active')) {
+                this.currentTheme = 'space';
+            } else {
+                this.currentTheme = 'legacy';
+            }
+        }
+        this.logger.debug('Current theme detected:', this.currentTheme);
+    }
+    
+    /**
+     * Handle theme change events with session state preservation
+     */
+    handleThemeChange(themeInfo) {
+        this.logger.info('Handling theme change for session management:', themeInfo);
+        
+        // Cache current theme state
+        this.cacheThemeState(this.currentTheme);
+        
+        const oldTheme = this.currentTheme;
+        this.currentTheme = themeInfo.theme || 'legacy';
+        
+        // Restore session data for new theme
+        this.restoreThemeState(this.currentTheme);
+        
+        // Refresh session display in new theme
+        this.refreshSessionDisplay();
+        
+        this.logger.debug(`Session theme switched: ${oldTheme} → ${this.currentTheme}`);
+    }
+    
+    /**
+     * Cache current theme state
+     */
+    cacheThemeState(theme) {
+        // Defensive check: ensure themeStateCache is initialized
+        if (!this.themeStateCache) {
+            this.logger.warn('themeStateCache not initialized, creating new Map');
+            this.themeStateCache = new Map();
+        }
+
+        const state = {
+            sessionData: this.currentSession ? { ...this.currentSession } : null,
+            activeSet: this.currentSet,
+            searchTerm: this.searchTerm,
+            filteredSets: [...this.filteredCardSets],
+            timestamp: Date.now()
+        };
+        
+        this.themeStateCache.set(theme, state);
+        this.logger.debug(`Cached state for theme: ${theme}`);
+    }
+    
+    /**
+     * Restore theme state
+     */
+    restoreThemeState(theme) {
+        // Defensive check: ensure themeStateCache is initialized
+        if (!this.themeStateCache) {
+            this.logger.warn('themeStateCache not initialized in restoreThemeState');
+            this.themeStateCache = new Map();
+            return; // No cached state to restore
+        }
+
+        const cachedState = this.themeStateCache.get(theme);
+        if (!cachedState) return;
+        
+        // Restore session data if available
+        if (cachedState.sessionData) {
+            this.currentSession = { ...cachedState.sessionData };
+        }
+        
+        // Restore set data
+        this.currentSet = cachedState.activeSet;
+        this.searchTerm = cachedState.searchTerm;
+        this.filteredCardSets = [...cachedState.filteredSets];
+        
+        this.logger.debug(`Restored state for theme: ${theme}`);
+    }
+    
+    /**
+     * Setup bulk operations system
+     */
+    setupBulkOperations() {
+        // Initialize bulk operation queue processor
+        this.bulkProcessor = {
+            queue: [],
+            processing: false,
+            results: [],
+            errors: []
+        };
+        
+        this.logger.debug('Bulk operations system initialized');
+    }
+    
+    /**
+     * Advanced bulk operations: Process multiple cards in batch
+     */
+    async processBulkCardOperation(operation, cardDataArray, options = {}) {
+        if (!this.config.enableBulkOperations) {
+            throw new Error('Bulk operations are disabled');
+        }
+        
+        const startTime = performance.now();
+        const results = {
+            operation,
+            totalCards: cardDataArray.length,
+            successful: 0,
+            failed: 0,
+            results: [],
+            errors: [],
+            processingTime: 0
+        };
+        
+        this.logger.info(`Starting bulk ${operation} operation for ${cardDataArray.length} cards`);
+        
+        // Process in chunks to avoid overwhelming the system
+        const chunkSize = options.chunkSize || Math.min(this.config.maxBulkSize, 10);
+        const chunks = [];
+        for (let i = 0; i < cardDataArray.length; i += chunkSize) {
+            chunks.push(cardDataArray.slice(i, i + chunkSize));
+        }
+        
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            
+            if (options.onProgress) {
+                options.onProgress(`Processing chunk ${i + 1}/${chunks.length}`);
+            }
+            
+            // Process chunk based on operation type
+            try {
+                const chunkResults = await this.processBulkChunk(operation, chunk, options);
+                results.results.push(...chunkResults.successes);
+                results.errors.push(...chunkResults.errors);
+                results.successful += chunkResults.successes.length;
+                results.failed += chunkResults.errors.length;
+                
+            } catch (error) {
+                this.logger.error(`Bulk operation chunk ${i + 1} failed:`, error);
+                results.errors.push({
+                    chunk: i + 1,
+                    error: error.message
+                });
+                results.failed += chunk.length;
+            }
+            
+            // Add delay between chunks if specified
+            if (i < chunks.length - 1 && options.delayBetweenChunks) {
+                await new Promise(resolve => setTimeout(resolve, options.delayBetweenChunks));
+            }
+        }
+        
+        results.processingTime = performance.now() - startTime;
+        
+        // Update session metrics
+        this.sessionMetrics.totalOperations++;
+        
+        this.logger.info(`Bulk ${operation} completed:`, {
+            total: results.totalCards,
+            successful: results.successful,
+            failed: results.failed,
+            time: `${results.processingTime.toFixed(2)}ms`
+        });
+        
+        return results;
+    }
+    
+    /**
+     * Process a chunk of cards for bulk operations
+     */
+    async processBulkChunk(operation, chunk, options) {
+        const successes = [];
+        const errors = [];
+        
+        const promises = chunk.map(async (cardData, index) => {
+            try {
+                let result;
+                switch (operation) {
+                    case 'import':
+                        result = await this.importSingleCard(cardData);
+                        break;
+                    case 'export':
+                        result = await this.exportSingleCard(cardData);
+                        break;
+                    case 'priceCheck':
+                        result = await this.checkCardPrice(cardData);
+                        break;
+                    case 'validate':
+                        result = this.validateCard(cardData);
+                        break;
+                    default:
+                        throw new Error(`Unknown bulk operation: ${operation}`);
+                }
+                
+                successes.push({ index, cardData, result });
+            } catch (error) {
+                errors.push({ index, cardData, error: error.message });
+            }
+        });
+        
+        await Promise.allSettled(promises);
+        
+        return { successes, errors };
+    }
+    
+    /**
+     * Enhanced export functionality with multiple format support
+     */
+    async exportSession(format = 'json', options = {}) {
+        if (!this.currentSession) {
+            throw new Error('No active session to export');
+        }
+        
+        this.sessionMetrics.exportCount++;
+        
+        try {
+            let exportData;
+            let mimeType;
+            let filename;
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            const sessionName = this.currentSession.sessionName || 'session';
+            
+            // Prepare export data with enhanced metadata
+            const sessionData = {
+                ...this.currentSession,
+                exportMetadata: {
+                    exportedAt: new Date().toISOString(),
+                    exportedFrom: this.currentTheme,
+                    version: '2.1.0',
+                    format,
+                    totalCards: this.currentSession.cards?.length || 0,
+                    sessionMetrics: { ...this.sessionMetrics }
+                }
+            };
+            
+            switch (format.toLowerCase()) {
+                case 'json':
+                    exportData = JSON.stringify(sessionData, null, 2);
+                    mimeType = 'application/json';
+                    filename = `${sessionName}-${timestamp}.json`;
+                    break;
+                    
+                case 'csv':
+                    exportData = this.convertSessionToCSV(sessionData);
+                    mimeType = 'text/csv';
+                    filename = `${sessionName}-${timestamp}.csv`;
+                    break;
+                    
+                case 'xlsx':
+                    // For XLSX, we'd need a library like SheetJS
+                    throw new Error('XLSX export not yet implemented - requires SheetJS library');
+                    
+                default:
+                    throw new Error(`Unsupported export format: ${format}`);
+            }
+            
+            // Create and trigger download
+            if (options.returnData) {
+                return { data: exportData, filename, mimeType };
+            } else {
+                this.triggerDownload(exportData, filename, mimeType);
+                this.logger.info(`Session exported as ${format.toUpperCase()}: ${filename}`);
+                return { success: true, filename };
+            }
+            
+        } catch (error) {
+            this.logger.error('Session export failed:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Convert session to CSV format
+     */
+    convertSessionToCSV(sessionData) {
+        if (!sessionData.cards || sessionData.cards.length === 0) {
+            return 'No cards in session';
+        }
+        
+        const headers = [
+            'Card Name',
+            'Card Number',
+            'Set Code',
+            'Rarity',
+            'Quantity',
+            'TCG Price',
+            'Market Price',
+            'Condition',
+            'Import Date',
+            'Price Last Updated'
+        ];
+        
+        const rows = sessionData.cards.map(card => [
+            card.name || '',
+            card.number || card.card_number || '',
+            card.set_code || '',
+            card.rarity || card.card_rarity || '',
+            card.quantity || 1,
+            card.tcg_price || 0,
+            card.tcg_market_price || card.market_price || 0,
+            card.condition || 'near-mint',
+            card.importDate || sessionData.created || '',
+            card.last_price_updt || card.priceLastUpdated || ''
+        ]);
+        
+        const csvContent = [headers, ...rows]
+            .map(row => row.map(field => `"${field}"`).join(','))
+            .join('\n');
+            
+        return csvContent;
+    }
+    
+    /**
+     * Enhanced import functionality with validation
+     */
+    async importSession(fileData, options = {}) {
+        this.sessionMetrics.importCount++;
+        
+        try {
+            let sessionData;
+            
+            // Parse the import data
+            if (typeof fileData === 'string') {
+                try {
+                    sessionData = JSON.parse(fileData);
+                } catch (error) {
+                    throw new Error('Invalid JSON format in import file');
+                }
+            } else if (typeof fileData === 'object') {
+                sessionData = fileData;
+            } else {
+                throw new Error('Invalid import data format');
+            }
+            
+            // Validate import data
+            const validation = this.validateImportData(sessionData);
+            if (!validation.isValid) {
+                throw new Error(`Import validation failed: ${validation.errors.join(', ')}`);
+            }
+            
+            // Backup current session if it exists
+            const backupData = this.currentSession ? { ...this.currentSession } : null;
+            
+            try {
+                // Import the session
+                this.currentSession = {
+                    ...sessionData,
+                    sessionId: sessionData.sessionId || this.generateSessionId(),
+                    importedAt: new Date().toISOString(),
+                    importedToTheme: this.currentTheme,
+                    originalTheme: sessionData.exportMetadata?.exportedFrom || 'unknown'
+                };
+                
+                // Update session state
+                this.sessionActive = true;
+                this.currentSet = sessionData.currentSet || null;
+                
+                // Refresh display in current theme
+                await this.refreshSessionDisplay();
+                
+                // Validate imported pricing data
+                const pricingReport = this.validateImportedPricingData();
+                
+                this.logger.info(`Session imported successfully: ${sessionData.cards?.length || 0} cards`);
+                
+                return {
+                    success: true,
+                    cardsImported: sessionData.cards?.length || 0,
+                    validation,
+                    pricingReport,
+                    sessionId: this.currentSession.sessionId
+                };
+                
+            } catch (importError) {
+                // Restore backup on failure
+                if (backupData) {
+                    this.currentSession = backupData;
+                }
+                throw importError;
+            }
+            
+        } catch (error) {
+            this.logger.error('Session import failed:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Validate import data structure
+     */
+    validateImportData(data) {
+        const errors = [];
+        const warnings = [];
+        
+        // Basic structure validation
+        if (!data || typeof data !== 'object') {
+            errors.push('Import data must be a valid object');
+            return { isValid: false, errors, warnings };
+        }
+        
+        // Check for required fields
+        if (!data.sessionId && !data.sessionName) {
+            warnings.push('No session identifier found');
+        }
+        
+        if (!Array.isArray(data.cards)) {
+            errors.push('Cards must be an array');
+        } else {
+            // Validate card structure
+            data.cards.forEach((card, index) => {
+                if (!card.name && !card.card_name) {
+                    errors.push(`Card ${index + 1} is missing name`);
+                }
+                if (!card.number && !card.card_number) {
+                    warnings.push(`Card ${index + 1} is missing card number`);
+                }
+            });
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings,
+            cardCount: Array.isArray(data.cards) ? data.cards.length : 0
+        };
+    }
+    
+    /**
+     * Trigger file download
+     */
+    triggerDownload(data, filename, mimeType) {
+        const blob = new Blob([data], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    /**
+     * Get comprehensive session statistics
+     */
+    getEnhancedSessionStats() {
+        const baseStats = this.getSessionStats();
+        
+        return {
+            ...baseStats,
+            theme: this.currentTheme,
+            metrics: { ...this.sessionMetrics },
+            bulkOperations: {
+                enabled: this.config.enableBulkOperations,
+                maxSize: this.config.maxBulkSize,
+                queueLength: this.bulkOperationQueue.length,
+                isProcessing: this.isBulkProcessing
+            },
+            themeStates: {
+                cached: Array.from(this.themeStateCache.keys()),
+                current: this.currentTheme
+            },
+            advanced: {
+                sessionRecoveryEnabled: this.config.sessionRecoveryEnabled,
+                performanceMonitoring: this.config.performanceMonitoring,
+                supportedExportFormats: this.config.exportFormats
+            }
+        };
+    }
+    
+    /**
+     * Session recovery functionality
+     */
+    async recoverSession(sessionId) {
+        if (!this.config.sessionRecoveryEnabled) {
+            throw new Error('Session recovery is disabled');
+        }
+        
+        try {
+            // Try to load session from storage
+            const recoveredData = await this.storage?.get(`session_backup_${sessionId}`);
+            
+            if (!recoveredData) {
+                throw new Error(`No backup found for session: ${sessionId}`);
+            }
+            
+            // Import the recovered session
+            const result = await this.importSession(recoveredData, { isRecovery: true });
+            
+            this.logger.info(`Session recovered: ${sessionId}`);
+            return result;
+            
+        } catch (error) {
+            this.logger.error('Session recovery failed:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create session backup for recovery
+     */
+    async backupSession() {
+        if (!this.config.sessionRecoveryEnabled || !this.currentSession) {
+            return;
+        }
+        
+        try {
+            const backupData = {
+                ...this.currentSession,
+                backedUpAt: new Date().toISOString(),
+                theme: this.currentTheme
+            };
+            
+            if (this.storage) {
+                await this.storage.set(
+                    `session_backup_${this.currentSession.sessionId}`, 
+                    backupData
+                );
+            }
+            
+            this.logger.debug('Session backup created');
+        } catch (error) {
+            this.logger.warn('Failed to create session backup:', error);
+        }
     }
 }

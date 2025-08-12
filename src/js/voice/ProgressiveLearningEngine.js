@@ -7,13 +7,11 @@
  */
 
 import { Logger } from '../utils/Logger.js';
-import { PhoneticMapper } from './PhoneticMapper.js';
-
 export class ProgressiveLearningEngine {
     constructor(storage = null, logger = null) {
         this.logger = logger || new Logger('ProgressiveLearningEngine');
         this.storage = storage;
-        this.phoneticMapper = new PhoneticMapper(this.logger);
+        this.phoneticMapper = null; // Lazy-loaded
         
         // User-specific pronunciation patterns
         this.userPatterns = new Map();
@@ -54,6 +52,23 @@ export class ProgressiveLearningEngine {
     }
     
     /**
+     * Initialize PhoneticMapper lazily to avoid circular dependency
+     */
+    async initializePhoneticMapper() {
+        if (!this.phoneticMapper) {
+            try {
+                const { PhoneticMapper } = await import('./PhoneticMapper.js');
+                this.phoneticMapper = new PhoneticMapper(this.logger);
+                this.logger.debug('PhoneticMapper initialized lazily');
+            } catch (error) {
+                this.logger.error('Failed to initialize PhoneticMapper:', error);
+                this.phoneticMapper = null;
+            }
+        }
+        return this.phoneticMapper;
+    }
+    
+    /**
      * Learn from successful voice recognition
      * @param {string} voiceInput - Original voice input
      * @param {string} selectedCard - Card selected by user
@@ -89,7 +104,9 @@ export class ProgressiveLearningEngine {
         this.updateUserPatterns(pattern);
         
         // Create or strengthen personalized rules
-        this.strengthenPersonalizedRules(pattern);
+        this.strengthenPersonalizedRules(pattern).catch(error => {
+            this.logger.error('Failed to strengthen personalized rules:', error);
+        });
         
         // Update learning stats
         this.learningStats.adaptationsApplied++;
@@ -142,11 +159,11 @@ export class ProgressiveLearningEngine {
      * @param {Array} candidates - Current recognition candidates
      * @returns {Array} Enhanced candidates with personalized scoring
      */
-    applyPersonalizedRecognition(voiceInput, candidates) {
+    async applyPersonalizedRecognition(voiceInput, candidates) {
         if (!voiceInput || !candidates.length) return candidates;
         
         const input = voiceInput.toLowerCase().trim();
-        const enhancedCandidates = candidates.map(candidate => {
+        const enhancedCandidates = await Promise.all(candidates.map(async candidate => {
             const enhanced = { ...candidate };
             
             // Apply user-specific pronunciation patterns
@@ -156,7 +173,7 @@ export class ProgressiveLearningEngine {
             const preferenceBoost = this.calculatePreferenceBoost(input, candidate.name);
             
             // Apply archetype learning
-            const archetypeBoost = this.calculateArchetypeBoost(input, candidate.name);
+            const archetypeBoost = await this.calculateArchetypeBoost(input, candidate.name);
             
             // Apply correction patterns (negative boost for rejected cards)
             const correctionPenalty = this.calculateCorrectionPenalty(input, candidate.name);
@@ -170,7 +187,7 @@ export class ProgressiveLearningEngine {
             enhanced.learningApplied = totalBoost !== 0;
             
             return enhanced;
-        });
+        }));
         
         // Sort by enhanced confidence
         enhancedCandidates.sort((a, b) => b.confidence - a.confidence);
@@ -216,10 +233,11 @@ export class ProgressiveLearningEngine {
      * Strengthen personalized rules based on successful patterns
      * @private
      */
-    strengthenPersonalizedRules(pattern) {
+    async strengthenPersonalizedRules(pattern) {
         // Extract phonetic components
-        const phoneticVariants = this.phoneticMapper.generateVariants(pattern.voiceInput);
-        const targetVariants = this.phoneticMapper.generateVariants(pattern.targetCard);
+        const phoneticMapper = await this.initializePhoneticMapper();
+        const phoneticVariants = phoneticMapper ? phoneticMapper.generateVariants(pattern.voiceInput) : [];
+        const targetVariants = phoneticMapper ? phoneticMapper.generateVariants(pattern.targetCard) : [];
         
         // Create mapping rules between phonetic variants
         phoneticVariants.forEach(voiceVariant => {
@@ -331,19 +349,22 @@ export class ProgressiveLearningEngine {
      * Calculate archetype-specific learning boost
      * @private
      */
-    calculateArchetypeBoost(voiceInput, cardName) {
+    async calculateArchetypeBoost(voiceInput, cardName) {
         const archetype = this.extractArchetype(cardName);
         
         if (archetype && this.patternCategories.archetype.has(archetype)) {
             const archetypePattern = this.patternCategories.archetype.get(archetype);
             
             // Check if voice input matches learned archetype patterns
-            const similarity = this.phoneticMapper.calculatePhoneticSimilarity(
-                voiceInput, 
-                archetypePattern.commonInputs.join(' ')
-            );
-            
-            return similarity * 0.05; // Small archetype boost
+            const phoneticMapper = await this.initializePhoneticMapper();
+            if (phoneticMapper) {
+                const similarity = phoneticMapper.calculatePhoneticSimilarity(
+                    voiceInput, 
+                    archetypePattern.commonInputs.join(' ')
+                );
+                
+                return similarity * 0.05; // Small archetype boost
+            }
         }
         
         return 0;

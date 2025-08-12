@@ -3227,6 +3227,32 @@
     will-change: transform, background-color;
 }
 
+/* Space theme specific styling for toggle button - higher specificity */
+body.space-theme .vertical-tabs-toggle,
+body.space-layout .vertical-tabs-toggle,
+.space-theme #pack-ripper-panel .vertical-tabs-toggle,
+.space-layout #pack-ripper-panel .vertical-tabs-toggle {
+    width: 28px !important;
+    height: 28px !important;
+    background: rgba(76, 159, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+    border: 1px solid rgba(76, 159, 255, 0.3) !important;
+    border-radius: 6px !important;
+    font-size: 0.9rem !important;
+    font-weight: normal !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    animation: none !important;
+}
+
+body.space-theme .vertical-tabs-toggle:hover,
+body.space-layout .vertical-tabs-toggle:hover,
+.space-theme #pack-ripper-panel .vertical-tabs-toggle:hover,
+.space-layout #pack-ripper-panel .vertical-tabs-toggle:hover {
+    background: rgba(76, 159, 255, 0.2) !important;
+    transform: scale3d(1.05, 1.05, 1) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
 .vertical-tabs-toggle .icon {
     transition: transform 0.2s ease;
 }

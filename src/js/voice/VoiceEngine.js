@@ -162,7 +162,19 @@ export class VoiceEngine {
         if (this.isInitialized) {
             return true;
         }
+        
+        // Prevent multiple simultaneous initialization attempts
+        if (this.isInitializing) {
+            this.logger.info('Voice engine initialization already in progress');
+            return this.initializationPromise;
+        }
 
+        this.isInitializing = true;
+        this.initializationPromise = this._doInitialize();
+        return this.initializationPromise;
+    }
+    
+    async _doInitialize() {
         try {
             this.logger.info('Initializing voice engine...');
             this.logger.debug('Voice engine config:', this.config);
@@ -214,6 +226,7 @@ export class VoiceEngine {
             this.setupErrorRecovery();
             
             this.isInitialized = true;
+            this.isInitializing = false;
             this.emitStatusChange('ready');
             
             this.logger.info('Voice engine initialized successfully');
@@ -222,6 +235,7 @@ export class VoiceEngine {
         } catch (error) {
             this.logger.error('Failed to initialize voice engine:', error);
             this.isInitialized = false;
+            this.isInitializing = false;
             
             // Return user-friendly error object instead of throwing
             return this.handleError(error, 'initialization');
@@ -881,7 +895,7 @@ export class VoiceEngine {
                     ...result
                 }));
 
-                const learnedCandidates = this.learningEngine.applyPersonalizedRecognition(
+                const learnedCandidates = await this.learningEngine.applyPersonalizedRecognition(
                     alternatives[0].transcript, // Original voice input
                     candidates
                 );

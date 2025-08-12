@@ -531,6 +531,8 @@
   h1, h2, h3, h4, h5, h6 {
     color: black !important;
     break-after: avoid;
+    word-break: keep-all !important; /* Prevent character-by-character wrapping in print */
+    overflow-wrap: normal !important; /* Override any aggressive word wrapping in print */
   }
   
   /* Page breaks */

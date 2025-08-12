@@ -4,11 +4,11 @@
 export const config = {
     // API URL - TCGcsv Implementation
     // Using TCGcsv as the sole data source (no MongoDB required)
-    API_URL: 'http://127.0.0.1:8083',
+    API_URL: 'http://127.0.0.1:8081',
     
     // Other configuration options
     APP_VERSION: '2.1.0',
-    APP_NAME: 'YGO Ripper UI v2',
+    APP_NAME: 'VoxRip',
     
     // Timeouts and limits
     API_TIMEOUT: 120000,
