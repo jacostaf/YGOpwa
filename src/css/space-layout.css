@@ -309,9 +309,21 @@ body.animations-disabled .cosmic-elements {
   grid-template-columns: 60px 1fr;
 }
 
-/* Left panel collapsed */
+/* Left panel collapsed - center panel expands to fill space */
 .space-layout .container.left-collapsed {
   grid-template-columns: 60px 1fr;
+}
+
+/* When left panel is collapsed, hide right panel and expand center */
+.space-layout .container.left-collapsed .right-panel {
+  display: none;
+}
+
+/* Ensure center panel takes full available width when left collapsed */
+.space-layout .container.left-collapsed .center-panel {
+  grid-column: 2 / -1; /* Span from column 2 to end */
+  max-width: 100%;
+  width: 100%;
 }
 
 /* === Holographic Header === */
@@ -546,12 +558,12 @@ body.animations-disabled .cosmic-elements {
   position: fixed !important;
   top: 50vh !important;
   transform: translateY(-50%) !important;
-  width: 20px !important;
-  height: 20px !important;
-  min-width: 20px !important;
-  min-height: 20px !important;
-  max-width: 20px !important;
-  max-height: 20px !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  max-width: 24px !important;
+  max-height: 24px !important;
   background: rgba(26, 32, 44, 0.9) !important;
   border: 1px solid rgba(76, 159, 255, 0.5) !important;
   border-left: none !important; /* Remove left border for seamless attachment */
@@ -591,14 +603,14 @@ body.animations-disabled .cosmic-elements {
   color: white !important;
   transform: translateY(-50%) scale(1.1) !important;
   box-shadow: 2px 1px 8px rgba(76, 159, 255, 0.4) !important;
-  width: 20px !important;
-  height: 20px !important;
+  width: 24px !important;
+  height: 24px !important;
 }
 
 .space-layout .panel-collapse-btn[data-side="left"]:active {
   transform: translateY(-50%) scale(0.95) !important;
-  width: 20px !important;
-  height: 20px !important;
+  width: 24px !important;
+  height: 24px !important;
 }
 
 /* Hamburger icon for collapse button */
@@ -2380,7 +2392,15 @@ body .btn-voice.hidden {
   }
   
   .space-layout .container.left-collapsed {
-    grid-template-columns: 70px 1fr 420px;
+    grid-template-columns: 70px 1fr;
+  }
+  
+  .space-layout .container.left-collapsed .right-panel {
+    display: none;
+  }
+  
+  .space-layout .container.left-collapsed .center-panel {
+    grid-column: 2 / -1;
   }
   
   .space-layout .container.right-collapsed {
@@ -2424,7 +2444,15 @@ body .btn-voice.hidden {
   }
   
   .space-layout .container.left-collapsed {
-    grid-template-columns: 65px 1fr minmax(360px, 400px);
+    grid-template-columns: 65px 1fr;
+  }
+  
+  .space-layout .container.left-collapsed .right-panel {
+    display: none;
+  }
+  
+  .space-layout .container.left-collapsed .center-panel {
+    grid-column: 2 / -1;
   }
   
   .space-layout .container.right-collapsed {
@@ -2470,7 +2498,15 @@ body .btn-voice.hidden {
   }
   
   .space-layout .container.left-collapsed {
-    grid-template-columns: 60px 1fr minmax(300px, 340px);
+    grid-template-columns: 60px 1fr;
+  }
+  
+  .space-layout .container.left-collapsed .right-panel {
+    display: none;
+  }
+  
+  .space-layout .container.left-collapsed .center-panel {
+    grid-column: 2 / -1;
   }
   
   .space-layout .container.right-collapsed {
@@ -2526,7 +2562,15 @@ body .btn-voice.hidden {
   }
   
   .space-layout .container.left-collapsed {
-    grid-template-columns: 55px 1fr minmax(260px, 300px);
+    grid-template-columns: 55px 1fr;
+  }
+  
+  .space-layout .container.left-collapsed .right-panel {
+    display: none;
+  }
+  
+  .space-layout .container.left-collapsed .center-panel {
+    grid-column: 2 / -1;
   }
   
   .space-layout .container.right-collapsed {
@@ -3684,14 +3728,24 @@ body .btn-voice.hidden {
 /* Global viewport overflow prevention */
 html, body {
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: hidden !important;
   box-sizing: border-box;
   position: relative;
+  margin: 0;
+  padding: 0;
 }
 
 /* Prevent any element from causing horizontal scroll */
 .space-layout * {
   max-width: 100% !important;
+}
+
+/* Main app container overflow control */
+#space-app {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden !important;
+  position: relative;
 }
 
 /* Hide horizontal overflow on main container */
