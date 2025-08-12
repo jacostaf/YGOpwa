@@ -7,7 +7,7 @@
  */
 
 // Import real components for boundary validation
-import { YGORipperApp } from '../app.js';
+import VoxRipApp from '../app.js';
 import { VoiceEngine } from '../voice/VoiceEngine.js';
 import { SessionManager } from '../session/SessionManager.js';
 import { Storage } from '../utils/Storage.js';
@@ -486,7 +486,7 @@ framework.describe('Safe Method Crash Prevention Tests', () => {
         };
 
         try {
-            const app = new YGORipperApp({ skipInitialization: true });
+            const app = new VoxRipApp({ skipInitialization: true });
             
             // This should not crash despite corrupted storage
             await app.safeLoadSettings();
@@ -504,7 +504,7 @@ framework.describe('Safe Method Crash Prevention Tests', () => {
     });
 
     framework.test('safeAddCard should prevent crashes with malformed card data', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         await app.initialize();
         
         const corruptedCard = MalformedDataGenerator.generateCorruptedCardData();
@@ -526,7 +526,7 @@ framework.describe('Safe Method Crash Prevention Tests', () => {
     });
 
     framework.test('safeProcessVoiceInput should prevent crashes with extreme input', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         await app.initialize();
         
         const extremeInputs = [
@@ -552,7 +552,7 @@ framework.describe('Safe Method Crash Prevention Tests', () => {
     });
 
     framework.test('error boundaries should handle concurrent failures without crashing', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         
         // Create multiple concurrent operations that should fail
         const concurrentOperations = [];
@@ -576,7 +576,7 @@ framework.describe('Safe Method Crash Prevention Tests', () => {
 
 framework.describe('Resource Cleanup Validation Tests', () => {
     framework.test('should cleanup resources after error recovery', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         
         // Create multiple failure scenarios
         for (let i = 0; i < 10; i++) {
@@ -615,7 +615,7 @@ framework.describe('Resource Cleanup Validation Tests', () => {
         
         // Create multiple app instances and force them to fail
         for (let i = 0; i < 5; i++) {
-            const app = new YGORipperApp({ skipInitialization: true });
+            const app = new VoxRipApp({ skipInitialization: true });
             
             try {
                 // Force initialization failure
@@ -649,7 +649,7 @@ framework.describe('Resource Cleanup Validation Tests', () => {
 
 framework.describe('Performance Impact Tests', () => {
     framework.test('error boundaries should not significantly impact normal performance', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         await app.initialize();
         
         // Measure normal operation performance
@@ -687,7 +687,7 @@ framework.describe('Performance Impact Tests', () => {
     });
 
     framework.test('should maintain performance under continuous error conditions', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         const operationTimes = [];
         
         // Simulate continuous errors for a period
@@ -725,7 +725,7 @@ framework.describe('Performance Impact Tests', () => {
 
 framework.describe('Malformed Data Behavior Tests', () => {
     framework.test('should handle deeply nested corrupted data', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         
         // Test with various types of malformed data
         const malformedData = [
@@ -754,7 +754,7 @@ framework.describe('Malformed Data Behavior Tests', () => {
     });
 
     framework.test('should handle memory-intensive malformed data', async () => {
-        const app = new YGORipperApp({ skipInitialization: true });
+        const app = new VoxRipApp({ skipInitialization: true });
         
         const extremeData = MalformedDataGenerator.generateExtremelyLargeObject();
         
