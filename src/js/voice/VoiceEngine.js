@@ -16,6 +16,7 @@ import { Logger } from '../utils/Logger.js';
 import { PhoneticMapper } from './PhoneticMapper.js';
 import { AdaptiveConfidenceManager } from './AdaptiveConfidenceManager.js';
 import { ProgressiveLearningEngine } from './ProgressiveLearningEngine.js';
+import { MemoryManagedComponent, globalMemoryManager } from '../utils/MemoryManager.js';
 
 /**
  * Enhanced Voice Engine with Space Theme Integration
@@ -26,8 +27,14 @@ import { ProgressiveLearningEngine } from './ProgressiveLearningEngine.js';
  * - Theme-aware voice controls and visualization
  * - Cross-platform voice recognition consistency
  */
-export class VoiceEngine {
+export class VoiceEngine extends MemoryManagedComponent {
     constructor(permissionManager, logger = null, storage = null) {
+        super('VoiceEngine', {
+            maxEventListeners: 50,
+            maxTimers: 20,
+            memoryBudgetMB: 30
+        });
+        
         this.permissionManager = permissionManager;
         this.logger = logger || new Logger('VoiceEngine');
         this.storage = storage;
@@ -74,7 +81,7 @@ export class VoiceEngine {
             multiLanguageSupport: true
         };
         
-        // Event listeners
+        // Event listeners (now memory-managed)
         this.listeners = {
             result: [],
             error: [],
@@ -82,6 +89,10 @@ export class VoiceEngine {
             permissionChange: [],
             interimResult: []
         };
+        
+        // Speech recognition cleanup tracking
+        this.speechRecognitionInstances = new Set();
+        this.mediaStreamTracks = new Set();
         
         // Recognition state
         this.lastResult = null;
@@ -111,6 +122,13 @@ export class VoiceEngine {
         
         // Error tracking
         this.lastEngineError = null;
+        
+        // Register with global memory manager
+        globalMemoryManager.registerComponent(this);
+        
+        // Add cleanup callbacks
+        this.addDestructionCallback(() => this.cleanupVoiceResources(), 'Voice resources cleanup');
+        this.addDestructionCallback(() => this.cleanupSpeechRecognition(), 'Speech recognition cleanup');
         
         this.logger.info('Enhanced VoiceEngine initialized for platform:', this.platform);
     }
@@ -1796,5 +1814,91 @@ export class VoiceEngine {
             spaceUIInitialized: this.spaceUIElements.size > 0,
             supportsThemeSwitch: true
         };
+    }
+    
+    /**
+     * Clean up voice-specific resources
+     */
+    cleanupVoiceResources() {
+        this.logger.info('Cleaning up voice resources');
+        
+        // Stop listening if active
+        if (this.isListening) {
+            this.stopListening();
+        }
+        
+        // Clear listeners
+        Object.keys(this.listeners).forEach(type => {
+            this.listeners[type] = [];
+        });
+        
+        // Clean up media stream tracks
+        this.mediaStreamTracks.forEach(track => {
+            try {
+                track.stop();
+            } catch (error) {
+                this.logger.debug(`Failed to stop media track: ${error.message}`);
+            }
+        });
+        this.mediaStreamTracks.clear();
+        
+        // Clear component references
+        if (this.phoneticMapper) {
+            this.phoneticMapper = null;
+        }
+        if (this.confidenceManager) {
+            this.confidenceManager = null;
+        }
+        if (this.learningEngine) {
+            this.learningEngine = null;
+        }
+        
+        this.logger.debug('Voice resources cleaned up');
+    }
+    
+    /**
+     * Clean up speech recognition instances
+     */
+    cleanupSpeechRecognition() {
+        this.logger.info('Cleaning up speech recognition instances');
+        
+        let cleaned = 0;
+        this.speechRecognitionInstances.forEach(recognition => {
+            try {
+                if (recognition && typeof recognition.stop === 'function') {
+                    recognition.stop();
+                    // Clear event handlers to prevent memory leaks
+                    recognition.onstart = null;
+                    recognition.onend = null;
+                    recognition.onresult = null;
+                    recognition.onerror = null;
+                    cleaned++;
+                }
+            } catch (error) {
+                this.logger.debug(`Failed to cleanup speech recognition: ${error.message}`);
+            }
+        });
+        
+        this.speechRecognitionInstances.clear();
+        this.engines.clear();
+        
+        this.logger.debug(`Cleaned up ${cleaned} speech recognition instances`);
+    }
+    
+    /**
+     * Override destroy to include voice-specific cleanup
+     */
+    destroy() {
+        if (this.isDestroyed) {
+            return;
+        }
+        
+        this.logger.info('Destroying VoiceEngine');
+        
+        // Unregister from global memory manager
+        globalMemoryManager.unregisterComponent(this);
+        
+        // Call parent destroy method
+        super.destroy();
     }
 }

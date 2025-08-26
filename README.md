@@ -103,7 +103,7 @@ open http://localhost:8080?test=voice
 open browser console and run: runVoiceTests()
 ```
 
-### Production Build
+### Production Build & Deployment
 ```bash
 # Install dependencies
 npm install
@@ -111,8 +111,20 @@ npm install
 # Build for production
 npm run build
 
-# Deploy static files to web server
+# Preview production build locally
+npm run preview
 ```
+
+**🚀 For complete deployment instructions, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)**
+
+The deployment guide includes:
+- **Render.com deployment** (recommended) - step-by-step with screenshots
+- **Alternative platforms** (Netlify, Vercel, GitHub Pages, Firebase)
+- **Manual deployment** for traditional hosting (FTP, cPanel)
+- **PWA deployment verification** and testing procedures
+- **Continuous deployment** setup with GitHub Actions
+- **Production optimization** and security hardening
+- **Troubleshooting guide** for common deployment issues
 
 ## 🏗️ Architecture
 

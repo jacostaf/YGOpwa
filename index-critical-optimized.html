@@ -20,14 +20,253 @@
     <link rel="icon" type="image/png" sizes="192x192" href="src/assets/icons/icon-192.png">
     <link rel="apple-touch-icon" href="src/assets/icons/icon-192.png">
     
-    <!-- Stylesheets - Will be optimized by build process -->
-    <link rel="stylesheet" href="src/css/main.css">
-    <link rel="stylesheet" href="src/css/components.css">
-    <link rel="stylesheet" href="src/css/responsive.css">
-    <!-- Space Theme Bridge CSS -->
-    <link rel="stylesheet" href="src/css/space-theme-bridge.css">
-    <!-- Space Theme Layout (will be enabled via feature flags) -->
+    <!-- Critical CSS - Inlined for fastest render -->
+    <style id="critical-css">
+/**
+ * Critical CSS - Essential styles for immediate render
+ * Optimized for First Contentful Paint <1.5s
+ */
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Critical CSS Variables - Essential Only */
+:root {
+  /* Essential Colors */
+  --color-primary: #ffd700;          /* Golden yellow */
+  --color-primary-dark: #ffb000;     /* Darker gold */
+  --color-primary-light: #fff176;    /* Light gold */
+  
+  --color-secondary: #1a1a2e;        /* Dark blue-purple */
+  --color-secondary-light: #2d2d4a;  /* Lighter dark blue */
+  --color-secondary-dark: #0f0f1a;   /* Darker blue */
+  
+  --color-background: #0f0f1a;       /* Very dark background */
+  --color-surface: #1a1a2e;          /* Card/surface background */
+  --color-surface-light: #2d2d4a;    /* Lighter surface */
+  
+  --color-text: #ffffff;             /* Primary text */
+  --color-text-secondary: #b0b0b0;   /* Secondary text */
+  --color-text-inverse: #000000;     /* Inverse text */
+  
+  /* Essential Typography */
+  --font-family-primary: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  
+  --font-size-base: 1rem;           /* 16px */
+  --font-size-lg: 1.125rem;         /* 18px */
+  --font-size-3xl: 1.875rem;        /* 30px */
+  
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+  
+  --line-height-normal: 1.5;
+  
+  /* Essential Spacing */
+  --spacing-md: 1rem;               /* 16px */
+  --spacing-lg: 1.5rem;             /* 24px */
+  --spacing-xl: 2rem;               /* 32px */
+  
+  /* Essential Layout */
+  --border-radius: 8px;
+  
+  /* Essential Transitions */
+  --transition-fast: 150ms ease-in-out;
+  --transition-normal: 250ms ease-in-out;
+  --transition-slow: 350ms ease-in-out;
+  
+  /* Essential Z-index */
+  --z-modal: 1080;                  /* Modal dialogs */
+  
+  /* Safe Area Support for Mobile Devices */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* Critical Reset and Base Styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  line-height: var(--line-height-normal);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background-color: var(--color-background);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Safe area support for mobile devices */
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
+}
+
+/* Critical Accessibility - Screen Reader Only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Critical Utility - Hidden Class */
+.hidden {
+  display: none !important;
+}
+
+/* Critical Loading Screen - Essential for First Paint */
+.loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, var(--color-background) 0%, var(--color-secondary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  transition: opacity var(--transition-slow), visibility var(--transition-slow);
+}
+
+.loading-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.loading-content {
+  text-align: center;
+  max-width: 400px;
+  padding: var(--spacing-xl);
+}
+
+.app-logo h1 {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-lg);
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  margin: var(--spacing-lg) auto;
+  border: 4px solid var(--color-surface-light);
+  border-top: 4px solid var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  will-change: transform;
+}
+
+@keyframes spin {
+  0% { transform: rotate3d(0, 0, 1, 0deg); }
+  100% { transform: rotate3d(0, 0, 1, 360deg); }
+}
+
+.loading-text {
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+  margin: var(--spacing-lg) 0;
+}
+
+.loading-progress {
+  width: 100%;
+  height: 4px;
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  margin-top: var(--spacing-md);
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  border-radius: var(--border-radius);
+  transition: width var(--transition-normal);
+  width: 0;
+}
+
+/* Critical App Layout - Basic Structure Only */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Critical Typography - Headings for Initial Content */
+h1, h2, h3 {
+  font-weight: var(--font-weight-bold);
+  line-height: 1.25;
+  color: var(--color-text);
+}
+
+/* Critical Mobile Support - Essential Only */
+@media (max-width: 768px) {
+  .loading-content {
+    padding: var(--spacing-md);
+  }
+  
+  .app-logo h1 {
+    font-size: var(--font-size-lg);
+  }
+  
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+  }
+}
+    </style>
+    
+    <!-- Non-critical CSS - Loaded asynchronously -->
+    <link rel="preload" href="src/css/main.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="src/css/main.css"></noscript>
+    
+    <link rel="preload" href="src/css/components.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="src/css/components.css"></noscript>
+    
+    <link rel="preload" href="src/css/responsive.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="src/css/responsive.css"></noscript>
+    
+    <link rel="preload" href="src/css/space-theme-bridge.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="src/css/space-theme-bridge.css"></noscript>
+    
+    <!-- Space Theme Layout (conditionally loaded) -->
     <link rel="stylesheet" href="src/css/space-layout.css" disabled id="space-layout-css">
+    
+    <!-- CSS preload polyfill for older browsers -->
+    <script>
+      !function(t){"use strict";t.loadCSS||(t.loadCSS=function(){});var e=loadCSS.relpreload={};if(e.support=function(){var e;try{e=t.document.createElement("link").relList.supports("preload")}catch(t){e=!1}return function(){return e}}(),e.bindMediaToggle=function(t){var e=t.media||"all";function a(){t.addEventListener?t.removeEventListener("load",a):t.attachEvent&&t.detachEvent("onload",a),t.setAttribute("onload",null),t.media=e}t.addEventListener?t.addEventListener("load",a):t.attachEvent&&t.attachEvent("onload",a),setTimeout(function(){t.rel="stylesheet",t.media="only x"}),setTimeout(a,3e3)},!e.support()){var a=t.document.getElementsByTagName("link");for(var n=0;n<a.length;n++){var o=a[n];"preload"!==o.getAttribute("rel")||"style"!==o.getAttribute("as")||o.getAttribute("data-loadcss")||(o.setAttribute("data-loadcss",!0),e.bindMediaToggle(o))}}}(this);
+    </script>
     
     <!-- Preload critical resources -->
     <link rel="preload" href="src/js/app.js" as="script" crossorigin="anonymous">
@@ -986,6 +1225,28 @@
                 setupCollapsibles();
             }
         }, 1000);
+    </script>
+
+    <!-- Lazy load space theme CSS when needed -->
+    <script>
+      // Lazy load space theme CSS when needed
+      function loadSpaceTheme() {
+        if (!document.getElementById('space-layout-css-dynamic')) {
+          const link = document.createElement('link');
+          link.id = 'space-layout-css-dynamic';
+          link.rel = 'stylesheet';
+          link.href = 'src/css/space-layout.css';
+          link.disabled = true;
+          document.head.appendChild(link);
+        }
+      }
+      
+      // Listen for theme change events
+      window.addEventListener('themeChanged', (event) => {
+        if (event.detail && event.detail.to === 'space') {
+          loadSpaceTheme();
+        }
+      });
     </script>
 </body>
 </html>

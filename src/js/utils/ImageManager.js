@@ -11,29 +11,50 @@
 
 import { Logger } from './Logger.js';
 import { config } from './config.js';
+import { MemoryManagedComponent, globalMemoryManager } from './MemoryManager.js';
 
-export class ImageManager {
+export class ImageManager extends MemoryManagedComponent {
     constructor() {
+        super('ImageManager', {
+            maxEventListeners: 10,
+            maxTimers: 5,
+            maxCacheSize: 1000,
+            memoryBudgetMB: 50
+        });
+        
         this.logger = new Logger('ImageManager');
         
-        // Cache configuration
+        // Cache configuration (memory-managed)
         this.imageCache = new Map(); // In-memory cache for loaded images
-        this.maxCacheSize = 1000; // Maximum number of cached images
+        this.maxCacheSize = 500; // Reduced for better memory management
         this.cachePrefix = 'ygo-card-image-'; // LocalStorage prefix for cached images
+        this.maxLocalStorageCacheSize = 50; // Limit localStorage cache size (MB)
+        
+        // Track caches for memory management
+        this.addTrackedCache('imageCache', this.imageCache, this.maxCacheSize);
+        this.addTrackedCache('loadingPromises', this.loadingPromises, 100);
         
         // Standard sizes for different display modes (matching oldIteration.py scaled down)
         this.focusModeSize = { width: 60, height: 90 };    // Smaller for focus mode
         this.normalModeSize = { width: 100, height: 145 }; // Standard for normal mode
         this.detailModeSize = { width: 200, height: 290 }; // Larger for card details
         
-        // Loading state management
+        // Loading state management (memory-managed)
         this.loadingImages = new Set(); // Track images currently being loaded
         this.loadingPromises = new Map(); // Store loading promises to avoid duplicate requests
+        this.loadingTimeouts = new Map(); // Track timeouts for cleanup
         
-        // Error handling
+        // Register with global memory manager
+        globalMemoryManager.registerComponent(this);
+        
+        // Add cleanup callbacks
+        this.addDestructionCallback(() => this.cleanupImageResources(), 'Image resources cleanup');
+        
+        // Error handling (memory-managed)
         this.failedImages = new Set(); // Track images that failed to load
         this.retryDelay = 1000; // Initial retry delay in ms
         this.maxRetries = 3; // Maximum number of retry attempts
+        this.maxFailedImages = 200; // Limit failed images set size
     }
 
     /**
@@ -48,10 +69,14 @@ export class ImageManager {
         try {
             const cacheKey = this.generateCacheKey(cardId, imageUrl, size);
             
-            // Check in-memory cache first
+            // Check in-memory cache first (LRU update)
             if (this.imageCache.has(cacheKey)) {
                 this.logger.debug(`Using cached image for card ${cardId}`);
                 const cachedImg = this.imageCache.get(cacheKey);
+                
+                // Update LRU order by deleting and re-adding
+                this.imageCache.delete(cacheKey);
+                this.imageCache.set(cacheKey, cachedImg);
                 
                 if (container) {
                     this.displayImage(cachedImg, container);
@@ -105,6 +130,14 @@ export class ImageManager {
             // Check if we've already failed to load this image
             if (this.failedImages.has(imageUrl)) {
                 throw new Error(`Image previously failed to load: ${imageUrl}`);
+            }
+            
+            // Limit failed images set size for memory management
+            if (this.failedImages.size >= this.maxFailedImages) {
+                const failedArray = Array.from(this.failedImages);
+                this.failedImages.clear();
+                // Keep the most recent 100 failed images
+                failedArray.slice(-100).forEach(url => this.failedImages.add(url));
             }
             
             this.logger.debug(`Loading image for card ${cardId} from ${imageUrl}`);
@@ -186,14 +219,17 @@ export class ImageManager {
             // Start the download
             img.src = imageUrl;
             
-            // Set timeout for the request
-            setTimeout(() => {
+            // Set timeout for the request using tracked timeout
+            const timeoutId = this.setTrackedTimeout(() => {
                 if (!img.complete) {
                     this.logger.debug(`Creating placeholder for timed out image: ${imageUrl}`);
                     const placeholderImg = this.createPlaceholderImage(size);
                     resolve(placeholderImg);
                 }
             }, 15000); // 15 second timeout
+            
+            // Store timeout for cleanup
+            this.loadingTimeouts.set(imageUrl, timeoutId);
         });
     }
 
@@ -267,8 +303,8 @@ export class ImageManager {
         
         imgWithCors.src = imageUrl;
         
-        // Timeout for CORS attempt
-        setTimeout(() => {
+        // Timeout for CORS attempt using tracked timeout
+        this.setTrackedTimeout(() => {
             if (!imgWithCors.complete) {
                 this.logger.debug(`CORS image loading timeout, trying without CORS: ${imageUrl}`);
                 this.loadImageWithoutCors(imageUrl, size, resolve, reject, originalUrl);
@@ -307,8 +343,8 @@ export class ImageManager {
         
         img.src = imageUrl;
         
-        // Timeout for non-CORS attempt
-        setTimeout(() => {
+        // Timeout for non-CORS attempt using tracked timeout
+        this.setTrackedTimeout(() => {
             if (!img.complete) {
                 reject(new Error(`Image loading timeout for ${originalUrl}`));
             }
@@ -452,19 +488,25 @@ export class ImageManager {
     }
 
     /**
-     * Cache image in memory with LRU eviction
+     * Cache image in memory with proper LRU eviction
      * @private
      */
     cacheImageInMemory(cacheKey, img) {
-        // Implement LRU eviction if cache is full
-        if (this.imageCache.size >= this.maxCacheSize) {
-            const oldestKey = this.imageCache.keys().next().value;
-            this.imageCache.delete(oldestKey);
-            this.logger.debug(`Evicted oldest cached image: ${oldestKey}`);
+        // If key already exists, delete it first to update position
+        if (this.imageCache.has(cacheKey)) {
+            this.imageCache.delete(cacheKey);
         }
         
+        // Implement proper LRU eviction if cache is full
+        while (this.imageCache.size >= this.maxCacheSize) {
+            const oldestKey = this.imageCache.keys().next().value;
+            this.imageCache.delete(oldestKey);
+            this.logger.debug(`LRU evicted cached image: ${oldestKey}`);
+        }
+        
+        // Add to end (most recently used)
         this.imageCache.set(cacheKey, img);
-        this.logger.debug(`Cached image in memory: ${cacheKey}`);
+        this.logger.debug(`Cached image in memory: ${cacheKey} (cache size: ${this.imageCache.size})`);
     }
 
     /**
@@ -473,6 +515,12 @@ export class ImageManager {
      */
     async cacheImageData(cacheKey, img) {
         try {
+            // Check localStorage cache size before adding
+            const currentCacheSize = this.getLocalStorageCacheSize();
+            if (currentCacheSize > this.maxLocalStorageCacheSize) {
+                this.cleanupLocalStorageCache();
+            }
+            
             // Convert image to data URL for storage
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -486,14 +534,32 @@ export class ImageManager {
             const cacheData = {
                 data: dataUrl,
                 timestamp: Date.now(),
-                expires: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days
+                expires: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
+                size: dataUrl.length // Track size for cleanup
             };
             
             localStorage.setItem(this.cachePrefix + cacheKey, JSON.stringify(cacheData));
             this.logger.debug(`Cached image data in localStorage: ${cacheKey}`);
             
         } catch (error) {
-            this.logger.warn(`Failed to cache image data: ${error.message}`);
+            if (error.name === 'QuotaExceededError') {
+                this.logger.warn('localStorage quota exceeded, cleaning up cache');
+                this.cleanupLocalStorageCache();
+                // Try once more after cleanup
+                try {
+                    const cacheData = {
+                        data: canvas.toDataURL('image/jpeg', 0.7), // Lower quality
+                        timestamp: Date.now(),
+                        expires: Date.now() + (3 * 24 * 60 * 60 * 1000), // 3 days
+                        size: 0 // Will be calculated
+                    };
+                    localStorage.setItem(this.cachePrefix + cacheKey, JSON.stringify(cacheData));
+                } catch (retryError) {
+                    this.logger.warn('Failed to cache even after cleanup:', retryError.message);
+                }
+            } else {
+                this.logger.warn(`Failed to cache image data: ${error.message}`);
+            }
             // Don't throw - caching failure shouldn't break image display
         }
     }
@@ -602,17 +668,125 @@ export class ImageManager {
     }
 
     /**
+     * Get localStorage cache size in MB
+     */
+    getLocalStorageCacheSize() {
+        let totalSize = 0;
+        const keys = Object.keys(localStorage);
+        
+        keys.forEach(key => {
+            if (key.startsWith(this.cachePrefix)) {
+                try {
+                    const data = localStorage.getItem(key);
+                    if (data) {
+                        totalSize += data.length;
+                    }
+                } catch (error) {
+                    // Skip corrupted entries
+                }
+            }
+        });
+        
+        return totalSize / 1024 / 1024; // Convert to MB
+    }
+    
+    /**
+     * Clean up localStorage cache to free space
+     */
+    cleanupLocalStorageCache() {
+        this.logger.info('Cleaning up localStorage image cache');
+        
+        const keys = Object.keys(localStorage);
+        const cacheKeys = keys.filter(key => key.startsWith(this.cachePrefix));
+        const cacheEntries = [];
+        
+        // Get all cache entries with timestamps
+        cacheKeys.forEach(key => {
+            try {
+                const data = JSON.parse(localStorage.getItem(key));
+                if (data && data.timestamp) {
+                    cacheEntries.push({ key, timestamp: data.timestamp, size: data.size || 0 });
+                }
+            } catch (error) {
+                // Remove corrupted entries
+                localStorage.removeItem(key);
+            }
+        });
+        
+        // Sort by timestamp (oldest first) and remove oldest 50%
+        cacheEntries.sort((a, b) => a.timestamp - b.timestamp);
+        const toRemove = cacheEntries.slice(0, Math.floor(cacheEntries.length * 0.5));
+        
+        toRemove.forEach(entry => {
+            localStorage.removeItem(entry.key);
+        });
+        
+        this.logger.info(`Removed ${toRemove.length} old cache entries from localStorage`);
+    }
+    
+    /**
+     * Clean up image-specific resources
+     */
+    cleanupImageResources() {
+        this.logger.info('Cleaning up image resources');
+        
+        // Clear loading state
+        this.loadingImages.clear();
+        this.loadingPromises.clear();
+        this.loadingTimeouts.clear();
+        
+        // Clear failed images (keep only recent ones)
+        if (this.failedImages.size > 50) {
+            const failedArray = Array.from(this.failedImages);
+            this.failedImages.clear();
+            failedArray.slice(-50).forEach(url => this.failedImages.add(url));
+        }
+        
+        // Aggressively clean memory cache
+        if (this.imageCache.size > 100) {
+            const entries = Array.from(this.imageCache.entries());
+            this.imageCache.clear();
+            // Keep only the last 100 entries
+            entries.slice(-100).forEach(([key, value]) => {
+                this.imageCache.set(key, value);
+            });
+        }
+        
+        this.logger.debug('Image resources cleaned up');
+    }
+    
+    /**
      * Get cache statistics
      */
     getCacheStats() {
         const localStorageCount = Object.keys(localStorage)
             .filter(key => key.startsWith(this.cachePrefix)).length;
+        const localStorageSize = this.getLocalStorageCacheSize();
             
         return {
             memoryCache: this.imageCache.size,
             localStorageCache: localStorageCount,
+            localStorageSizeMB: localStorageSize.toFixed(2),
             failedImages: this.failedImages.size,
-            currentlyLoading: this.loadingImages.size
+            currentlyLoading: this.loadingImages.size,
+            loadingPromises: this.loadingPromises.size
         };
+    }
+    
+    /**
+     * Override destroy to include image-specific cleanup
+     */
+    destroy() {
+        if (this.isDestroyed) {
+            return;
+        }
+        
+        this.logger.info('Destroying ImageManager');
+        
+        // Unregister from global memory manager
+        globalMemoryManager.unregisterComponent(this);
+        
+        // Call parent destroy method
+        super.destroy();
     }
 }

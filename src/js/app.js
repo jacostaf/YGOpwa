@@ -378,6 +378,9 @@ class VoxRipApp {
                 performanceMonitoring: true
             });
             
+            // Expose to window for easier access
+            window.migrationManager = this.migrationManager;
+            
             await this.migrationManager.initialize();
             
             this.logger.info('Migration system initialized successfully');

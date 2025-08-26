@@ -6,9 +6,16 @@
  */
 
 import { Logger } from './Logger.js';
+import { MemoryManagedComponent, globalMemoryManager } from './MemoryManager.js';
 
-export class RealPerformanceMonitor {
+export class RealPerformanceMonitor extends MemoryManagedComponent {
     constructor(options = {}) {
+        super('RealPerformanceMonitor', {
+            maxEventListeners: 20,
+            maxTimers: 5,
+            memoryBudgetMB: 15
+        });
+        
         this.logger = new Logger('RealPerformanceMonitor');
         
         // Configuration
@@ -63,6 +70,22 @@ export class RealPerformanceMonitor {
         this.observers = [];
         this.alerts = [];
         
+        // Performance data limits for memory management
+        this.maxHistorySize = this.config.performanceBufferSize;
+        this.maxAlerts = 50;
+        
+        // Register caches for tracking
+        this.addTrackedCache('performanceDataCPU', this.performanceData.cpu.history, this.maxHistorySize);
+        this.addTrackedCache('performanceDataMemory', this.performanceData.memory.history, this.maxHistorySize);
+        this.addTrackedCache('performanceDataFrames', this.performanceData.frames.history, this.maxHistorySize);
+        this.addTrackedCache('networkRequests', this.performanceData.network.requests, 100);
+        
+        // Register with global memory manager
+        globalMemoryManager.registerComponent(this);
+        
+        // Add cleanup callbacks
+        this.addDestructionCallback(() => this.cleanupPerformanceResources(), 'Performance monitoring cleanup');
+        
         // Initialize monitoring systems
         this.initialize();
         
@@ -109,6 +132,7 @@ export class RealPerformanceMonitor {
             });
             navObserver.observe({ entryTypes: ['navigation'] });
             this.observers.push(navObserver);
+            this.addTrackedObserver(navObserver);
             
             // Monitor resource loading
             const resourceObserver = new PerformanceObserver((list) => {
@@ -118,6 +142,7 @@ export class RealPerformanceMonitor {
             });
             resourceObserver.observe({ entryTypes: ['resource'] });
             this.observers.push(resourceObserver);
+            this.addTrackedObserver(resourceObserver);
             
             // Monitor paint timing
             const paintObserver = new PerformanceObserver((list) => {
@@ -127,6 +152,7 @@ export class RealPerformanceMonitor {
             });
             paintObserver.observe({ entryTypes: ['paint'] });
             this.observers.push(paintObserver);
+            this.addTrackedObserver(paintObserver);
             
             // Monitor layout shift (if available)
             if ('layout-shift' in PerformanceObserver.supportedEntryTypes) {
@@ -137,6 +163,7 @@ export class RealPerformanceMonitor {
                 });
                 layoutObserver.observe({ entryTypes: ['layout-shift'] });
                 this.observers.push(layoutObserver);
+                this.addTrackedObserver(layoutObserver);
             }
             
             this.logger.debug('PerformanceObservers set up successfully');
@@ -271,8 +298,8 @@ export class RealPerformanceMonitor {
         this.isMonitoring = true;
         this.monitoringStartTime = performance.now();
         
-        // Start continuous monitoring loop
-        this.monitoringInterval = setInterval(() => {
+        // Start continuous monitoring loop using tracked interval
+        this.monitoringInterval = this.setTrackedInterval(() => {
             this.collectRealTimeMetrics();
         }, this.config.monitoringInterval);
         
@@ -312,9 +339,9 @@ export class RealPerformanceMonitor {
                 frameTime: cpuData.avgFrameTime
             });
             
-            // Maintain buffer size
-            if (this.performanceData.cpu.history.length > this.config.performanceBufferSize) {
-                this.performanceData.cpu.history.shift();
+            // Maintain buffer size with memory management
+            if (this.performanceData.cpu.history.length > this.maxHistorySize) {
+                this.performanceData.cpu.history = this.performanceData.cpu.history.slice(-this.maxHistorySize);
             }
             
             // Update peak and average
@@ -334,9 +361,9 @@ export class RealPerformanceMonitor {
                 value: currentMemory
             });
             
-            // Maintain buffer size
-            if (this.performanceData.memory.history.length > this.config.performanceBufferSize) {
-                this.performanceData.memory.history.shift();
+            // Maintain buffer size with memory management
+            if (this.performanceData.memory.history.length > this.maxHistorySize) {
+                this.performanceData.memory.history = this.performanceData.memory.history.slice(-this.maxHistorySize);
             }
             
             this.performanceData.memory.peak = Math.max(this.performanceData.memory.peak, currentMemory);
@@ -434,9 +461,9 @@ export class RealPerformanceMonitor {
             frameTime
         });
         
-        // Maintain buffer size
-        if (this.performanceData.frames.history.length > this.config.performanceBufferSize) {
-            this.performanceData.frames.history.shift();
+        // Maintain buffer size with memory management
+        if (this.performanceData.frames.history.length > this.maxHistorySize) {
+            this.performanceData.frames.history = this.performanceData.frames.history.slice(-this.maxHistorySize);
         }
         
         // Calculate average frame time
@@ -454,9 +481,9 @@ export class RealPerformanceMonitor {
             timestamp: performance.now()
         });
         
-        // Maintain buffer size
+        // Maintain buffer size with memory management
         if (this.performanceData.network.requests.length > 100) {
-            this.performanceData.network.requests.shift();
+            this.performanceData.network.requests = this.performanceData.network.requests.slice(-100);
         }
     }
     
@@ -571,9 +598,9 @@ export class RealPerformanceMonitor {
         const alert = { type, message, timestamp };
         this.alerts.push(alert);
         
-        // Maintain alert buffer
-        if (this.alerts.length > 50) {
-            this.alerts.shift();
+        // Maintain alert buffer with memory management
+        if (this.alerts.length > this.maxAlerts) {
+            this.alerts = this.alerts.slice(-this.maxAlerts);
         }
         
         this.logger.warn(`Performance Alert [${type}]: ${message}`);
@@ -680,19 +707,49 @@ export class RealPerformanceMonitor {
     }
     
     /**
+     * Clean up performance monitoring resources
+     */
+    cleanupPerformanceResources() {
+        this.logger.info('Cleaning up performance monitoring resources');
+        
+        // Clear performance data arrays
+        this.performanceData.cpu.history = [];
+        this.performanceData.memory.history = [];
+        this.performanceData.frames.history = [];
+        this.performanceData.network.requests = [];
+        this.performanceData.animations.active.clear();
+        this.performanceData.animations.performance.clear();
+        this.performanceData.animations.highCpuAnimations = [];
+        
+        // Clear alerts
+        this.alerts = [];
+        
+        this.logger.debug('Performance monitoring resources cleaned up');
+    }
+    
+    /**
      * Cleanup and destroy
      */
     destroy() {
+        if (this.isDestroyed) {
+            return;
+        }
+        
+        this.logger.info('Destroying Real Performance Monitor');
+        
         this.stopMonitoring();
         
-        // Clean up observers
-        this.observers.forEach(observer => observer.disconnect());
+        // Clean up observers (handled by parent class via addTrackedObserver)
         this.observers = [];
         
         // Restore original fetch if we modified it
         // (In production, this would need more sophisticated cleanup)
         
-        this.logger.info('Real Performance Monitor destroyed');
+        // Unregister from global memory manager
+        globalMemoryManager.unregisterComponent(this);
+        
+        // Call parent destroy method
+        super.destroy();
     }
 }
 

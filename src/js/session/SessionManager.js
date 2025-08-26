@@ -12,9 +12,17 @@
 
 import { Logger } from '../utils/Logger.js';
 import { config } from '../utils/config.js';
+import { MemoryManagedComponent, globalMemoryManager } from '../utils/MemoryManager.js';
 
-export class SessionManager {
+export class SessionManager extends MemoryManagedComponent {
     constructor(storage = null, logger = null) {
+        super('SessionManager', {
+            maxEventListeners: 30,
+            maxTimers: 10,
+            maxCacheSize: 500,
+            memoryBudgetMB: 20
+        });
+        
         this.storage = storage;
         this.logger = logger || new Logger('SessionManager');
         this.voiceEngine = null; // Will be set by app.js after VoiceEngine initialization
@@ -44,7 +52,7 @@ export class SessionManager {
         // Pricing data loading tracking
         this.loadingPriceData = new Set(); // Track cards with pending price requests
         
-        // Event listeners
+        // Event listeners (now memory-managed)
         this.listeners = {
             sessionStart: [],
             sessionStop: [],
@@ -57,6 +65,10 @@ export class SessionManager {
             setSwitched: []
         };
         
+        // Track caches for cleanup
+        this.addTrackedCache('setCards', this.setCards, 100);
+        this.addTrackedCache('commonCardNames', this.commonCardNames, 200);
+        
         // Configuration
         this.config = {
             autoSave: true,
@@ -67,8 +79,12 @@ export class SessionManager {
             apiTimeout: 10000 // 10 second timeout for API calls
         };
         
-        // Auto-save timer
+        // Auto-save timer (will be tracked for cleanup)
         this.autoSaveTimer = null;
+        
+        // Session data arrays (implement size limits)
+        this.sessionHistoryLimit = 50;
+        this.loadingPriceDataLimit = 100;
         
         // Common card names cache for optimization
         this.commonCardNames = new Map();
@@ -85,6 +101,12 @@ export class SessionManager {
             voiceCommands: 0,
             averageConfidence: 0
         };
+        
+        // Register with global memory manager
+        globalMemoryManager.registerComponent(this);
+        
+        // Add cleanup callbacks
+        this.addDestructionCallback(() => this.cleanupSessionResources(), 'Session resources cleanup');
         
         // Initialize advanced session management
         this.initializeAdvancedFeatures();
@@ -986,8 +1008,8 @@ export class SessionManager {
             this.sessionHistory.unshift({ ...this.currentSession });
             
             // Limit history size
-            if (this.sessionHistory.length > this.config.maxSessionHistory) {
-                this.sessionHistory = this.sessionHistory.slice(0, this.config.maxSessionHistory);
+            if (this.sessionHistory.length > this.sessionHistoryLimit) {
+                this.sessionHistory = this.sessionHistory.slice(0, this.sessionHistoryLimit);
             }
             
             // Save to storage
@@ -1078,6 +1100,12 @@ export class SessionManager {
             };
             
             // Add to session immediately
+            // Enforce session card limits for memory management
+            if (this.currentSession.cards.length >= 1000) {
+                this.logger.warn('Session card limit reached, removing oldest cards');
+                this.currentSession.cards = this.currentSession.cards.slice(-900);
+            }
+            
             this.currentSession.cards.push(enhancedCard);
             
             // Update statistics
@@ -1125,6 +1153,14 @@ export class SessionManager {
      */
     async _updateCardPricing(card, cardData) {
         const cardId = card.id;
+        // Limit size of loading set for memory management
+        if (this.loadingPriceData.size >= this.loadingPriceDataLimit) {
+            // Clear the oldest entries
+            const entries = Array.from(this.loadingPriceData);
+            this.loadingPriceData.clear();
+            entries.slice(-50).forEach(id => this.loadingPriceData.add(id));
+        }
+        
         this.loadingPriceData.add(cardId);
         
         try {
@@ -1243,6 +1279,7 @@ export class SessionManager {
             // But we need to update the existing card instead of adding a new one
             
             // Track this card for pricing data loading
+            // Memory-managed loading set (already limited above)
             this.loadingPriceData.add(card.id);
             
             try {
@@ -3143,7 +3180,7 @@ export class SessionManager {
             clearInterval(this.autoSaveTimer);
         }
         
-        this.autoSaveTimer = setInterval(async () => {
+        this.autoSaveTimer = this.setTrackedInterval(async () => {
             if (this.sessionActive) {
                 await this.saveSession();
             }
@@ -3995,5 +4032,68 @@ export class SessionManager {
         } catch (error) {
             this.logger.warn('Failed to create session backup:', error);
         }
+    }
+    
+    /**
+     * Clean up session-specific resources
+     */
+    cleanupSessionResources() {
+        this.logger.info('Cleaning up session resources');
+        
+        // Stop auto-save timer if running
+        if (this.autoSaveTimer) {
+            clearInterval(this.autoSaveTimer);
+            this.autoSaveTimer = null;
+        }
+        
+        // Clear event listeners
+        Object.keys(this.listeners).forEach(type => {
+            this.listeners[type] = [];
+        });
+        
+        // Clear cached data structures
+        this.setCards.clear();
+        this.commonCardNames.clear();
+        this.loadingPriceData.clear();
+        
+        // Clear session history (limit to prevent memory buildup)
+        this.sessionHistory = this.sessionHistory.slice(0, 10); // Keep only 10 most recent
+        
+        // Clear current session data if active
+        if (this.currentSession) {
+            this.currentSession.cards = this.currentSession.cards.slice(-100); // Keep last 100 cards
+        }
+        
+        // Clear component references
+        this.voiceEngine = null;
+        this.selectorMapper = null;
+        
+        this.logger.debug('Session resources cleaned up');
+    }
+    
+    /**
+     * Override destroy to include session-specific cleanup
+     */
+    destroy() {
+        if (this.isDestroyed) {
+            return;
+        }
+        
+        this.logger.info('Destroying SessionManager');
+        
+        // Stop active session
+        if (this.sessionActive) {
+            try {
+                this.stopSession();
+            } catch (error) {
+                this.logger.warn('Failed to stop session during destroy:', error);
+            }
+        }
+        
+        // Unregister from global memory manager
+        globalMemoryManager.unregisterComponent(this);
+        
+        // Call parent destroy method
+        super.destroy();
     }
 }

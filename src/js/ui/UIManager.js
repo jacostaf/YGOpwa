@@ -111,10 +111,20 @@ export class UIManager {
             // Step 2: Refresh DOM elements for new theme
             this.refreshDOMElements();
             
-            // Step 3: Restore form state in new theme
+            // Step 3: Update sessionCards element based on new theme
+            if (this.selectorMapper && this.selectorMapper.isSpaceThemeActive()) {
+                this.elements.sessionCards = this.elements.sessionCardsSpace;
+                // Also update empty state element
+                this.elements.emptySession = document.getElementById('space-empty-session');
+            } else {
+                this.elements.sessionCards = this.elements.sessionCardsLegacy;
+                this.elements.emptySession = document.getElementById('empty-session');
+            }
+            
+            // Step 4: Restore form state in new theme
             await this.restoreFormState(formState);
             
-            // Step 4: Preserve session display state
+            // Step 5: Preserve session display state
             await this.preserveSessionState();
             
             this.logger.info('Theme change completed with state preservation');
@@ -617,9 +627,15 @@ export class UIManager {
         this.elements.floatingSettingsBtn = document.getElementById('floating-settings-btn');
         
         // CRITICAL FIX: Session tracker elements - BOTH themes
-        this.elements.sessionCards = this.getElement('sessionCards'); // Current theme
         this.elements.sessionCardsLegacy = document.getElementById('session-cards');
-        this.elements.sessionCardsSpace = document.querySelector('.cards-list'); // Space theme cards list
+        this.elements.sessionCardsSpace = document.querySelector('.cards-container'); // Space theme cards container
+        
+        // Set the active sessionCards based on current theme
+        if (this.selectorMapper && this.selectorMapper.isSpaceThemeActive()) {
+            this.elements.sessionCards = this.elements.sessionCardsSpace;
+        } else {
+            this.elements.sessionCards = this.elements.sessionCardsLegacy;
+        }
         
         this.elements.emptySession = document.getElementById('empty-session');
         this.elements.emptySessionSpace = document.querySelector('.empty-state');

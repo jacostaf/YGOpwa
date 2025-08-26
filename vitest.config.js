@@ -5,10 +5,10 @@ export default defineConfig({
     // Default environment for most tests (back to JSDOM)
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/tests/setup.js'],
-    include: ['src/tests/**/*.test.js'],
+    setupFiles: ['./tests/production-legacy/setup.js'],
+    include: ['tests/production-legacy/**/*.test.js'],
     // Exclude browser-specific tests from main config
-    exclude: ['src/tests/unit/imageManager.browser.test.js'],
+    exclude: ['tests/production-legacy/unit/imageManager.browser.test.js'],
     
     coverage: {
       // Explicitly specify the coverage provider
@@ -26,13 +26,13 @@ export default defineConfig({
       
       exclude: [
         'node_modules/',
-        'src/tests/',
+        'tests/',
         '**/*.config.js',
         '**/*.test.js',
-        'src/tests/**/*',
+        'tests/**/*',
         'coverage/**/*',
         '**/*.spec.js',
-        'js/tests/**/*',  // Exclude all test infrastructure files
+        'tests/**/*',  // Exclude all test infrastructure files
         '**/TestRunner.js'  // Explicit exclusion pattern for TestRunner.js
       ],
       

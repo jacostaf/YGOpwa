@@ -4,8 +4,8 @@ export default defineConfig({
   test: {
     // Browser-only configuration for ImageManager tests
     globals: true,
-    setupFiles: ['./src/tests/browser-setup.js'], // Browser-specific setup
-    include: ['src/tests/unit/imageManager.browser.test.js'], // Use browser-compatible test
+    setupFiles: ['./tests/production-legacy/browser-setup.js'], // Browser-specific setup
+    include: ['tests/production-legacy/unit/imageManager.browser.test.js'], // Use browser-compatible test
     
     // Browser configuration with required provider
     browser: {
@@ -31,7 +31,7 @@ export default defineConfig({
       
       exclude: [
         'node_modules/',
-        'src/tests/',
+        'tests/',
         '**/*.config.js',
         '**/*.test.js'
       ],

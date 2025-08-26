@@ -16,9 +16,16 @@
 
 import { FeatureFlags } from './FeatureFlags.js';
 import { SelectorMapper } from './SelectorMapper.js';
+import { MemoryManagedComponent, globalMemoryManager } from './MemoryManager.js';
 
-export class MigrationManager {
+export class MigrationManager extends MemoryManagedComponent {
   constructor(options = {}) {
+    super('MigrationManager', {
+      maxEventListeners: 100,
+      maxTimers: 30,
+      memoryBudgetMB: 25
+    });
+    
     this.options = {
       animationDuration: 500,
       enableAnalytics: true,
@@ -59,6 +66,18 @@ export class MigrationManager {
     // Panel management system
     this.panelManager = null;
 
+    // Event listener tracking for cleanup
+    this.trackedEventListeners = new Map();
+    this.starFieldAnimations = new Set();
+    this.cosmicElementAnimations = new Set();
+
+    // Register with global memory manager
+    globalMemoryManager.registerComponent(this);
+    
+    // Add cleanup callbacks
+    this.addDestructionCallback(() => this.cleanupThemeResources(), 'Theme resources cleanup');
+    this.addDestructionCallback(() => this.cleanupAnimations(), 'Animation cleanup');
+    
     this.initialize();
   }
 
@@ -128,6 +147,9 @@ export class MigrationManager {
    */
   async initializeLegacyTheme() {
     this.log('Initializing legacy theme...');
+
+    // Clean up space theme functionality first
+    this.cleanupCollapsibleListeners();
 
     // Show legacy layout and hide space layout - CRITICAL FIX
     const legacyApp = document.getElementById('app');
@@ -247,8 +269,11 @@ export class MigrationManager {
     // Set up navigation system
     this.setupSpaceNavigation();
 
+    // Set up collapsible functionality for space theme
+    this.setupCollapsibleFunctionality();
+
     // Wait a moment for DOM to settle, then set up theme settings
-    setTimeout(() => {
+    this.setTrackedTimeout(() => {
       this.setupThemeSettings();
       this.log('Theme settings setup delayed for DOM stability');
     }, 100);
@@ -606,6 +631,101 @@ export class MigrationManager {
   }
 
   /**
+   * Set up collapsible functionality for space theme sections
+   */
+  setupCollapsibleFunctionality() {
+    // Only set up collapsible functionality if we're in space theme
+    if (this.currentTheme !== 'space') {
+      return;
+    }
+
+    // Remove any existing listeners first to prevent duplicates
+    this.cleanupCollapsibleListeners();
+
+    // Directly add click handlers to collapsible headers
+    const collapsibleHeaders = document.querySelectorAll('.collapsible-header[data-target]');
+    
+    if (collapsibleHeaders.length > 0) {
+      collapsibleHeaders.forEach(header => {
+        // Store the handler so we can remove it later
+        const handler = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const targetId = header.dataset.target;
+          this.toggleCollapsibleSection(targetId, header);
+        };
+        
+        // Store handler reference for cleanup
+        if (!this.collapsibleHandlers) {
+          this.collapsibleHandlers = new Map();
+        }
+        this.collapsibleHandlers.set(header, handler);
+        
+        // Add the event listener
+        header.addEventListener('click', handler);
+      });
+      
+      this.log(`Collapsible functionality set up for ${collapsibleHeaders.length} sections`);
+    } else {
+      this.log('WARNING: No collapsible headers found');
+    }
+  }
+
+  /**
+   * Toggle a collapsible section
+   */
+  toggleCollapsibleSection(targetId, headerElement) {
+    const contentElement = document.getElementById(targetId);
+    const collapsibleSection = headerElement.closest('.collapsible-section');
+    const toggleIcon = headerElement.querySelector('.toggle-icon');
+    
+    if (!contentElement) {
+      this.log(`WARNING: Collapsible content not found: ${targetId}`);
+      return;
+    }
+
+    // Toggle expanded class on content
+    const isCurrentlyExpanded = contentElement.classList.contains('expanded');
+    
+    if (isCurrentlyExpanded) {
+      // Collapse the section
+      contentElement.classList.remove('expanded');
+      if (collapsibleSection) {
+        collapsibleSection.classList.add('collapsed');
+      }
+      if (toggleIcon) {
+        toggleIcon.style.transform = 'rotate(-90deg)';
+      }
+      this.log(`Collapsed section: ${targetId}`);
+    } else {
+      // Expand the section
+      contentElement.classList.add('expanded');
+      if (collapsibleSection) {
+        collapsibleSection.classList.remove('collapsed');
+      }
+      if (toggleIcon) {
+        toggleIcon.style.transform = 'rotate(0deg)';
+      }
+      this.log(`Expanded section: ${targetId}`);
+    }
+  }
+
+  /**
+   * Clean up collapsible event listeners
+   */
+  cleanupCollapsibleListeners() {
+    // Remove individual handlers from headers
+    if (this.collapsibleHandlers) {
+      this.collapsibleHandlers.forEach((handler, header) => {
+        header.removeEventListener('click', handler);
+      });
+      this.collapsibleHandlers.clear();
+      this.log('Cleaned up collapsible listeners');
+    }
+  }
+
+  /**
    * Set up theme settings functionality
    */
   setupThemeSettings() {
@@ -663,6 +783,14 @@ export class MigrationManager {
           e.stopPropagation();
           const theme = e.currentTarget.dataset.theme;
           this.log(`Theme preset clicked: ${theme}`);
+          
+          // When a theme preset is clicked, disable custom colors
+          const customColorsToggle = document.getElementById('use-custom-colors');
+          if (customColorsToggle && customColorsToggle.checked) {
+            customColorsToggle.checked = false;
+            this.toggleCustomColors(false);
+          }
+          
           this.applyThemePreset(theme);
         });
       });
@@ -671,10 +799,17 @@ export class MigrationManager {
       this.log('WARNING: No theme preset buttons found');
     }
 
-    // Color pickers
-    const colorPickers = spaceLayout.querySelectorAll('input[type="color"]');
-    if (colorPickers.length > 0) {
-      colorPickers.forEach(picker => {
+    // Color pickers - Handle all including the new background picker
+    const colorPickerIds = [
+      'primary-color-picker',
+      'secondary-color-picker',
+      'accent-color-picker',
+      'background-color-picker'
+    ];
+    
+    colorPickerIds.forEach(pickerId => {
+      const picker = document.getElementById(pickerId);
+      if (picker) {
         // Clone to remove any existing listeners
         const newPicker = picker.cloneNode(true);
         picker.parentNode.replaceChild(newPicker, picker);
@@ -687,11 +822,9 @@ export class MigrationManager {
         newPicker.addEventListener('input', (e) => {
           this.handleColorChange(e.target.id, e.target.value);
         });
-      });
-      this.log(`Added listeners to ${colorPickers.length} color pickers`);
-    } else {
-      this.log('WARNING: No color pickers found');
-    }
+      }
+    });
+    this.log(`Set up color picker listeners`);
 
     // Opacity slider
     const opacitySlider = document.getElementById('panel-opacity-slider');
@@ -807,15 +940,20 @@ export class MigrationManager {
     // Custom colors toggle
     const customColorsToggle = document.getElementById('use-custom-colors');
     if (customColorsToggle) {
-      customColorsToggle.addEventListener('change', (e) => {
+      // Remove any existing listeners first
+      const newToggle = customColorsToggle.cloneNode(true);
+      customColorsToggle.parentNode.replaceChild(newToggle, customColorsToggle);
+      
+      newToggle.addEventListener('change', (e) => {
         const isEnabled = e.target.checked;
-        this.log(`Custom colors toggle: ${isEnabled}`);
+        this.log(`Custom colors toggle changed to: ${isEnabled}`);
         this.toggleCustomColors(isEnabled);
       });
       
-      // Initialize state - start with custom colors disabled
+      // Initialize state - start with custom colors disabled and checkbox unchecked
+      newToggle.checked = false;
       this.toggleCustomColors(false);
-      this.log('Custom colors toggle listener added');
+      this.log('Custom colors toggle initialized as disabled');
     }
 
     // Initialize color previews and gradient
@@ -829,11 +967,16 @@ export class MigrationManager {
    */
   toggleCustomColors(enabled) {
     const customColorSection = document.getElementById('custom-color-section');
+    
+    // Store the state
+    this.customColorsEnabled = enabled;
+    
     if (customColorSection) {
       if (enabled) {
         customColorSection.classList.remove('disabled');
-        // Apply current custom colors
+        // Apply current custom colors immediately
         this.applyCustomColors();
+        this.log('Applied custom colors');
       } else {
         customColorSection.classList.add('disabled');
         // Revert to theme preset colors
@@ -841,9 +984,15 @@ export class MigrationManager {
         if (activePreset) {
           const theme = activePreset.dataset.theme;
           this.applyThemePreset(theme);
+          this.log(`Reverted to theme preset: ${theme}`);
+        } else {
+          // If no active preset, apply default
+          this.applyThemePreset('space-blue');
+          this.log('Reverted to default space-blue theme');
         }
       }
     }
+    
     this.log(`Custom colors ${enabled ? 'enabled' : 'disabled'}`);
   }
   
@@ -854,7 +1003,8 @@ export class MigrationManager {
     const colorPickers = [
       { id: 'primary-color-picker', handler: 'primary-color-picker' },
       { id: 'secondary-color-picker', handler: 'secondary-color-picker' },
-      { id: 'accent-color-picker', handler: 'accent-color-picker' }
+      { id: 'accent-color-picker', handler: 'accent-color-picker' },
+      { id: 'background-color-picker', handler: 'background-color-picker' }
     ];
     
     colorPickers.forEach(({ id, handler }) => {
@@ -1108,11 +1258,50 @@ export class MigrationManager {
    * Apply a theme preset
    */
   applyThemePreset(presetName) {
+    const root = document.documentElement;
+    
+    // Define theme color schemes
+    const themes = {
+      'space-blue': {
+        primary: '#4c9fff',
+        secondary: '#7c3aed',
+        accent: '#00d4ff',
+        background: '#0a0e1a'
+      },
+      'space-purple': {
+        primary: '#9333ea',
+        secondary: '#ec4899',
+        accent: '#f472b6',
+        background: '#1a0a2e'
+      },
+      'space-green': {
+        primary: '#10b981',
+        secondary: '#059669',
+        accent: '#34d399',
+        background: '#0a1f1a'
+      },
+      'ygo-classic': {
+        primary: '#ffd700',
+        secondary: '#ff6b35',
+        accent: '#ff1744',
+        background: '#1a0e0a'
+      }
+    };
+    
+    // Get the theme colors
+    const themeColors = themes[presetName] || themes['space-blue'];
+    
+    // Only apply colors if custom colors are NOT enabled
+    const customColorsToggle = document.getElementById('use-custom-colors');
+    if (!customColorsToggle || !customColorsToggle.checked) {
+      this.applyThemeColors(themeColors);
+    }
+    
     // Remove all theme classes
     document.body.classList.remove('nebula-theme', 'matrix-theme', 'voxrip-classic-theme');
     
     // Handle space-theme class based on preset
-    if (presetName === 'voxrip-classic') {
+    if (presetName === 'ygo-classic') {
       // Classic theme doesn't use space-theme
       document.body.classList.remove('space-theme');
       document.body.classList.add('voxrip-classic-theme');
@@ -1133,7 +1322,9 @@ export class MigrationManager {
           default:
             themeClass = presetName.replace('space-', '') + '-theme';
         }
-        document.body.classList.add(themeClass);
+        if (themeClass) {
+          document.body.classList.add(themeClass);
+        }
       }
     }
 
@@ -1142,8 +1333,75 @@ export class MigrationManager {
     presetButtons.forEach(button => {
       button.classList.toggle('active', button.dataset.theme === presetName);
     });
+    
+    // Update color pickers to match theme (visual reference only)
+    const picker1 = document.getElementById('primary-color-picker');
+    const picker2 = document.getElementById('secondary-color-picker');
+    const picker3 = document.getElementById('accent-color-picker');
+    const picker4 = document.getElementById('background-color-picker');
+    if (picker1) picker1.value = themeColors.primary;
+    if (picker2) picker2.value = themeColors.secondary;
+    if (picker3) picker3.value = themeColors.accent;
+    if (picker4) picker4.value = themeColors.background;
 
-    this.log(`Applied theme preset: ${presetName} -> ${this.getCurrentThemeClasses()}`);
+    this.log(`Applied theme preset: ${presetName}`);
+  }
+  
+  /**
+   * Apply theme colors to CSS variables
+   */
+  applyThemeColors(colors) {
+    const root = document.documentElement;
+    
+    // Helper to convert hex to RGB
+    const hexToRgb = (hex) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : null;
+    };
+    
+    // Helper to adjust brightness
+    const adjustBrightness = (hex, factor) => {
+      const rgb = hexToRgb(hex);
+      if (!rgb) return hex;
+      const r = Math.round(Math.min(255, Math.max(0, rgb.r * (1 + factor))));
+      const g = Math.round(Math.min(255, Math.max(0, rgb.g * (1 + factor))));
+      const b = Math.round(Math.min(255, Math.max(0, rgb.b * (1 + factor))));
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    
+    // Apply each color type
+    Object.keys(colors).forEach(colorType => {
+      const color = colors[colorType];
+      const rgb = hexToRgb(color);
+      const rgbString = rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : '255, 255, 255';
+      
+      // Set main color variables
+      root.style.setProperty(`--color-${colorType}`, color);
+      root.style.setProperty(`--color-${colorType}-rgb`, rgbString);
+      
+      // Handle background-specific variables
+      if (colorType === 'background') {
+        root.style.setProperty('--color-background-light', adjustBrightness(color, 0.3));
+        root.style.setProperty('--color-background-medium', adjustBrightness(color, 0.5));
+        root.style.setProperty('--color-surface', adjustBrightness(color, 0.2));
+        
+        const surfaceColor = adjustBrightness(color, 0.2);
+        const surfaceRgb = hexToRgb(surfaceColor);
+        const surfaceRgbString = surfaceRgb ? `${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}` : rgbString;
+        root.style.setProperty('--color-surface-rgb', surfaceRgbString);
+        root.style.setProperty('--color-darker-rgb', rgbString);
+        
+        // Update glass backgrounds
+        root.style.setProperty('--color-glass-bg', `rgba(${surfaceRgbString}, 0.75)`);
+        root.style.setProperty('--color-glass-bg-light', `rgba(${surfaceRgbString}, 0.85)`);
+      }
+    });
+    
+    this.log('Applied theme colors to CSS variables');
   }
 
   /**
@@ -1234,6 +1492,28 @@ export class MigrationManager {
         root.style.setProperty('--color-border-light', `${color}20`);
         root.style.setProperty('--border-color', `${color}50`);
         this.updateColorPreview('accent-color-preview', color);
+        break;
+      case 'background-color-picker':
+        // Apply to all background-related variables
+        root.style.setProperty('--color-background', color);
+        root.style.setProperty('--color-background-rgb', rgbString);
+        root.style.setProperty('--color-background-light', adjustBrightness(color, 0.3));
+        root.style.setProperty('--color-background-medium', adjustBrightness(color, 0.5));
+        // Update surface colors based on background
+        const surfaceColor = adjustBrightness(color, 0.2);
+        const surfaceRgb = hexToRgb(surfaceColor);
+        const surfaceRgbString = surfaceRgb ? `${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}` : rgbString;
+        root.style.setProperty('--color-surface', surfaceColor);
+        root.style.setProperty('--color-surface-rgb', surfaceRgbString);
+        root.style.setProperty('--color-surface-light', adjustBrightness(color, 0.4));
+        // Update darker background
+        const darkerRgb = hexToRgb(adjustBrightness(color, -0.3));
+        const darkerRgbString = darkerRgb ? `${darkerRgb.r}, ${darkerRgb.g}, ${darkerRgb.b}` : rgbString;
+        root.style.setProperty('--color-darker-rgb', darkerRgbString);
+        // Update glass backgrounds
+        root.style.setProperty('--color-glass-bg', `rgba(${surfaceRgbString}, 0.75)`);
+        root.style.setProperty('--color-glass-bg-light', `rgba(${surfaceRgbString}, 0.85)`);
+        this.updateColorPreview('background-color-preview', color);
         break;
     }
 
@@ -1461,7 +1741,8 @@ export class MigrationManager {
     const defaults = {
       'primary-color-picker': '#4c9fff',
       'secondary-color-picker': '#7c3aed',
-      'accent-color-picker': '#00d4ff'
+      'accent-color-picker': '#00d4ff',
+      'background-color-picker': '#0a0e1a'
     };
 
     Object.entries(defaults).forEach(([id, color]) => {
@@ -1598,7 +1879,7 @@ export class MigrationManager {
    */
   setupEventListeners() {
     // Listen for feature flag changes
-    window.addEventListener('featureFlagChanged', (event) => {
+    this.addTrackedEventListener(window, 'featureFlagChanged', (event) => {
       if (event.detail.flagKey === 'USE_SPACE_THEME') {
         const newTheme = event.detail.enabled ? 'space' : 'legacy';
         if (newTheme !== this.currentTheme) {
@@ -1608,12 +1889,12 @@ export class MigrationManager {
     });
 
     // Listen for resize events
-    window.addEventListener('resize', () => {
+    this.addTrackedEventListener(window, 'resize', () => {
       this.handleResize();
     });
 
     // Listen for visibility change
-    document.addEventListener('visibilitychange', () => {
+    this.addTrackedEventListener(document, 'visibilitychange', () => {
       this.handleVisibilityChange();
     });
   }
@@ -1764,35 +2045,109 @@ export class MigrationManager {
   }
 
   /**
-   * Clean up resources
+   * Clean up theme-specific resources
    */
-  destroy() {
+  cleanupThemeResources() {
+    this.log('Cleaning up theme resources');
+    
+    // Clean up collapsible listeners
+    this.cleanupCollapsibleListeners();
+
+    // Clean up navigation listeners
+    this.cleanupNavigationListeners();
+
     // Clean up panel manager
     if (this.panelManager) {
       this.panelManager.destroy();
+      this.panelManager = null;
     }
 
     // Clean up feature flags
-    if (this.featureFlags) {
+    if (this.featureFlags && typeof this.featureFlags.destroy === 'function') {
       this.featureFlags.destroy();
+      this.featureFlags = null;
     }
 
     // Clean up selector mapper
-    if (this.selectorMapper) {
+    if (this.selectorMapper && typeof this.selectorMapper.destroy === 'function') {
       this.selectorMapper.destroy();
-    }
-
-    // Clean up animation manager
-    if (this.animationManager) {
-      this.animationManager.destroy();
+      this.selectorMapper = null;
     }
 
     // Clean up theme manager
-    if (this.themeManager) {
+    if (this.themeManager && typeof this.themeManager.destroy === 'function') {
       this.themeManager.destroy();
+      this.themeManager = null;
     }
+    
+    // Clear component references
+    this.components.legacy.clear();
+    this.components.space.clear();
+    
+    this.log('Theme resources cleaned up');
+  }
+  
+  /**
+   * Clean up animations and star field
+   */
+  cleanupAnimations() {
+    this.log('Cleaning up animations');
+    
+    // Clean up animation manager
+    if (this.animationManager && typeof this.animationManager.destroy === 'function') {
+      this.animationManager.destroy();
+      this.animationManager = null;
+    }
+    
+    // Clean up star field animations
+    this.starFieldAnimations.forEach(animationId => {
+      try {
+        cancelAnimationFrame(animationId);
+      } catch (error) {
+        // Animation may already be canceled
+      }
+    });
+    this.starFieldAnimations.clear();
+    
+    // Clean up cosmic element animations
+    this.cosmicElementAnimations.forEach(animationId => {
+      try {
+        cancelAnimationFrame(animationId);
+      } catch (error) {
+        // Animation may already be canceled
+      }
+    });
+    this.cosmicElementAnimations.clear();
+    
+    // Remove star field and cosmic elements from DOM
+    const starLayers = document.querySelector('.space-layout .star-layers');
+    if (starLayers) {
+      starLayers.innerHTML = '';
+    }
+    
+    const cosmicContainer = document.querySelector('.space-layout .cosmic-elements');
+    if (cosmicContainer) {
+      cosmicContainer.innerHTML = '';
+    }
+    
+    this.log('Animations cleaned up');
+  }
 
-    this.log('Migration Manager destroyed');
+  /**
+   * Clean up resources and destroy
+   */
+  destroy() {
+    if (this.isDestroyed) {
+      return;
+    }
+    
+    this.log('Destroying Migration Manager');
+    
+    // Unregister from global memory manager
+    globalMemoryManager.unregisterComponent(this);
+
+    // Call parent destroy method
+    super.destroy();
   }
 }
 
@@ -2044,6 +2399,37 @@ class PanelManager {
    * Handle collapse/expand button clicks
    */
   handleCollapseButtonClick(side) {
+    // Handle center panel separately
+    if (side === 'center') {
+      const centerPanel = document.getElementById('center-panel');
+      const container = document.querySelector('.space-layout .container');
+      const collapseBtn = document.getElementById('center-collapse-btn');
+      
+      if (centerPanel && container) {
+        if (centerPanel.classList.contains('collapsed')) {
+          // Expand center panel
+          centerPanel.classList.remove('collapsed');
+          container.classList.remove('center-collapsed');
+          if (collapseBtn) {
+            const icon = collapseBtn.querySelector('.collapse-icon');
+            if (icon) icon.textContent = '▶';
+          }
+          this.state.centerCollapsed = false;
+        } else {
+          // Collapse center panel
+          centerPanel.classList.add('collapsed');
+          container.classList.add('center-collapsed');
+          if (collapseBtn) {
+            const icon = collapseBtn.querySelector('.collapse-icon');
+            if (icon) icon.textContent = '◀';
+          }
+          this.state.centerCollapsed = true;
+        }
+      }
+      return;
+    }
+    
+    // Handle left/right panels as before
     const isCollapsed = this.state[side + 'Collapsed'];
     
     if (isCollapsed) {
