@@ -1,0 +1,784 @@
+/**
+ * VoxRip Animations
+ *
+ * Comprehensive animation system for VoxRip UI
+ * - Page transitions
+ * - Component animations
+ * - Loading states
+ * - Interactive feedback
+ * - Accessibility (reduced motion support)
+ *
+ * Performance: All animations use transform and opacity for 60fps
+ */
+
+/* ==========================================================================
+   KEYFRAMES
+   ========================================================================== */
+
+/* Page Transitions */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Scale Animations */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Card Flip Animation */
+@keyframes flipIn {
+  from {
+    transform: perspective(1000px) rotateY(-180deg);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(1000px) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes flipOut {
+  from {
+    transform: perspective(1000px) rotateY(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: perspective(1000px) rotateY(180deg);
+    opacity: 0;
+  }
+}
+
+/* Loading Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes progressIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes dotPulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Glow and Highlight */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 5px currentColor;
+  }
+  50% {
+    box-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
+  }
+}
+
+@keyframes highlightFlash {
+  0%, 100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: var(--accent-color);
+  }
+}
+
+/* Bounce */
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Shake (for errors) */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-5px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(5px);
+  }
+}
+
+/* Ripple Effect */
+@keyframes ripple {
+  from {
+    transform: scale(0);
+    opacity: 1;
+  }
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   PAGE TRANSITIONS
+   ========================================================================== */
+
+.page-enter {
+  animation: fadeIn 300ms ease-out, slideUp 300ms ease-out;
+}
+
+.page-exit {
+  animation: fadeOut 200ms ease-in;
+}
+
+.page-transition {
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
+
+/* ==========================================================================
+   SIDEBAR ANIMATIONS
+   ========================================================================== */
+
+.sidebar {
+  transition: transform 250ms ease-in-out, width 250ms ease-in-out;
+}
+
+.sidebar-nav-item {
+  transition: all 150ms ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-nav-item:hover {
+  transform: translateX(4px);
+}
+
+.sidebar-nav-item.active {
+  animation: slideInLeft 200ms ease-out;
+}
+
+.sidebar-nav-item i,
+.sidebar-nav-item svg {
+  transition: transform 200ms ease-in-out, color 150ms ease-in-out;
+}
+
+.sidebar-nav-item.active i,
+.sidebar-nav-item.active svg {
+  transform: scale(1.1);
+}
+
+.sidebar-nav-item:hover i,
+.sidebar-nav-item:hover svg {
+  transform: scale(1.05);
+}
+
+/* Sidebar drawer mobile animation */
+.sidebar-drawer-enter {
+  animation: slideInLeft 250ms ease-out;
+}
+
+.sidebar-drawer-exit {
+  animation: fadeOut 200ms ease-in;
+  transform: translateX(-100%);
+}
+
+/* ==========================================================================
+   CARD ANIMATIONS
+   ========================================================================== */
+
+.card,
+.glass-card {
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.card:hover,
+.glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.card:active,
+.glass-card:active {
+  transform: translateY(0) scale(0.98);
+  transition: transform 100ms ease-in;
+}
+
+/* Card flip animation for pack opening */
+.card-flip {
+  animation: flipIn 600ms ease-out;
+  transform-style: preserve-3d;
+}
+
+.card-flip-out {
+  animation: flipOut 600ms ease-in;
+}
+
+/* Staggered card animations */
+.card-stagger-1 { animation-delay: 0ms; }
+.card-stagger-2 { animation-delay: 50ms; }
+.card-stagger-3 { animation-delay: 100ms; }
+.card-stagger-4 { animation-delay: 150ms; }
+.card-stagger-5 { animation-delay: 200ms; }
+.card-stagger-6 { animation-delay: 250ms; }
+.card-stagger-7 { animation-delay: 300ms; }
+.card-stagger-8 { animation-delay: 350ms; }
+
+/* Card grid item entrance */
+.card-grid-item {
+  animation: scaleIn 300ms ease-out;
+}
+
+/* ==========================================================================
+   LOADING STATES
+   ========================================================================== */
+
+/* Spinner */
+.spinner {
+  animation: spin 1000ms linear infinite;
+  display: inline-block;
+}
+
+.spinner-slow {
+  animation: spin 2000ms linear infinite;
+}
+
+.spinner-fast {
+  animation: spin 600ms linear infinite;
+}
+
+/* Skeleton Screens */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 1500ms infinite linear;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-text {
+  height: 16px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+
+.skeleton-title {
+  height: 24px;
+  width: 60%;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-card {
+  height: 200px;
+  border-radius: 8px;
+}
+
+.skeleton-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.skeleton-button {
+  height: 40px;
+  width: 120px;
+  border-radius: 6px;
+}
+
+/* Pulsing Loader */
+.pulse-loader {
+  animation: pulse 1500ms ease-in-out infinite;
+}
+
+/* Dot Loader */
+.dot-loader {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.dot-loader span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: dotPulse 1400ms infinite ease-in-out;
+}
+
+.dot-loader span:nth-child(1) { animation-delay: 0ms; }
+.dot-loader span:nth-child(2) { animation-delay: 160ms; }
+.dot-loader span:nth-child(3) { animation-delay: 320ms; }
+
+/* Progress Bar */
+.progress-bar {
+  position: relative;
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  height: 4px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: var(--accent-color, #737373);
+  transition: width 300ms ease-out;
+  border-radius: 4px;
+}
+
+.progress-bar-indeterminate .progress-bar-fill {
+  width: 30%;
+  animation: progressIndeterminate 1500ms infinite ease-in-out;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 200ms ease-out;
+}
+
+.loading-overlay-exit {
+  animation: fadeOut 200ms ease-in;
+}
+
+/* ==========================================================================
+   BUTTON ANIMATIONS
+   ========================================================================== */
+
+button,
+.btn {
+  transition: all 150ms ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+button:hover,
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+button:active,
+.btn:active {
+  transform: translateY(0) scale(0.98);
+  transition: transform 100ms ease-in;
+}
+
+button:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent-color, #737373);
+  outline-offset: 2px;
+}
+
+/* Ripple effect container */
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-effect {
+  position: absolute;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  animation: ripple 600ms ease-out;
+}
+
+/* ==========================================================================
+   TOAST NOTIFICATIONS
+   ========================================================================== */
+
+.toast {
+  animation: slideInRight 300ms ease-out;
+  transform-origin: right center;
+}
+
+.toast-exit {
+  animation: slideOutRight 200ms ease-in, fadeOut 200ms ease-in;
+}
+
+.toast-success {
+  animation: slideInRight 300ms ease-out, pulse 200ms ease-out 300ms;
+}
+
+/* ==========================================================================
+   MODAL ANIMATIONS
+   ========================================================================== */
+
+.modal-backdrop {
+  animation: fadeIn 150ms ease-out;
+}
+
+.modal-backdrop-exit {
+  animation: fadeOut 150ms ease-in;
+}
+
+.modal-content {
+  animation: scaleIn 250ms ease-out;
+}
+
+.modal-content-exit {
+  animation: scaleOut 200ms ease-in;
+}
+
+/* ==========================================================================
+   STAT CARD ANIMATIONS
+   ========================================================================== */
+
+.stat-card {
+  animation: fadeIn 400ms ease-out, slideUp 400ms ease-out;
+}
+
+.stat-card:nth-child(1) { animation-delay: 0ms; }
+.stat-card:nth-child(2) { animation-delay: 100ms; }
+.stat-card:nth-child(3) { animation-delay: 200ms; }
+.stat-card:nth-child(4) { animation-delay: 300ms; }
+
+.stat-value-updating {
+  animation: pulse 300ms ease-in-out;
+}
+
+/* ==========================================================================
+   ACHIEVEMENT ANIMATIONS
+   ========================================================================== */
+
+.achievement-unlock {
+  animation: bounceIn 600ms ease-out, glow 1000ms ease-in-out 600ms;
+}
+
+.achievement-badge {
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.achievement-badge:hover {
+  transform: scale(1.05);
+}
+
+.achievement-progress-bar {
+  transition: width 500ms ease-out;
+}
+
+/* ==========================================================================
+   FORM ANIMATIONS
+   ========================================================================== */
+
+input,
+textarea,
+select {
+  transition: border-color 150ms ease-in-out, box-shadow 150ms ease-in-out;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  box-shadow: 0 0 0 3px rgba(115, 115, 115, 0.1);
+}
+
+.form-error {
+  animation: shake 300ms ease-in-out, highlightFlash 300ms ease-in-out;
+}
+
+/* ==========================================================================
+   UTILITY CLASSES
+   ========================================================================== */
+
+/* Fade animations */
+.fade-in {
+  animation: fadeIn 300ms ease-out;
+}
+
+.fade-out {
+  animation: fadeOut 200ms ease-in;
+}
+
+.fade-in-slow {
+  animation: fadeIn 600ms ease-out;
+}
+
+/* Slide animations */
+.slide-up {
+  animation: slideUp 300ms ease-out;
+}
+
+.slide-down {
+  animation: slideDown 300ms ease-out;
+}
+
+/* Scale animations */
+.scale-in {
+  animation: scaleIn 250ms ease-out;
+}
+
+.scale-out {
+  animation: scaleOut 200ms ease-in;
+}
+
+/* Glow effect */
+.glow {
+  animation: glow 2000ms ease-in-out infinite;
+}
+
+/* Pulse effect */
+.pulse {
+  animation: pulse 1500ms ease-in-out infinite;
+}
+
+/* Spin effect */
+.spin {
+  animation: spin 1000ms linear infinite;
+}
+
+/* Shake effect */
+.shake {
+  animation: shake 300ms ease-in-out;
+}
+
+/* Bounce effect */
+.bounce-in {
+  animation: bounceIn 500ms ease-out;
+}
+
+/* Smooth transitions */
+.transition-all {
+  transition: all 200ms ease-in-out;
+}
+
+.transition-colors {
+  transition: background-color 150ms ease-in-out, color 150ms ease-in-out, border-color 150ms ease-in-out;
+}
+
+.transition-transform {
+  transition: transform 200ms ease-out;
+}
+
+.transition-opacity {
+  transition: opacity 200ms ease-in-out;
+}
+
+/* ==========================================================================
+   ACCESSIBILITY - REDUCED MOTION
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Keep essential opacity transitions */
+  .page-enter,
+  .page-exit,
+  .fade-in,
+  .fade-out {
+    animation: fadeIn 150ms ease-out;
+  }
+
+  /* Disable shimmer effect */
+  .skeleton {
+    animation: none;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Disable glow effects */
+  .glow,
+  .achievement-unlock {
+    animation: none;
+  }
+
+  /* Simplify button feedback */
+  button:hover,
+  .btn:hover {
+    transform: none;
+  }
+
+  button:active,
+  .btn:active {
+    transform: none;
+    opacity: 0.8;
+  }
+}
+
+/* ==========================================================================
+   PERFORMANCE OPTIMIZATIONS
+   ========================================================================== */
+
+/* GPU acceleration hints for complex animations */
+.will-animate {
+  will-change: transform, opacity;
+}
+
+/* Remove will-change after animation completes */
+.animation-complete {
+  will-change: auto;
+}
+
+/* Prevent layout shifts during animations */
+.fixed-dimensions {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* ==========================================================================
+   DARK MODE SPECIFIC ADJUSTMENTS
+   ========================================================================== */
+
+[data-theme="light"] .skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.05) 0%,
+    rgba(0, 0, 0, 0.15) 50%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  background-size: 1000px 100%;
+}
+
+/* ==========================================================================
+   END OF ANIMATIONS
+   ========================================================================== */

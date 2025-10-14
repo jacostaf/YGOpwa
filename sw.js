@@ -9,25 +9,63 @@
  * - Performance optimizations
  */
 
-const CACHE_NAME = 'ygo-ripper-v2.1.0';
-const RUNTIME_CACHE = 'ygo-ripper-runtime';
+const CACHE_NAME = 'voxrip-v2.0.0';
+const RUNTIME_CACHE = 'voxrip-runtime';
 
 // Resources to cache for offline use
 const CACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
+  // CSS files
   '/src/css/main.css',
   '/src/css/components.css',
   '/src/css/responsive.css',
+  '/src/css/themes.css',
+  '/src/css/layouts.css',
+  '/src/css/sidebar.css',
+  '/src/css/animations.css',
+  '/src/css/accessibility.css',
+  // Core app
   '/src/js/app.js',
+  // Components
+  '/src/components/Sidebar.js',
+  '/src/components/StatsCard.js',
+  '/src/components/CardGrid.js',
+  '/src/components/PatternList.js',
+  '/src/components/AchievementBadge.js',
+  '/src/components/ToggleSwitch.js',
+  // Pages
+  '/src/pages/DashboardPage.js',
+  '/src/pages/PackOpeningPage.js',
+  '/src/pages/PriceCheckerPage.js',
+  '/src/pages/VoiceTrainingPage.js',
+  '/src/pages/SettingsPage.js',
+  '/src/pages/ThemeSettingsPage.js',
+  '/src/pages/CollectionPage.js',
+  '/src/pages/AchievementsPage.js',
+  // Services
+  '/src/services/DashboardService.js',
+  '/src/services/CollectionManager.js',
+  '/src/services/AchievementManager.js',
+  // Themes
+  '/src/themes/theme-config.js',
+  '/src/themes/ThemeManager.js',
+  // Utils
+  '/src/utils/Router.js',
+  '/src/utils/IconLoader.js',
+  '/src/utils/AnimationHelper.js',
+  '/src/utils/Logger.js',
+  '/src/utils/Storage.js',
+  // Voice (existing)
   '/src/js/voice/VoiceEngine.js',
   '/src/js/voice/PermissionManager.js',
+  // Session (existing)
   '/src/js/session/SessionManager.js',
+  // Price (existing)
   '/src/js/price/PriceChecker.js',
-  '/src/js/ui/UIManager.js',
-  '/src/js/utils/Logger.js',
-  '/src/js/utils/Storage.js'
+  // UI (existing)
+  '/src/js/ui/UIManager.js'
 ];
 
 // Cache strategies
@@ -295,11 +333,11 @@ function createOfflineHTML() {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>YGO Ripper UI v2 - Offline</title>
+      <title>VoxRip - Offline</title>
       <style>
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+          background: linear-gradient(135deg, #0a0a0a 0%, #171717 100%);
           color: #ffffff;
           margin: 0;
           padding: 2rem;
@@ -311,41 +349,50 @@ function createOfflineHTML() {
         }
         .offline-content {
           max-width: 400px;
+          background: rgba(23, 23, 23, 0.4);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(64, 64, 64, 0.5);
+          border-radius: 16px;
+          padding: 2rem;
         }
         .offline-icon {
           font-size: 4rem;
           margin-bottom: 1rem;
         }
         h1 {
-          color: #ffd700;
+          color: #ffffff;
           margin-bottom: 1rem;
+          font-size: 1.75rem;
         }
         p {
           line-height: 1.6;
           margin-bottom: 1rem;
-          color: #b0b0b0;
+          color: #a3a3a3;
         }
         .retry-btn {
-          background: linear-gradient(135deg, #ffd700 0%, #ffb000 100%);
-          color: #000;
-          border: none;
+          background: rgba(115, 115, 115, 0.2);
+          color: #ffffff;
+          border: 1px solid rgba(115, 115, 115, 0.5);
           padding: 0.75rem 1.5rem;
           border-radius: 8px;
-          font-weight: bold;
+          font-weight: 600;
           cursor: pointer;
-          transition: transform 0.2s;
+          transition: all 0.2s;
+          backdrop-filter: blur(8px);
         }
         .retry-btn:hover {
+          background: rgba(115, 115, 115, 0.3);
           transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
       </style>
     </head>
     <body>
       <div class="offline-content">
-        <div class="offline-icon">📦</div>
+        <div class="offline-icon">⚡</div>
         <h1>You're Offline</h1>
         <p>
-          YGO Ripper UI v2 is currently offline. Some features may not be available 
+          VoxRip is currently offline. Some features may not be available
           until you reconnect to the internet.
         </p>
         <p>

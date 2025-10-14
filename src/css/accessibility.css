@@ -1,0 +1,810 @@
+/**
+ * accessibility.css - WCAG 2.1 AA Compliant Accessibility Styles
+ *
+ * Features:
+ * - Visible focus indicators (2px minimum, 3:1 contrast ratio)
+ * - Skip-to-content link
+ * - Keyboard navigation support
+ * - Screen reader utilities
+ * - High contrast mode support
+ * - Reduced motion support
+ * - Focus-visible polyfill styles
+ * - ARIA live regions
+ * - Accessible form elements
+ *
+ * WCAG Requirements:
+ * - Focus Visible (2.4.7): All interactive elements must have visible focus
+ * - Focus Order (2.4.3): Tab order must be logical and intuitive
+ * - Keyboard (2.1.1): All functionality must be keyboard accessible
+ * - Non-text Contrast (1.4.11): UI components must have 3:1 contrast
+ * - Text Contrast (1.4.3): Text must have 4.5:1 contrast (AA) or 7:1 (AAA)
+ */
+
+/* =================================================================
+   SKIP TO CONTENT LINK
+   ================================================================= */
+
+/**
+ * Skip-to-content link for keyboard navigation
+ * Hidden by default, visible on focus
+ * Allows keyboard users to skip navigation and go directly to main content
+ */
+.skip-to-content {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  z-index: 10000;
+  padding: 1rem 1.5rem;
+  background: var(--accent-color, #60a5fa);
+  color: #000;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0 0 0.5rem 0;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  transition: top 0.2s ease-out;
+}
+
+.skip-to-content:focus {
+  top: 0;
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+/* =================================================================
+   GLOBAL FOCUS INDICATORS
+   ================================================================= */
+
+/**
+ * Remove default focus outline (we'll add custom ones below)
+ * Only remove if we provide an alternative focus indicator
+ */
+*:focus {
+  outline: none;
+}
+
+/**
+ * Visible focus indicator for all interactive elements
+ * WCAG 2.4.7: Focus must be visible with 2px minimum thickness and 3:1 contrast
+ */
+*:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* =================================================================
+   INTERACTIVE ELEMENTS - ENHANCED FOCUS
+   ================================================================= */
+
+/**
+ * Buttons - Focus with accent color and subtle glow
+ */
+button:focus-visible,
+.btn:focus-visible,
+.icon-btn:focus-visible {
+  outline: 3px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2);
+}
+
+/**
+ * Links - Focus with underline and outline
+ */
+a:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 3px;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+/**
+ * Form inputs - Focus with border and glow
+ */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 0px;
+  border-color: var(--focus-color, #60a5fa);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+}
+
+/**
+ * Checkbox and radio - Focus with ring
+ */
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2);
+}
+
+/**
+ * Range sliders - Focus with track highlight
+ */
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 4px;
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.3);
+}
+
+input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.3);
+}
+
+/* =================================================================
+   SIDEBAR NAVIGATION - KEYBOARD FOCUS
+   ================================================================= */
+
+/**
+ * Sidebar nav items - Enhanced focus with background
+ */
+.sidebar-nav-item:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: -2px;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+/**
+ * Sidebar close button - Focus with ring
+ */
+.sidebar-close:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2);
+}
+
+/* =================================================================
+   CARDS - FOCUS STATES
+   ================================================================= */
+
+/**
+ * Interactive cards - Focus with border and shadow
+ */
+.card:focus-visible,
+.glass-card:focus-visible,
+.section-card:focus-visible,
+.stats-card:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.15),
+              var(--shadow-lg, 0 10px 20px rgba(0, 0, 0, 0.2));
+}
+
+/**
+ * Card buttons/links - Focus within cards
+ */
+.card button:focus-visible,
+.card a:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  position: relative;
+  z-index: 1;
+}
+
+/* =================================================================
+   MODALS AND OVERLAYS - FOCUS TRAP
+   ================================================================= */
+
+/**
+ * Modal - Focus trap and initial focus
+ */
+.modal:focus {
+  outline: none;
+}
+
+/**
+ * Modal close button - Enhanced focus
+ */
+.modal-close:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.25);
+}
+
+/**
+ * Modal overlay - No focus indicator (not focusable)
+ */
+.modal-overlay {
+  outline: none;
+}
+
+/* =================================================================
+   TOAST NOTIFICATIONS - ACCESSIBILITY
+   ================================================================= */
+
+/**
+ * Toast close button - Focus with ring
+ */
+.toast-close:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+/* =================================================================
+   TOGGLE SWITCHES - KEYBOARD FOCUS
+   ================================================================= */
+
+/**
+ * Toggle switch checkbox - Enhanced focus on slider
+ */
+.toggle-checkbox:focus-visible + .toggle-slider {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2);
+}
+
+/* =================================================================
+   DROPDOWN MENUS - KEYBOARD NAVIGATION
+   ================================================================= */
+
+/**
+ * Dropdown items - Focus with background highlight
+ */
+.dropdown-item:focus-visible,
+.menu-item:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: -2px;
+  background: rgba(96, 165, 250, 0.15);
+}
+
+/* =================================================================
+   TABLES - KEYBOARD NAVIGATION
+   ================================================================= */
+
+/**
+ * Table cells - Focus for keyboard navigation
+ */
+td:focus-visible,
+th:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: -2px;
+  position: relative;
+  z-index: 1;
+}
+
+/**
+ * Table rows - Focus for row selection
+ */
+tr:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: -2px;
+}
+
+/* =================================================================
+   SCREEN READER UTILITIES
+   ================================================================= */
+
+/**
+ * Screen reader only text
+ * Visually hidden but accessible to screen readers
+ */
+.sr-only,
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/**
+ * Focusable screen reader only elements
+ * Becomes visible on focus (e.g., skip links)
+ */
+.sr-only-focusable:focus,
+.visually-hidden-focusable:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* =================================================================
+   ARIA LIVE REGIONS
+   ================================================================= */
+
+/**
+ * Live region for announcements
+ * Used for dynamic content updates
+ */
+.aria-live-region,
+[role="status"],
+[role="alert"] {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/**
+ * Visible live regions (e.g., status messages)
+ */
+.aria-live-region-visible,
+[role="status"].visible,
+[role="alert"].visible {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+}
+
+/* =================================================================
+   HIGH CONTRAST MODE SUPPORT
+   ================================================================= */
+
+/**
+ * Windows High Contrast Mode
+ * Ensures borders and outlines are visible
+ */
+@media (prefers-contrast: high) {
+  /* Enhanced borders */
+  button,
+  .btn,
+  input,
+  select,
+  textarea,
+  .card,
+  .glass-card {
+    border: 2px solid;
+  }
+
+  /* Enhanced focus indicators */
+  *:focus-visible {
+    outline: 3px solid;
+    outline-offset: 3px;
+  }
+
+  /* Enhanced text contrast */
+  body {
+    background: #000;
+    color: #fff;
+  }
+
+  .card,
+  .glass-card,
+  .section-card {
+    background: #000;
+    border: 2px solid #fff;
+  }
+
+  /* Disable transparency */
+  * {
+    background-color: inherit !important;
+    opacity: 1 !important;
+  }
+}
+
+/* =================================================================
+   REDUCED MOTION SUPPORT
+   ================================================================= */
+
+/**
+ * Respect user's reduced motion preference
+ * Disable or reduce animations
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Keep focus transitions */
+  *:focus-visible {
+    transition-duration: 0ms !important;
+  }
+}
+
+/* =================================================================
+   KEYBOARD NAVIGATION HELPERS
+   ================================================================= */
+
+/**
+ * Tab order indicator (for debugging)
+ * Uncomment to visualize tab order
+ */
+/*
+*:focus {
+  box-shadow: inset 0 0 0 2px red !important;
+}
+*/
+
+/**
+ * Keyboard-only focus (hide focus for mouse users)
+ * Using :focus-visible to show focus only for keyboard
+ */
+.js-focus-visible :focus:not(.focus-visible) {
+  outline: none;
+}
+
+/* =================================================================
+   ACCESSIBLE FORM ERROR STATES
+   ================================================================= */
+
+/**
+ * Form field errors - Enhanced visibility
+ */
+input:invalid:focus-visible,
+textarea:invalid:focus-visible,
+select:invalid:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 0px;
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+/**
+ * Error messages - High contrast
+ */
+.form-error,
+.error-message,
+[role="alert"] {
+  color: #fca5a5;
+  font-weight: 600;
+  padding: 0.5rem;
+  border-left: 3px solid #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  margin-top: 0.5rem;
+}
+
+/**
+ * Success messages - High contrast
+ */
+.form-success,
+.success-message {
+  color: #86efac;
+  font-weight: 600;
+  padding: 0.5rem;
+  border-left: 3px solid #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  margin-top: 0.5rem;
+}
+
+/* =================================================================
+   ACCESSIBLE TOOLTIPS
+   ================================================================= */
+
+/**
+ * Tooltip - Accessible on focus and hover
+ */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]:focus-visible::after,
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  border-radius: 0.375rem;
+  z-index: 1000;
+  margin-bottom: 0.5rem;
+}
+
+/* =================================================================
+   LOADING STATES - ACCESSIBILITY
+   ================================================================= */
+
+/**
+ * Loading spinner - Screen reader announcement
+ */
+.loading-spinner[role="status"],
+.spinner[role="status"] {
+  position: relative;
+}
+
+.loading-spinner[role="status"]::after,
+.spinner[role="status"]::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: -10000px;
+}
+
+/* =================================================================
+   ACCESSIBLE DISABLED STATES
+   ================================================================= */
+
+/**
+ * Disabled elements - Clear visual indication
+ */
+button:disabled,
+.btn:disabled,
+.btn-disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/**
+ * Disabled elements should not be focusable
+ */
+button:disabled:focus,
+input:disabled:focus,
+select:disabled:focus,
+textarea:disabled:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* =================================================================
+   ACCESSIBLE PAGINATION
+   ================================================================= */
+
+/**
+ * Pagination - Keyboard navigation
+ */
+.pagination button:focus-visible,
+.pagination a:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+/**
+ * Current page - High contrast
+ */
+.pagination .current,
+.pagination [aria-current="page"] {
+  font-weight: 700;
+  background: var(--accent-color, #60a5fa);
+  color: #000;
+  border: 2px solid var(--accent-color, #60a5fa);
+}
+
+/* =================================================================
+   ACCESSIBLE TABS
+   ================================================================= */
+
+/**
+ * Tab list - ARIA tablist role
+ */
+[role="tablist"] {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+/**
+ * Tab buttons - Focus with background
+ */
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: -2px;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+/**
+ * Active tab - High contrast
+ */
+[role="tab"][aria-selected="true"] {
+  border-bottom: 3px solid var(--accent-color, #60a5fa);
+  font-weight: 600;
+  color: var(--accent-color, #60a5fa);
+}
+
+/* =================================================================
+   ACCESSIBLE ACCORDIONS
+   ================================================================= */
+
+/**
+ * Accordion button - Focus with ring
+ */
+[role="button"][aria-expanded]:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2);
+}
+
+/**
+ * Accordion expanded state - Visual indicator
+ */
+[role="button"][aria-expanded="true"]::after {
+  transform: rotate(180deg);
+}
+
+/* =================================================================
+   ACCESSIBLE BREADCRUMBS
+   ================================================================= */
+
+/**
+ * Breadcrumb navigation - ARIA nav role
+ */
+.breadcrumb,
+[aria-label="Breadcrumb"] {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/**
+ * Breadcrumb links - Focus with underline
+ */
+.breadcrumb a:focus-visible {
+  outline: 2px solid var(--focus-color, #60a5fa);
+  outline-offset: 2px;
+  text-decoration: underline;
+}
+
+/**
+ * Current breadcrumb - High contrast
+ */
+.breadcrumb [aria-current="page"] {
+  font-weight: 600;
+  color: var(--accent-color, #60a5fa);
+}
+
+/* =================================================================
+   COLOR CONTRAST HELPERS
+   ================================================================= */
+
+/**
+ * Ensure minimum 4.5:1 contrast for normal text
+ * These are fallback colors for better contrast
+ */
+.text-contrast-high {
+  color: #fff;
+  background: #000;
+}
+
+.text-contrast-medium {
+  color: #e5e5e5;
+  background: #1a1a1a;
+}
+
+/**
+ * Ensure minimum 3:1 contrast for large text (18pt+)
+ */
+.text-large-contrast {
+  color: #d4d4d4;
+  background: #262626;
+}
+
+/**
+ * Ensure minimum 3:1 contrast for UI components
+ */
+.ui-contrast {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* =================================================================
+   PRINT ACCESSIBILITY
+   ================================================================= */
+
+/**
+ * Print styles - Ensure content is accessible when printed
+ */
+@media print {
+  /* Show links */
+  a[href]::after {
+    content: " (" attr(href) ")";
+  }
+
+  /* Hide interactive elements */
+  button,
+  .btn,
+  input,
+  select,
+  textarea {
+    border: 1px solid #000;
+    background: #fff;
+  }
+
+  /* Ensure high contrast */
+  * {
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  /* Show focus outlines */
+  *:focus {
+    outline: 2px solid #000;
+  }
+}
+
+/* =================================================================
+   RESPONSIVE ACCESSIBILITY
+   ================================================================= */
+
+/**
+ * Mobile - Larger touch targets (minimum 44x44px)
+ */
+@media (max-width: 767px) {
+  button,
+  .btn,
+  a,
+  input[type="checkbox"],
+  input[type="radio"],
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Enhanced focus for touch screens */
+  *:focus-visible {
+    outline-width: 3px;
+    outline-offset: 3px;
+  }
+}
+
+/**
+ * Tablet and up - Standard touch targets
+ */
+@media (min-width: 768px) {
+  button,
+  .btn,
+  a {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+/* =================================================================
+   DARK MODE ACCESSIBILITY
+   ================================================================= */
+
+/**
+ * Dark mode - Enhanced contrast
+ * Applied automatically when dark theme is active
+ */
+[data-theme="dark"],
+.theme-dark {
+  --focus-color: #60a5fa;
+  --text-contrast: #fff;
+  --border-contrast: rgba(255, 255, 255, 0.3);
+}
+
+/**
+ * Light mode - Enhanced contrast
+ */
+[data-theme="light"],
+.theme-light {
+  --focus-color: #2563eb;
+  --text-contrast: #000;
+  --border-contrast: rgba(0, 0, 0, 0.3);
+}
+
+/* =================================================================
+   FOCUS WITHIN - CONTAINER FOCUS
+   ================================================================= */
+
+/**
+ * Container has focused child - Subtle highlight
+ */
+.card:focus-within,
+.glass-card:focus-within,
+.form-group:focus-within {
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.1);
+}
+
+/* =================================================================
+   END OF ACCESSIBILITY STYLES
+   ================================================================= */

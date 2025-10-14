@@ -21,6 +21,7 @@ import { TrainingUI } from './ui/TrainingUI.js';
 import { PatternManagerUI } from './ui/PatternManagerUI.js';
 import { Logger } from './utils/Logger.js';
 import { Storage } from './utils/Storage.js';
+import { AchievementManager } from '../services/AchievementManager.js';
 
 /**
  * Main Application Class
@@ -31,7 +32,7 @@ class YGORipperApp {
         // Application metadata
         this.version = '2.1.0';
         this.name = 'YGO Ripper UI v2';
-        
+
         // Component instances
         this.logger = new Logger('YGORipperApp');
         this.storage = new Storage();
@@ -42,19 +43,24 @@ class YGORipperApp {
         this.uiManager = new UIManager();
         this.trainingUI = null; // Initialized after app setup
         this.patternManagerUI = null; // Initialized after app setup
-        
+        this.achievementManager = null; // Initialized after app setup
+
         // Application state
         this.isInitialized = false;
         this.currentTab = 'pack-ripper';  // Changed from 'price-checker' to make pack-ripper (which contains voice) the default tab
         this.settings = {};
-        
+
         // Initialization promise
         this.initPromise = null;
-        
+
         // Voice processing throttling
         this.voiceProcessingQueue = [];
         this.isProcessingVoice = false;
-        
+
+        // Make app instance globally available for pages to access services
+        // Both window.app and window.ygoApp point to the same instance
+        window.app = this;
+
         // Start initialization unless disabled (for testing)
         if (!options.skipInitialization) {
             this.initialize();
@@ -134,7 +140,7 @@ class YGORipperApp {
             this.safeSetupEventHandlers();
             
             this.updateLoadingProgress(92, 'Initializing pattern management...');
-            
+
             // Initialize pattern manager UI after voice engine is ready
             if (this.patternManagerUI && this.voiceEngine) {
                 try {
@@ -143,7 +149,17 @@ class YGORipperApp {
                     this.logger.warn('Pattern manager UI initialization failed:', error);
                 }
             }
-            
+
+            this.updateLoadingProgress(93, 'Initializing achievements...');
+
+            // Initialize achievement manager
+            try {
+                this.achievementManager = new AchievementManager(this);
+                this.logger.info('Achievement manager initialized');
+            } catch (error) {
+                this.logger.warn('Achievement manager initialization failed:', error);
+            }
+
             this.updateLoadingProgress(95, 'Loading initial data...');
             
             // Load initial data with error boundary
@@ -454,12 +470,12 @@ class YGORipperApp {
             if (this.settings.autoConfirm && bestConfidencePercent >= this.settings.autoConfirmThreshold) {
                 // Auto-confirm the best match
                 this.logger.info(`Auto-confirming: ${bestMatch.name} (${bestConfidencePercent.toFixed(1)}% confidence)`);
-                
+
                 await this.safeAddCard({
                     ...bestMatch,
                     quantity: 1
                 });
-                
+
                 // Record successful interaction for learning
                 if (this.voiceEngine) {
                     this.voiceEngine.recordUserInteraction(transcript, bestMatch.name, true, {
@@ -467,11 +483,16 @@ class YGORipperApp {
                         currentSet: this.sessionManager.currentSet
                     });
                 }
-                
+
+                // Track achievement for card recognition
+                if (this.achievementManager) {
+                    this.achievementManager.trackCardRecognition(bestConfidencePercent);
+                }
+
                 // Update UI
                 this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
                 this.showToast(`Auto-confirmed: ${bestMatch.name} (${bestConfidencePercent.toFixed(1)}%)`, 'success');
-                
+
                 // Auto-save if enabled
                 if (this.settings.sessionAutoSave) {
                     await this.safeAutoSave();
@@ -568,10 +589,15 @@ class YGORipperApp {
             }
             
             const results = await this.priceChecker.checkPrice(formData);
-            
+
             if (results.success) {
                 this.uiManager.displayPriceResults(results);
                 this.logger.info('Price check completed successfully');
+
+                // Track achievement for price checking
+                if (this.achievementManager) {
+                    this.achievementManager.trackPriceCheck();
+                }
             } else {
                 throw new Error(results.error || 'Price check failed');
             }
@@ -1473,7 +1499,13 @@ class YGORipperApp {
                             alternativesAvailable: cards.length
                         });
                     }
-                    
+
+                    // Track achievement for card recognition (user-selected)
+                    if (this.achievementManager) {
+                        const confidence = selectedCard.confidence || 0;
+                        this.achievementManager.trackCardRecognition(confidence);
+                    }
+
                     this.safeAddCard({
                         ...selectedCard,
                         quantity: 1

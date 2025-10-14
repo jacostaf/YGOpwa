@@ -1,0 +1,751 @@
+/**
+ * collection.css
+ * Styles for the Collection Page
+ * Includes glassmorphism styling, filters, controls, and responsive layouts
+ */
+
+/* ========================================
+   Collection Page Layout
+   ======================================== */
+
+.collection-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 2rem;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+/* ========================================
+   Collection Stats Grid
+   ======================================== */
+
+.collection-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.collection-stats-grid .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.collection-stats-grid .stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.stat-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-icon i {
+  width: 32px;
+  height: 32px;
+  color: white;
+}
+
+.stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-change {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========================================
+   Collection Controls
+   ======================================== */
+
+.collection-controls {
+  padding: 2rem;
+}
+
+.controls-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.controls-section h3 i {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-primary);
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ========================================
+   Form Controls
+   ======================================== */
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-group label i {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-primary);
+}
+
+.form-input,
+.form-select {
+  padding: 0.75rem 1rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.form-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ========================================
+   View Toggle Buttons
+   ======================================== */
+
+.view-toggle-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.view-toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-toggle-btn i {
+  width: 18px;
+  height: 18px;
+}
+
+.view-toggle-btn:hover {
+  background: var(--card-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.view-toggle-btn.active {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  border-color: var(--accent-primary);
+  color: white;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+/* ========================================
+   Slider
+   ======================================== */
+
+.slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--card-bg);
+  outline: none;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+}
+
+.slider:hover {
+  opacity: 1;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  cursor: pointer;
+  box-shadow: 0 2px 8px var(--accent-glow);
+  transition: all 0.2s ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  cursor: pointer;
+  box-shadow: 0 2px 8px var(--accent-glow);
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+/* ========================================
+   Collection Display
+   ======================================== */
+
+.collection-display {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.collection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.collection-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.collection-header h3 i {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-primary);
+}
+
+/* ========================================
+   Collection Grid View
+   ======================================== */
+
+.collection-grid-view {
+  /* CardGrid component styles applied via CardGrid.js */
+}
+
+/* ========================================
+   Collection List View (Table)
+   ======================================== */
+
+.collection-list-view {
+  width: 100%;
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
+.collection-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.collection-table thead {
+  background: rgba(var(--accent-rgb), 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.collection-table thead th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  font-size: 0.8125rem;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.collection-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.collection-table tbody tr:hover {
+  background: var(--card-hover);
+}
+
+.collection-table tbody td {
+  padding: 1rem;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.collection-table tbody td:first-child {
+  padding-left: 1rem;
+}
+
+.collection-table tbody td:last-child {
+  padding-right: 1rem;
+}
+
+/* Image column */
+.collection-table tbody td:first-child img {
+  display: block;
+  border: 2px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.collection-table tbody td:first-child img:hover {
+  transform: scale(1.5);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  position: relative;
+}
+
+/* ========================================
+   Empty State
+   ======================================== */
+
+.empty-state {
+  width: 100%;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.empty-state .glass-card {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.empty-state i {
+  width: 64px;
+  height: 64px;
+  color: var(--text-tertiary);
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.empty-state p:last-child {
+  color: var(--text-tertiary);
+  font-size: 0.9375rem;
+}
+
+/* ========================================
+   Error State
+   ======================================== */
+
+.error-state {
+  width: 100%;
+  max-width: 500px;
+  margin: 4rem auto;
+  padding: 3rem 2rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.error-state i {
+  width: 64px;
+  height: 64px;
+  color: #ef4444;
+  margin-bottom: 1rem;
+}
+
+.error-state h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.error-state p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+
+/* Tablet (768px - 1024px) */
+@media (max-width: 1024px) {
+  .collection-page {
+    padding: 1.5rem;
+  }
+
+  .collection-stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .collection-stats-grid .stat-card {
+    padding: 1.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+  }
+
+  .controls-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .collection-controls {
+    padding: 1.5rem;
+  }
+}
+
+/* Mobile (< 768px) */
+@media (max-width: 768px) {
+  .collection-page {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .page-actions {
+    width: 100%;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .page-actions button {
+    flex: 1;
+  }
+
+  .collection-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .collection-stats-grid .stat-card {
+    padding: 1rem;
+  }
+
+  .stat-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .stat-icon i {
+    width: 28px;
+    height: 28px;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .stat-label,
+  .stat-change {
+    font-size: 0.8125rem;
+  }
+
+  .controls-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .collection-controls {
+    padding: 1rem;
+  }
+
+  .controls-section h3 {
+    font-size: 1.125rem;
+  }
+
+  .view-toggle-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .collection-header h3 {
+    font-size: 1.125rem;
+  }
+
+  /* Make table scrollable on mobile */
+  .table-container {
+    border-radius: 8px;
+  }
+
+  .collection-table {
+    font-size: 0.875rem;
+  }
+
+  .collection-table thead th,
+  .collection-table tbody td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .collection-table thead th {
+    font-size: 0.75rem;
+  }
+
+  /* Adjust image size in table on mobile */
+  .collection-table tbody td:first-child img {
+    width: 40px;
+    height: 56px;
+  }
+
+  .empty-state {
+    padding: 3rem 1rem;
+  }
+
+  .empty-state .glass-card {
+    padding: 2rem 1rem;
+  }
+
+  .empty-state i {
+    width: 48px;
+    height: 48px;
+  }
+
+  .empty-state h3 {
+    font-size: 1.25rem;
+  }
+
+  .empty-state p {
+    font-size: 0.9375rem;
+  }
+}
+
+/* Extra small mobile (< 480px) */
+@media (max-width: 480px) {
+  .collection-stats-grid .stat-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+  }
+
+  .stat-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .view-toggle-btn {
+    font-size: 0.875rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .view-toggle-btn span {
+    display: none;
+  }
+
+  .view-toggle-btn i {
+    margin: 0;
+  }
+
+  /* Stack table columns on very small screens */
+  .collection-table {
+    font-size: 0.8125rem;
+  }
+
+  .collection-table thead th:nth-child(n+5),
+  .collection-table tbody td:nth-child(n+5) {
+    display: none;
+  }
+}
+
+/* ========================================
+   Loading State
+   ======================================== */
+
+.collection-loading {
+  width: 100%;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.collection-loading .spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========================================
+   Accessibility
+   ======================================== */
+
+/* Focus indicators */
+.form-input:focus-visible,
+.form-select:focus-visible,
+.view-toggle-btn:focus-visible,
+.slider:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .slider::-webkit-slider-thumb,
+  .slider::-moz-range-thumb {
+    transition: none;
+  }
+
+  .collection-stats-grid .stat-card:hover {
+    transform: none;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .form-input,
+  .form-select,
+  .view-toggle-btn {
+    border-width: 2px;
+  }
+
+  .collection-table tbody tr {
+    border-bottom-width: 2px;
+  }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
+
+@media print {
+  .collection-page {
+    padding: 0;
+  }
+
+  .page-actions,
+  .collection-controls,
+  .view-toggle-group,
+  #cardSizeSliderGroup {
+    display: none;
+  }
+
+  .collection-stats-grid .stat-card {
+    break-inside: avoid;
+  }
+
+  .collection-table {
+    break-inside: avoid;
+  }
+
+  .collection-table tbody tr {
+    break-inside: avoid;
+  }
+}

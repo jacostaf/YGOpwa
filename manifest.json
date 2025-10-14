@@ -1,11 +1,11 @@
 {
-  "name": "YGO Ripper UI v2",
-  "short_name": "YGO Ripper",
-  "description": "Cross-platform Yu-Gi-Oh card price checker and pack ripper with robust voice recognition",
+  "name": "VoxRip - Yu-Gi-Oh Card Manager",
+  "short_name": "VoxRip",
+  "description": "Modern PWA for Yu-Gi-Oh card management with voice recognition, price checking, pack opening, and collection tracking. Features 7 themes, offline support, and multiplatform compatibility.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#ffd700",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
   "orientation": "portrait-primary",
   "icons": [
     {

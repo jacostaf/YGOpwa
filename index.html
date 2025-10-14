@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="description" content="Cross-platform Yu-Gi-Oh card price checker and pack ripper with robust voice recognition">
-    <meta name="theme-color" content="#ffd700">
+    <meta name="description" content="Modern PWA for Yu-Gi-Oh card management with voice recognition, price checking, pack opening, and collection tracking. Features 7 themes, offline support, and multiplatform compatibility.">
+    <meta name="theme-color" content="#0a0a0a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="YGO Ripper">
-    
-    <title>YGO Ripper UI v2 - Card Price Checker & Pack Ripper</title>
+    <meta name="apple-mobile-web-app-title" content="VoxRip">
+
+    <title>VoxRip - Yu-Gi-Oh Card Manager</title>
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -24,17 +24,33 @@
     <link rel="stylesheet" href="src/css/main.css">
     <link rel="stylesheet" href="src/css/components.css">
     <link rel="stylesheet" href="src/css/responsive.css">
-    
+    <link rel="stylesheet" href="src/css/utilities.css">
+    <link rel="stylesheet" href="src/css/themes.css">
+    <link rel="stylesheet" href="src/css/layouts.css">
+    <link rel="stylesheet" href="src/css/sidebar.css">
+    <link rel="stylesheet" href="src/css/settings.css">
+    <link rel="stylesheet" href="src/css/theme-settings.css">
+    <link rel="stylesheet" href="src/css/collection.css">
+    <link rel="stylesheet" href="src/css/pack-opening-compact.css">
+    <link rel="stylesheet" href="src/css/animations.css">
+    <link rel="stylesheet" href="src/css/accessibility.css">
+
     <!-- Preload critical resources -->
     <link rel="preload" href="src/js/app.js" as="script" crossorigin="anonymous">
     <link rel="preload" href="src/js/voice/VoiceEngine.js" as="script" crossorigin="anonymous">
+
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
+    <!-- Skip to Content Link (for keyboard navigation) -->
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
     <!-- App Loading Screen -->
     <div id="loading-screen" class="loading-screen">
         <div class="loading-content">
             <div class="app-logo">
-                <h1>YGO Ripper UI v2</h1>
+                <h1>VoxRip</h1>
                 <div class="loading-spinner"></div>
             </div>
             <p class="loading-text">Initializing application...</p>
@@ -46,43 +62,82 @@
 
     <!-- Main Application -->
     <div id="app" class="app hidden">
-        <!-- App Header -->
-        <header class="app-header">
-            <div class="header-content">
-                <h1 class="app-title">
-                    <span class="title-icon">🃏</span>
-                    YGO Ripper UI v2
-                </h1>
-                <div class="header-actions">
-                    <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Open Settings">
-                        <span>⚙️</span>
-                    </button>
-                    <button id="help-btn" class="icon-btn" title="Help" aria-label="Open Help">
-                        <span>❓</span>
-                    </button>
+        <!-- Mobile Sidebar Toggle -->
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar navigation">
+            <i data-lucide="menu"></i>
+        </button>
+
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+            <!-- Sidebar Header -->
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <span>🃏</span>
+                    <span>VoxRip</span>
                 </div>
             </div>
-        </header>
 
-        <!-- Navigation Tabs -->
-        <nav class="tab-navigation" role="tablist">
-            <button class="tab-btn" data-tab="price-checker" role="tab" aria-selected="false" aria-controls="price-checker-panel">
-                <span class="tab-icon">💰</span>
-                <span class="tab-label">Price Checker</span>
-            </button>
-            <button class="tab-btn active" data-tab="pack-ripper" role="tab" aria-selected="true" aria-controls="pack-ripper-panel">
-                <span class="tab-icon">📦</span>
-                <span class="tab-label">Pack Ripper</span>
-            </button>
-        </nav>
+            <!-- Sidebar Navigation (will be populated by Sidebar.js in Phase 4) -->
+            <nav class="sidebar-nav" id="sidebar-nav" role="menu" aria-label="Navigation menu">
+                <!-- Navigation items will be added in Phase 4 -->
+            </nav>
+
+            <!-- Sidebar Footer -->
+            <div class="sidebar-footer">
+                <span id="app-version">v2.0.0</span>
+            </div>
+        </aside>
+
+        <!-- Sidebar Overlay for mobile -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
         <!-- Main Content Area -->
-        <main class="main-content">
-            <!-- Price Checker Tab -->
-            <section id="price-checker-panel" class="tab-panel" role="tabpanel" aria-labelledby="price-checker-tab">
-                <div class="panel-content">
-                    <div class="card section-card">
-                        <h2>Card Price Checker</h2>
+        <main class="main-content" id="main-content" role="main" aria-label="Main content">
+            <!-- Page Header -->
+            <header class="page-header" id="page-header" role="banner">
+                <div class="page-header-title">
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+                <div class="page-header-actions" id="page-header-actions">
+                    <!-- Page-specific actions will be added here -->
+                </div>
+            </header>
+
+            <!-- Page Container (dynamic content) -->
+            <div class="page-container" id="page-container">
+                <!-- Content will be dynamically loaded by router -->
+                <div class="page-content">
+                    <div class="card section-card glass-card">
+                        <h2>Welcome to VoxRip</h2>
+                        <p>The page content will be loaded dynamically by the router system (Phase 5).</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <div class="status-item">
+                <span id="app-status">Ready</span>
+            </div>
+            <div class="status-item">
+                <span id="connection-status">Online</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- OLD CONTENT PRESERVED BELOW FOR REFERENCE - TO BE PORTED IN LATER PHASES -->
+    <!--
+    PRICE CHECKER CONTENT - Will be ported to PriceCheckerPage.js in Phase 8
+    PACK RIPPER CONTENT - Will be ported to PackOpeningPage.js in Phase 7
+    VOICE TRAINING CONTENT - Will be ported to VoiceTrainingPage.js in Phase 9
+    -->
+    <div id="legacy-content" style="display: none;">
+        <!-- Price Checker Tab (OLD - for reference) -->
+        <section id="price-checker-panel-old" class="tab-panel" role="tabpanel">
+            <div class="panel-content">
+                <div class="card section-card">
+                    <h2>Card Price Checker</h2>
                         <form id="price-form" class="price-form">
                             <div class="form-grid">
                                 <div class="form-group">
@@ -407,21 +462,7 @@
             </section>
 
 
-        </main>
-
-        <!-- Status Bar -->
-        <footer class="status-bar">
-            <div class="status-item">
-                <span id="app-status">Ready</span>
-            </div>
-            <div class="status-item">
-                <span id="connection-status">Online</span>
-            </div>
-            <div class="status-item">
-                <span id="app-version">v2.1.0</span>
-            </div>
-        </footer>
-    </div>
+    </div> <!-- End legacy-content -->
 
     <!-- Floating Voice Submenu (visible only during voice recognition) -->
     <div id="floating-voice-submenu" class="floating-voice-submenu hidden">
@@ -459,6 +500,95 @@
                     });
             });
         }
+    </script>
+
+    <!-- Router & Sidebar Integration (Phase 5) -->
+    <script type="module">
+        import Router from './src/utils/Router.js';
+        import Sidebar from './src/components/Sidebar.js';
+
+        // Import all page components
+        import DashboardPage from './src/pages/DashboardPage.js';
+        import PriceCheckerPage from './src/pages/PriceCheckerPage.js';
+        import PackOpeningPage from './src/pages/PackOpeningPage.js';
+        import CollectionPage from './src/pages/CollectionPage.js';
+        import VoiceTrainingPage from './src/pages/VoiceTrainingPage.js';
+        import AchievementsPage from './src/pages/AchievementsPage.js';
+        import SettingsPage from './src/pages/SettingsPage.js';
+        import ThemeSettingsPage from './src/pages/ThemeSettingsPage.js';
+
+        // Initialize router and sidebar when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Router
+            const router = new Router({
+                defaultRoute: 'dashboard',
+                notFoundRoute: 'dashboard'
+            });
+
+            const pageContainer = document.getElementById('page-container');
+            const pageTitle = document.getElementById('page-title');
+
+            router.initialize(pageContainer, pageTitle);
+
+            // Register all routes
+            router.register('dashboard', DashboardPage);
+            router.register('pack-opening', PackOpeningPage);
+            router.register('price-checker', PriceCheckerPage);
+            router.register('collection', CollectionPage);
+            router.register('training', VoiceTrainingPage);
+            router.register('achievements', AchievementsPage);
+            router.register('settings', SettingsPage);
+            router.register('theme', ThemeSettingsPage);
+
+            console.log('Router initialized with', router.getRoutes().length, 'routes');
+
+            // Initialize sidebar component FIRST
+            const sidebar = new Sidebar({
+                container: document.getElementById('sidebar'),
+                defaultActive: 'dashboard',
+                onNavigate: (navId) => {
+                    console.log('Sidebar navigation to:', navId);
+                    // Use router to navigate
+                    router.navigate(navId);
+                }
+            });
+
+            // Listen for route changes to update sidebar active state
+            router.addEventListener('route:change', (data) => {
+                if (sidebar) {
+                    sidebar.setActive(data.route);
+                }
+            });
+
+            // Mobile sidebar toggle button
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', () => {
+                    sidebar.toggle();
+                });
+            }
+
+            // Sidebar overlay click to close
+            const sidebarOverlay = document.getElementById('sidebar-overlay');
+            if (sidebarOverlay) {
+                sidebarOverlay.addEventListener('click', () => {
+                    sidebar.close();
+                });
+            }
+
+            // Close sidebar on escape key (mobile)
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && sidebar.isOpen && sidebar.isMobile) {
+                    sidebar.close();
+                }
+            });
+
+            // Store instances globally for debugging
+            window.router = router;
+            window.sidebar = sidebar;
+
+            console.log('Router and Sidebar initialized successfully');
+        });
     </script>
 </body>
 </html>

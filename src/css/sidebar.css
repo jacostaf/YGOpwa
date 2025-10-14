@@ -1,0 +1,396 @@
+/**
+ * sidebar.css
+ *
+ * Styles for the VoxRip sidebar navigation component
+ * Features:
+ * - Fixed sidebar layout (240px width)
+ * - Mobile drawer with overlay
+ * - Glassmorphism styling
+ * - Active state animations
+ * - Smooth transitions
+ */
+
+/* ===== SIDEBAR CONTAINER ===== */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 100vh;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: transform 0.3s ease;
+}
+
+/* Mobile: Hidden by default */
+.sidebar.mobile {
+  transform: translateX(-100%);
+}
+
+.sidebar.mobile.open {
+  transform: translateX(0);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Desktop: Always visible */
+@media (min-width: 768px) {
+  .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar.mobile {
+    transform: translateX(0);
+  }
+}
+
+/* ===== SIDEBAR HEADER ===== */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  min-height: 80px;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sidebar-logo-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--accent-color);
+}
+
+.sidebar-logo-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-color), var(--text-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.sidebar-close {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.sidebar-close:hover {
+  background: var(--hover-bg);
+  color: var(--text-color);
+}
+
+.sidebar-close i {
+  width: 20px;
+  height: 20px;
+}
+
+/* Show close button on mobile */
+@media (max-width: 767px) {
+  .sidebar-close {
+    display: block;
+  }
+}
+
+/* ===== SIDEBAR NAVIGATION ===== */
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0.5rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar */
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* ===== NAV ITEMS ===== */
+.sidebar-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.25rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  width: 100%;
+}
+
+.sidebar-nav-item:hover {
+  background: var(--hover-bg);
+  color: var(--text-color);
+  transform: translateX(2px);
+}
+
+.sidebar-nav-item.active {
+  background: var(--accent-color);
+  color: white;
+  font-weight: 600;
+}
+
+.sidebar-nav-item.active .sidebar-nav-icon {
+  color: white;
+}
+
+.sidebar-nav-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.sidebar-nav-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Active indicator */
+.sidebar-nav-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  background: white;
+  border-radius: 0 2px 2px 0;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+/* Hover icon rotation effect */
+.sidebar-nav-item:hover .sidebar-nav-icon {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.sidebar-nav-item.active .sidebar-nav-icon {
+  transform: scale(1.05);
+}
+
+/* Focus states for accessibility */
+.sidebar-nav-item:focus {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.sidebar-nav-item:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ===== SIDEBAR FOOTER ===== */
+.sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.sidebar-version {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-version-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-version-text {
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+.sidebar-credits {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-align: center;
+  opacity: 0.7;
+}
+
+/* ===== MOBILE OVERLAY ===== */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+body.sidebar-open .sidebar-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+
+/* Tablet: Slightly smaller sidebar */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .sidebar {
+    width: 220px;
+  }
+
+  .sidebar-nav-item {
+    padding: 0.75rem 0.875rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* Large desktop: Optional wider sidebar */
+@media (min-width: 1920px) {
+  .sidebar {
+    width: 260px;
+  }
+
+  .sidebar-nav-item {
+    padding: 1rem 1.25rem;
+  }
+}
+
+/* Small mobile: Compact spacing */
+@media (max-width: 375px) {
+  .sidebar-header {
+    padding: 1.25rem 0.875rem;
+  }
+
+  .sidebar-nav {
+    padding: 0.75rem 0.375rem;
+  }
+
+  .sidebar-nav-item {
+    padding: 0.75rem 0.875rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* ===== ANIMATIONS ===== */
+
+/* Fade in animation for sidebar on page load */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sidebar {
+  animation: fadeIn 0.4s ease;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar-nav-item,
+  .sidebar-nav-icon,
+  .sidebar-nav-indicator,
+  .sidebar-overlay,
+  .sidebar.mobile {
+    transition: none;
+    animation: none;
+  }
+
+  .sidebar-nav-item:hover {
+    transform: none;
+  }
+}
+
+/* ===== DARK MODE ENHANCEMENTS ===== */
+
+/* Additional glassmorphism for dark themes */
+@media (prefers-color-scheme: dark) {
+  .sidebar {
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  .sidebar-footer {
+    background: rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ===== HIGH CONTRAST MODE ===== */
+@media (prefers-contrast: high) {
+  .sidebar {
+    border-right: 2px solid var(--border-color);
+  }
+
+  .sidebar-nav-item {
+    border: 1px solid transparent;
+  }
+
+  .sidebar-nav-item:focus {
+    border-color: var(--accent-color);
+  }
+
+  .sidebar-nav-item.active {
+    border: 2px solid var(--accent-color);
+  }
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  .sidebar {
+    display: none;
+  }
+}

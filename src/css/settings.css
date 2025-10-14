@@ -1,0 +1,468 @@
+/**
+ * Settings Page Styles
+ * Glassmorphism styling for the Settings page and related components
+ */
+
+/* Settings Page Container */
+.settings-page {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Page Header */
+.settings-page .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.settings-page .page-title-section h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
+}
+
+.settings-page .page-subtitle {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.settings-page .unsaved-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(234, 179, 8, 0.2);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 8px;
+  color: var(--warning-color, #fbbf24);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* Settings Section */
+.settings-section {
+  margin-bottom: 2rem;
+  padding: 2rem;
+  border-radius: 16px;
+}
+
+.settings-section .section-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-section .section-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
+}
+
+.settings-section .section-description {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* Settings List */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Setting Item */
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 2rem;
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setting-label {
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.setting-description {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.setting-control {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Slider Controls */
+.setting-slider {
+  width: 200px;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(100, 100, 100, 0.3);
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-color, #60a5fa);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.setting-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+.setting-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-color, #60a5fa);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.setting-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+.setting-slider:focus {
+  outline: 2px solid var(--accent-color, #60a5fa);
+  outline-offset: 2px;
+}
+
+.slider-value {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  min-width: 50px;
+  text-align: right;
+}
+
+/* Number Input Controls */
+.setting-input-number {
+  width: 80px;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.setting-input-number:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.setting-input-number:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-color, #60a5fa);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+}
+
+.input-unit {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* Select Controls */
+.setting-select {
+  min-width: 150px;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px;
+}
+
+.setting-select:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.setting-select:focus {
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-color, #60a5fa);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+}
+
+.setting-select option {
+  background: var(--bg-secondary, #1a1a1a);
+  color: var(--text-primary);
+  padding: 0.5rem;
+}
+
+/* Settings Actions */
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  margin-bottom: 2rem;
+  border-radius: 16px;
+}
+
+.settings-actions .btn {
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.settings-actions .btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.settings-actions .btn:not(.btn-disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Settings Info Card */
+.settings-info-card {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  border-radius: 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.settings-info-card .info-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--info-color, #60a5fa);
+}
+
+.settings-info-card .info-content h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.75rem 0;
+}
+
+.settings-info-card .info-content ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.settings-info-card .info-content ul li {
+  margin-bottom: 0.5rem;
+}
+
+.settings-info-card .info-content ul li strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 1rem;
+  }
+
+  .settings-page .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-page .page-title-section h1 {
+    font-size: 1.5rem;
+  }
+
+  .settings-section {
+    padding: 1.5rem;
+  }
+
+  .settings-section .section-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .setting-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 0;
+  }
+
+  .setting-control {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .setting-slider {
+    flex: 1;
+    max-width: 200px;
+  }
+
+  .setting-select {
+    width: 100%;
+  }
+
+  .settings-actions {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .settings-actions .btn {
+    width: 100%;
+  }
+
+  .settings-info-card {
+    flex-direction: column;
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-page .page-title-section h1 {
+    font-size: 1.25rem;
+  }
+
+  .settings-section {
+    padding: 1rem;
+  }
+
+  .setting-label {
+    font-size: 0.95rem;
+  }
+
+  .setting-description {
+    font-size: 0.8rem;
+  }
+
+  .slider-value {
+    font-size: 0.875rem;
+  }
+}
+
+/* Dark Mode Adjustments */
+body[data-theme="light"] .setting-slider {
+  background: rgba(200, 200, 200, 0.4);
+}
+
+body[data-theme="light"] .setting-input-number,
+body[data-theme="light"] .setting-select {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+body[data-theme="light"] .setting-input-number:hover,
+body[data-theme="light"] .setting-select:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+body[data-theme="light"] .setting-input-number:focus,
+body[data-theme="light"] .setting-select:focus {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+body[data-theme="light"] .settings-info-card {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+/* Animation for unsaved indicator */
+@keyframes pulse-warning {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.unsaved-indicator {
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+/* Accessibility Focus Styles */
+.setting-item:focus-within {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+/* Loading State */
+.settings-page.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
