@@ -39,12 +39,9 @@ export default class ThemeSettingsPage {
 
     return `
       <div class="page-content theme-settings-page">
-        <!-- Page Header -->
-        <div class="page-header">
-          <div class="page-title-section">
-            <h1><i data-lucide="palette"></i> Theme Settings</h1>
-            <p class="page-subtitle">Choose your preferred color theme for the VoxRip interface</p>
-          </div>
+        <!-- Page Intro -->
+        <div class="theme-intro">
+          <p class="intro-subtitle">Choose your preferred color theme for the VoxRip interface</p>
         </div>
 
         <!-- Theme Grid -->
