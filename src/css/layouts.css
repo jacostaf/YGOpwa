@@ -120,7 +120,7 @@
   backdrop-filter: blur(var(--blur-md, 8px));
   -webkit-backdrop-filter: blur(var(--blur-md, 8px));
   border-bottom: 1px solid var(--border-primary, #262626);
-  padding: var(--spacing-lg, 1.5rem) var(--spacing-xl, 2rem);
+  padding: var(--spacing-lg, 1.5rem) 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -132,6 +132,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-md, 1rem);
+  padding-left: var(--spacing-xl, 2rem);
 }
 
 .page-header-title h1 {
@@ -151,6 +152,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm, 0.5rem);
+  padding-right: var(--spacing-xl, 2rem);
 }
 
 /* ================================================
@@ -250,8 +252,16 @@
   }
 
   .page-header {
-    padding: var(--spacing-md, 1rem) var(--spacing-lg, 1.5rem);
+    padding: var(--spacing-md, 1rem) 0;
     min-height: 64px;
+  }
+
+  .page-header-title {
+    padding-left: var(--spacing-lg, 1.5rem);
+  }
+
+  .page-header-actions {
+    padding-right: var(--spacing-lg, 1.5rem);
   }
 
   .page-header-title h1 {
@@ -283,17 +293,21 @@
 
   /* Adjust page header for mobile toggle */
   .page-header {
-    padding-left: calc(44px + var(--spacing-lg, 1.5rem) + var(--spacing-md, 1rem));
-    padding-right: var(--spacing-md, 1rem);
+    padding: var(--spacing-md, 1rem) 0;
     min-height: 64px;
+  }
+
+  .page-header-title {
+    padding-left: calc(44px + var(--spacing-lg, 1.5rem) + var(--spacing-md, 1rem));
+  }
+
+  .page-header-actions {
+    padding-right: var(--spacing-md, 1rem);
+    gap: var(--spacing-xs, 0.25rem);
   }
 
   .page-header-title h1 {
     font-size: var(--text-lg, 1.125rem);
-  }
-
-  .page-header-actions {
-    gap: var(--spacing-xs, 0.25rem);
   }
 
   /* Reduce page container padding */
@@ -314,7 +328,14 @@
 /* Small mobile (< 480px) */
 @media (max-width: 479px) {
   .page-header {
+    padding: var(--spacing-sm, 0.5rem) 0;
+  }
+
+  .page-header-title {
     padding-left: calc(44px + var(--spacing-md, 1rem) + var(--spacing-sm, 0.5rem));
+  }
+
+  .page-header-actions {
     padding-right: var(--spacing-sm, 0.5rem);
   }
 
