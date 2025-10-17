@@ -34,7 +34,7 @@
 
 .sidebar.mobile.open {
   transform: translateX(0);
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
 }
 
 /* Desktop: Always visible */
@@ -166,8 +166,7 @@
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease,
-              box-shadow 0.3s ease;
+  transition: all 0.2s ease;
   overflow: hidden;
   width: 100%;
 }
@@ -176,7 +175,6 @@
   background: var(--sidebar-hover);
   color: var(--text-primary);
   transform: translateX(2px);
-  box-shadow: var(--shadow-sm);
 }
 
 .sidebar-nav-item.active {
@@ -401,7 +399,7 @@ body.sidebar-open .sidebar-overlay {
   }
 
   .sidebar-nav-item.active {
-    border: 1px solid var(--accent-primary);
+    border: 2px solid var(--accent-primary);
   }
 }
 

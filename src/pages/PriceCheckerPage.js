@@ -44,7 +44,7 @@ export default class PriceCheckerPage {
     return `
       <div class="page-content">
         <!-- Price Checker Form Card -->
-        <div class="card section-card glass-card">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6 mb-6">
           <h2>
             <i data-lucide="dollar-sign" style="width: 24px; height: 24px; vertical-align: middle;"></i>
             Card Price Checker
@@ -156,7 +156,7 @@ export default class PriceCheckerPage {
 
         <!-- Price Results Card (initially hidden) -->
         <div id="price-results" class="price-results hidden">
-          <div class="card section-card glass-card">
+          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6">
             <div class="section-header">
               <h3>
                 <i data-lucide="trending-up" style="width: 22px; height: 22px; vertical-align: middle;"></i>

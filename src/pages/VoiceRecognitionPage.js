@@ -53,7 +53,7 @@ export default class VoiceRecognitionPage {
         </div>
 
         <!-- Voice Engine Status -->
-        <div class="glass-card" style="margin-bottom: 2rem;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="margin-bottom: 2rem;">
           <div class="card-header">
             <h2 class="card-title">
               <i data-lucide="activity" style="width: 20px; height: 20px;"></i>
@@ -91,7 +91,7 @@ export default class VoiceRecognitionPage {
         </div>
 
         <!-- Voice Controls -->
-        <div class="glass-card" style="margin-bottom: 2rem;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="margin-bottom: 2rem;">
           <div class="card-header">
             <h2 class="card-title">
               <i data-lucide="mic-2" style="width: 20px; height: 20px;"></i>
@@ -132,7 +132,7 @@ export default class VoiceRecognitionPage {
         </div>
 
         <!-- Live Transcription -->
-        <div class="glass-card" style="margin-bottom: 2rem;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="margin-bottom: 2rem;">
           <div class="card-header">
             <h2 class="card-title">
               <i data-lucide="type" style="width: 20px; height: 20px;"></i>
@@ -153,7 +153,7 @@ export default class VoiceRecognitionPage {
         </div>
 
         <!-- Recognition Results -->
-        <div class="glass-card" style="margin-bottom: 2rem;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="margin-bottom: 2rem;">
           <div class="card-header">
             <h2 class="card-title">
               <i data-lucide="check-circle" style="width: 20px; height: 20px;"></i>
@@ -171,7 +171,7 @@ export default class VoiceRecognitionPage {
         </div>
 
         <!-- Quick Actions -->
-        <div class="glass-card">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div class="card-header">
             <h2 class="card-title">
               <i data-lucide="zap" style="width: 20px; height: 20px;"></i>

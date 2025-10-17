@@ -51,12 +51,12 @@ export default class DashboardPage {
     return `
       <div class="page-content dashboard-page">
         <!-- Main Stats Grid -->
-        <section class="dashboard-main-stats grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" id="dashboard-main-stats" role="region" aria-label="Main statistics">
+        <section class="dashboard-main-stats grid gap-6 mb-8" id="dashboard-main-stats" role="region" aria-label="Main statistics">
           <!-- Stats cards will be inserted here -->
         </section>
 
         <!-- Secondary Grid (Activity + Quick Stats) -->
-        <div class="dashboard-secondary-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="dashboard-secondary-grid grid gap-6">
           <!-- Recent Activity Section -->
           <section class="dashboard-activity bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6" role="region" aria-label="Recent activity">
             <div class="section-header flex items-center justify-between mb-6">
@@ -74,7 +74,7 @@ export default class DashboardPage {
               <h2 class="text-lg font-semibold text-white">Quick Stats</h2>
               <i data-lucide="TrendingUp" class="w-5 h-5 text-neutral-500" aria-hidden="true"></i>
             </div>
-            <div class="quick-stats-grid grid grid-cols-2 gap-4" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
+            <div class="quick-stats-grid grid gap-4" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
               <!-- Quick stats will be inserted here -->
             </div>
           </section>
@@ -326,7 +326,7 @@ export default class DashboardPage {
       if (this.container) {
         this.container.innerHTML = `
           <div class="page-content">
-            <div class="card section-card glass-card error-card">
+            <div class="error-card bg-neutral-900/40 backdrop-blur-sm border border-red-800/50 rounded-xl p-6">
               <h2>⚠️ Failed to load Dashboard</h2>
               <p>${error.message || 'Unknown error occurred'}</p>
               <p class="text-sm text-neutral-400 mt-2">Please refresh the page or try again later.</p>

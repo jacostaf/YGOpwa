@@ -1,0 +1,12 @@
+CSS Variable Migration - Baseline State
+Date: 2025-10-16 17:50:28
+Backup Location: backups/css_migration_20251016_174929
+
+Deprecated var(--color-*) Occurrences:
+- utilities.css: 9
+- main.css: 18
+- components.css: 306
+- sidebar.css: 0
+- themes.css: 0
+
+TOTAL TO MIGRATE: 333

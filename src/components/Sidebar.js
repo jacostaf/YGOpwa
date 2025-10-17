@@ -67,7 +67,10 @@ export default class Sidebar {
       <div class="sidebar-header">
         <div class="sidebar-logo">
           <i data-lucide="sparkles" class="sidebar-logo-icon"></i>
-          <span class="sidebar-logo-text">VoxRip</span>
+          <div class="sidebar-branding">
+            <span class="sidebar-logo-text">VoxRip</span>
+            <span class="sidebar-subtitle">Voice-Powered Collection Toolkit</span>
+          </div>
         </div>
         <button class="sidebar-close" aria-label="Close sidebar">
           <i data-lucide="x"></i>

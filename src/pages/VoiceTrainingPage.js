@@ -47,18 +47,12 @@ export default class VoiceTrainingPage {
   render() {
     return `
       <div class="page-content voice-training-page">
-        <!-- Page Header -->
-        <div class="page-header">
-          <div class="page-title-section">
-            <h1><i data-lucide="headphones"></i> Voice Training</h1>
-            <p class="page-subtitle">Manage and analyze your voice recognition patterns</p>
-          </div>
-          <div class="page-actions">
-            <button class="btn btn-secondary btn-refresh" title="Refresh patterns">
-              <i data-lucide="refresh-cw"></i>
-              Refresh
-            </button>
-          </div>
+        <!-- Page Actions -->
+        <div class="page-actions" style="display: flex; justify-content: flex-end; margin-bottom: 24px;">
+          <button class="btn btn-secondary btn-refresh" title="Refresh patterns">
+            <i data-lucide="refresh-cw"></i>
+            Refresh
+          </button>
         </div>
 
         <!-- Training Stats Grid -->
@@ -70,7 +64,7 @@ export default class VoiceTrainingPage {
         </div>
 
         <!-- Search and Filter Section -->
-        <div class="search-filter-section glass-card">
+        <div class="search-filter-section bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div class="search-box">
             <i data-lucide="search"></i>
             <input
@@ -124,7 +118,7 @@ export default class VoiceTrainingPage {
    */
   renderStatsCard(title, value, icon, colorClass) {
     return `
-      <div class="stat-card glass-card stat-${colorClass}">
+      <div class="stat-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-${colorClass}">
         <div class="stat-icon">
           <i data-lucide="${icon}"></i>
         </div>
@@ -150,7 +144,7 @@ export default class VoiceTrainingPage {
       .slice(0, 5);
 
     return `
-      <div class="training-analytics glass-card">
+      <div class="training-analytics bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
         <h2><i data-lucide="bar-chart-2"></i> Training Analytics</h2>
 
         <div class="analytics-grid">
@@ -236,7 +230,7 @@ export default class VoiceTrainingPage {
    */
   renderHelpSection() {
     return `
-      <div class="training-help glass-card">
+      <div class="training-help bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
         <h3><i data-lucide="help-circle"></i> How Voice Training Works</h3>
         <div class="help-content">
           <div class="help-item">
@@ -541,7 +535,7 @@ export default class VoiceTrainingPage {
     modalOverlay.className = 'modal-overlay';
 
     modalOverlay.innerHTML = `
-      <div class="modal glass-card">
+      <div class="modal bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
         <div class="modal-header">
           <h3><i data-lucide="edit-2"></i> Edit Pattern</h3>
           <button class="modal-close">&times;</button>

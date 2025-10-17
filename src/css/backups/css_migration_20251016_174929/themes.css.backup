@@ -25,9 +25,9 @@
   --bg-tertiary: #262626;          /* neutral-800 */
 
   /* Card/Surface colors (with transparency for glassmorphism) */
-  --card-bg: rgba(23, 23, 23, 0.4);       /* neutral-900/40 */
-  --card-bg-hover: rgba(23, 23, 23, 0.6);  /* neutral-900/60 */
-  --card-border: rgba(38, 38, 38, 0.5);    /* neutral-800/50 - matches mockup */
+  --card-bg: rgba(23, 23, 23, 0.4);      /* neutral-900/40 */
+  --card-bg-hover: rgba(23, 23, 23, 0.6); /* neutral-900/60 */
+  --card-border: rgba(38, 38, 38, 0.5);   /* neutral-800/50 */
 
   /* Text colors */
   --text-primary: #ffffff;         /* white */
@@ -45,9 +45,9 @@
   --gradient-via: #171717;         /* neutral-900 */
   --gradient-to: #0a0a0a;          /* neutral-950 */
 
-  /* Border colors - semi-transparent to match mockup */
-  --border-primary: rgba(38, 38, 38, 0.5);    /* neutral-800/50 - matches mockup */
-  --border-secondary: rgba(115, 115, 115, 0.5);  /* neutral-500/50 - matches mockup */
+  /* Border colors */
+  --border-primary: #262626;       /* neutral-800 */
+  --border-secondary: #404040;     /* neutral-700 */
 
   /* Sidebar colors */
   --sidebar-bg: rgba(23, 23, 23, 0.8);
@@ -86,30 +86,11 @@
   --radius-2xl: 1.5rem;       /* 24px */
   --radius-full: 9999px;      /* Full rounded */
 
-  /* Shadows - Simple single-layer system matching mockup */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.15);
-  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
-  --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
-  --shadow-2xl: 0 30px 60px -15px rgba(0, 0, 0, 0.3);
-
-  /* Colored accent shadows (simplified single-layer) */
-  --shadow-accent-sm: 0 2px 4px 0 rgba(115, 115, 115, 0.15);
-  --shadow-accent-md: 0 4px 8px -2px rgba(115, 115, 115, 0.2);
-  --shadow-accent-lg: 0 8px 16px -4px rgba(115, 115, 115, 0.25);
-
-  /* Inner shadows for depth */
-  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
-  --shadow-inner-lg: inset 0 3px 6px 0 rgba(0, 0, 0, 0.1);
-
-  /* Focus/Glow effects */
-  --shadow-glow:
-    0 0 0 3px rgba(115, 115, 115, 0.15),
-    0 2px 6px 0 rgba(0, 0, 0, 0.1);
-
-  --shadow-glow-strong:
-    0 0 0 4px rgba(115, 115, 115, 0.2),
-    0 4px 12px 0 rgba(115, 115, 115, 0.15);
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 
   /* Glassmorphism blur */
   --blur-sm: 4px;
@@ -176,17 +157,14 @@ body {
   border-radius: var(--radius-lg);
   backdrop-filter: blur(var(--blur-md));
   -webkit-backdrop-filter: blur(var(--blur-md));
-  box-shadow: none;
   transition: background var(--transition-fast),
               border-color var(--transition-fast),
-              transform var(--transition-fast),
-              box-shadow var(--transition-normal);
+              transform var(--transition-fast);
 }
 
 .glass-card:hover {
   background: var(--card-bg-hover);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
 }
 
 /* ========================================
@@ -201,25 +179,17 @@ body {
   padding: var(--spacing-sm) var(--spacing-md);
   font-weight: var(--font-medium);
   cursor: pointer;
-  box-shadow: var(--shadow-accent-sm);
   transition: background var(--transition-fast),
-              transform var(--transition-fast),
-              box-shadow var(--transition-fast);
+              transform var(--transition-fast);
 }
 
 .btn-primary:hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-accent-md);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: var(--shadow-accent-sm);
-}
-
-.btn-primary:focus-visible {
-  box-shadow: var(--shadow-glow);
 }
 
 .btn-secondary {
@@ -230,27 +200,14 @@ body {
   padding: var(--spacing-sm) var(--spacing-md);
   font-weight: var(--font-medium);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
   transition: background var(--transition-fast),
               color var(--transition-fast),
-              border-color var(--transition-fast),
-              box-shadow var(--transition-fast),
-              transform var(--transition-fast);
+              border-color var(--transition-fast);
 }
 
 .btn-secondary:hover {
   background: var(--accent-primary);
   color: var(--text-primary);
-  box-shadow: var(--shadow-accent-sm);
-  transform: translateY(-1px);
-}
-
-.btn-secondary:active {
-  transform: translateY(0);
-}
-
-.btn-secondary:focus-visible {
-  box-shadow: var(--shadow-glow);
 }
 
 /* ========================================
@@ -269,10 +226,8 @@ textarea {
   color: var(--text-primary);
   padding: var(--spacing-sm) var(--spacing-md);
   font-size: var(--text-base);
-  box-shadow: var(--shadow-inner);
   transition: background var(--transition-fast),
-              border-color var(--transition-fast),
-              box-shadow var(--transition-fast);
+              border-color var(--transition-fast);
 }
 
 .input:focus,
@@ -282,7 +237,6 @@ textarea:focus {
   outline: none;
   border-color: var(--accent-primary);
   background: var(--card-bg-hover);
-  box-shadow: var(--shadow-glow);
 }
 
 .input::placeholder,
@@ -398,120 +352,23 @@ textarea {
 
 /* Light theme specific adjustments */
 body[data-theme="light"] {
-  /* Light theme gets softer, more diffused shadows */
-  --shadow-sm:
-    0 1px 2px 0 rgba(0, 0, 0, 0.08),
-    0 1px 3px 0 rgba(0, 0, 0, 0.05);
-
-  --shadow-md:
-    0 2px 4px -1px rgba(0, 0, 0, 0.15),
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 1px 8px -1px rgba(0, 0, 0, 0.06);
-
-  --shadow-lg:
-    0 4px 6px -2px rgba(0, 0, 0, 0.15),
-    0 10px 15px -3px rgba(0, 0, 0, 0.12),
-    0 2px 20px -2px rgba(0, 0, 0, 0.08);
-
-  --shadow-xl:
-    0 10px 10px -5px rgba(0, 0, 0, 0.1),
-    0 20px 25px -5px rgba(0, 0, 0, 0.15),
-    0 8px 40px -8px rgba(0, 0, 0, 0.12);
+  /* Light theme gets slightly different shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.15), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
 }
 
-/* Blue theme - blue-tinted accent shadows */
-body[data-theme="blue"] {
-  --shadow-accent-sm:
-    0 1px 3px 0 rgba(59, 130, 246, 0.25),
-    0 1px 2px 0 rgba(0, 0, 0, 0.2);
-
-  --shadow-accent-md:
-    0 4px 8px -2px rgba(59, 130, 246, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.25);
-
-  --shadow-accent-lg:
-    0 8px 16px -4px rgba(59, 130, 246, 0.35),
-    0 4px 8px -2px rgba(0, 0, 0, 0.3);
-
-  --shadow-glow:
-    0 0 0 3px rgba(59, 130, 246, 0.2),
-    0 2px 8px 0 rgba(59, 130, 246, 0.15);
-}
-
-/* Violet theme - violet-tinted accent shadows */
-body[data-theme="violet"] {
-  --shadow-accent-sm:
-    0 1px 3px 0 rgba(139, 92, 246, 0.25),
-    0 1px 2px 0 rgba(0, 0, 0, 0.2);
-
-  --shadow-accent-md:
-    0 4px 8px -2px rgba(139, 92, 246, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.25);
-
-  --shadow-accent-lg:
-    0 8px 16px -4px rgba(139, 92, 246, 0.35),
-    0 4px 8px -2px rgba(0, 0, 0, 0.3);
-
-  --shadow-glow:
-    0 0 0 3px rgba(139, 92, 246, 0.2),
-    0 2px 8px 0 rgba(139, 92, 246, 0.15);
-}
-
-/* Emerald theme - emerald-tinted accent shadows */
-body[data-theme="emerald"] {
-  --shadow-accent-sm:
-    0 1px 3px 0 rgba(16, 185, 129, 0.25),
-    0 1px 2px 0 rgba(0, 0, 0, 0.2);
-
-  --shadow-accent-md:
-    0 4px 8px -2px rgba(16, 185, 129, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.25);
-
-  --shadow-accent-lg:
-    0 8px 16px -4px rgba(16, 185, 129, 0.35),
-    0 4px 8px -2px rgba(0, 0, 0, 0.3);
-
-  --shadow-glow:
-    0 0 0 3px rgba(16, 185, 129, 0.2),
-    0 2px 8px 0 rgba(16, 185, 129, 0.15);
-}
-
-/* Rose theme - rose-tinted accent shadows */
-body[data-theme="rose"] {
-  --shadow-accent-sm:
-    0 1px 3px 0 rgba(244, 63, 94, 0.25),
-    0 1px 2px 0 rgba(0, 0, 0, 0.2);
-
-  --shadow-accent-md:
-    0 4px 8px -2px rgba(244, 63, 94, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.25);
-
-  --shadow-accent-lg:
-    0 8px 16px -4px rgba(244, 63, 94, 0.35),
-    0 4px 8px -2px rgba(0, 0, 0, 0.3);
-
-  --shadow-glow:
-    0 0 0 3px rgba(244, 63, 94, 0.2),
-    0 2px 8px 0 rgba(244, 63, 94, 0.15);
-}
-
-/* Amber theme - amber-tinted accent shadows */
+/* Dark themes (all except light) get enhanced contrast */
+body[data-theme="dark"],
+body[data-theme="blue"],
+body[data-theme="violet"],
+body[data-theme="emerald"],
+body[data-theme="rose"],
 body[data-theme="amber"] {
-  --shadow-accent-sm:
-    0 1px 3px 0 rgba(245, 158, 11, 0.25),
-    0 1px 2px 0 rgba(0, 0, 0, 0.2);
-
-  --shadow-accent-md:
-    0 4px 8px -2px rgba(245, 158, 11, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.25);
-
-  --shadow-accent-lg:
-    0 8px 16px -4px rgba(245, 158, 11, 0.35),
-    0 4px 8px -2px rgba(0, 0, 0, 0.3);
-
-  --shadow-glow:
-    0 0 0 3px rgba(245, 158, 11, 0.2),
-    0 2px 8px 0 rgba(245, 158, 11, 0.15);
+  /* Enhanced shadows for dark themes */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
 }
 
 /* ========================================

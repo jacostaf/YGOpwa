@@ -47,17 +47,6 @@ export class AchievementsPage {
 
     return `
       <div class="achievements-page">
-        <!-- Page Header -->
-        <div class="page-header" style="margin-bottom: 32px;">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-            <i data-lucide="Award" style="width: 32px; height: 32px; color: var(--accent);"></i>
-            <h1 style="font-size: 28px; font-weight: 700; color: white; margin: 0;">Achievements</h1>
-          </div>
-          <p style="font-size: 14px; color: rgba(255, 255, 255, 0.6); margin: 0;">
-            Track your progress and unlock rewards
-          </p>
-        </div>
-
         <!-- Stats Overview -->
         ${this.renderStatsOverview(stats)}
 
@@ -71,7 +60,7 @@ export class AchievementsPage {
 
         <!-- Empty State (if no achievements match filter) -->
         <div id="achievements-empty" class="achievements-empty" style="display: none;">
-          <div class="glass-card" style="padding: 48px; text-align: center;">
+          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="padding: 48px; text-align: center;">
             <i data-lucide="Award" style="width: 64px; height: 64px; color: rgba(255, 255, 255, 0.3); margin: 0 auto 16px;"></i>
             <h3 style="font-size: 18px; font-weight: 600; color: white; margin: 0 0 8px 0;">
               No Achievements Found
@@ -99,7 +88,7 @@ export class AchievementsPage {
         margin-bottom: 32px;
       ">
         <!-- Total Achievements -->
-        <div class="glass-card" style="padding: 24px;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="padding: 24px;">
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
             <i data-lucide="Trophy" style="width: 24px; height: 24px; color: var(--accent);"></i>
             <span style="font-size: 13px; color: rgba(255, 255, 255, 0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">
@@ -112,7 +101,7 @@ export class AchievementsPage {
         </div>
 
         <!-- Unlocked Achievements -->
-        <div class="glass-card" style="padding: 24px;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="padding: 24px;">
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
             <i data-lucide="CheckCircle" style="width: 24px; height: 24px; color: #22C55E;"></i>
             <span style="font-size: 13px; color: rgba(255, 255, 255, 0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">
@@ -125,7 +114,7 @@ export class AchievementsPage {
         </div>
 
         <!-- Locked Achievements -->
-        <div class="glass-card" style="padding: 24px;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="padding: 24px;">
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
             <i data-lucide="Lock" style="width: 24px; height: 24px; color: rgba(255, 255, 255, 0.4);"></i>
             <span style="font-size: 13px; color: rgba(255, 255, 255, 0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">
@@ -138,7 +127,7 @@ export class AchievementsPage {
         </div>
 
         <!-- Completion Percentage -->
-        <div class="glass-card" style="padding: 24px;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="padding: 24px;">
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
             <i data-lucide="Target" style="width: 24px; height: 24px; color: #3B82F6;"></i>
             <span style="font-size: 13px; color: rgba(255, 255, 255, 0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">
@@ -168,7 +157,7 @@ export class AchievementsPage {
       </div>
 
       <!-- Category Stats -->
-      <div class="category-stats glass-card" style="padding: 24px; margin-bottom: 32px;">
+      <div class="category-stats bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="padding: 24px; margin-bottom: 32px;">
         <h3 style="font-size: 16px; font-weight: 600; color: white; margin: 0 0 20px 0;">
           Progress by Category
         </h3>
@@ -333,7 +322,7 @@ export class AchievementsPage {
     if (!this.achievementManager) {
       this.container.innerHTML = `
         <div class="page-content">
-          <div class="card section-card glass-card error-card">
+          <div class="error-card bg-neutral-900/40 backdrop-blur-sm border border-red-800/50 rounded-xl p-6">
             <h2>⚠️ Achievements Not Available</h2>
             <p>The achievement system could not be loaded.</p>
             <p class="text-sm text-neutral-400 mt-2">Please refresh the page or try again later.</p>

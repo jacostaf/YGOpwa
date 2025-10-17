@@ -50,7 +50,7 @@ export default class ThemeSettingsPage {
         </div>
 
         <!-- Theme Info -->
-        <div class="theme-info-card glass-card">
+        <div class="theme-info-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div class="info-icon">
             <i data-lucide="info"></i>
           </div>
@@ -87,7 +87,7 @@ export default class ThemeSettingsPage {
       const textColor = this.getThemeTextColor(theme);
 
       return `
-        <div class="theme-card glass-card ${activeClass}" data-theme="${themeName}">
+        <div class="theme-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl ${activeClass}" data-theme="${themeName}">
           <!-- Active Indicator -->
           ${isActive ? `
             <div class="theme-active-badge">

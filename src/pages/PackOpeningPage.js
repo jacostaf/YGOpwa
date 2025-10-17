@@ -102,7 +102,7 @@ export default class PackOpeningPage {
     return `
       <div class="page-content pack-opening-page-compact">
         <!-- Compact Controls Bar -->
-        <div class="glass-card compact-controls" style="margin-bottom: 1rem; padding: 1rem;">
+        <div class="compact-controls bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="margin-bottom: 1rem; padding: 1rem;">
           <div class="controls-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; align-items: start;">
 
             <!-- Set Selection (Compact) -->
@@ -238,7 +238,7 @@ export default class PackOpeningPage {
         </div>
 
         <!-- Cards Display Area (MAXIMUM SPACE) -->
-        <div class="glass-card" style="padding: 1rem; flex: 1; min-height: 400px;">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl" style="padding: 1rem; flex: 1; min-height: 400px;">
           <div id="card-grid-container" style="min-height: 300px;">
             <div class="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; color: var(--text-secondary);">
               <i data-lucide="package-open" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
@@ -1171,7 +1171,7 @@ export default class PackOpeningPage {
       if (this.container) {
         this.container.innerHTML = `
           <div class="page-content">
-            <div class="card section-card glass-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6">
+            <div class="error-card bg-neutral-900/40 backdrop-blur-sm border border-red-800/50 rounded-xl p-6">
               <h2 class="text-xl font-semibold text-red-400 mb-2 flex items-center gap-2">
                 <i data-lucide="AlertCircle" class="w-6 h-6"></i>
                 Failed to Load Pack Opening Page

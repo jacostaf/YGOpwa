@@ -78,7 +78,7 @@ export class CollectionPage {
 
         <!-- Stats Overview -->
         <div class="collection-stats-grid" id="collectionStatsGrid">
-          <div class="glass-card stat-card">
+          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
             <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
               <i class="lucide-icon" data-lucide="package"></i>
             </div>
@@ -89,7 +89,7 @@ export class CollectionPage {
             </div>
           </div>
 
-          <div class="glass-card stat-card">
+          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
             <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
               <i class="lucide-icon" data-lucide="layers"></i>
             </div>
@@ -100,7 +100,7 @@ export class CollectionPage {
             </div>
           </div>
 
-          <div class="glass-card stat-card">
+          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
             <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
               <i class="lucide-icon" data-lucide="dollar-sign"></i>
             </div>
@@ -111,7 +111,7 @@ export class CollectionPage {
             </div>
           </div>
 
-          <div class="glass-card stat-card">
+          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
             <div class="stat-icon" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
               <i class="lucide-icon" data-lucide="star"></i>
             </div>
@@ -124,7 +124,7 @@ export class CollectionPage {
         </div>
 
         <!-- Filters and Controls -->
-        <div class="glass-card collection-controls">
+        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl collection-controls">
           <div class="controls-section">
             <h3>
               <i class="lucide-icon" data-lucide="filter"></i>
@@ -248,7 +248,7 @@ export class CollectionPage {
 
           <!-- List View -->
           <div id="collectionListView" class="collection-list-view" style="display: none;">
-            <div class="glass-card">
+            <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
               <div class="table-container">
                 <table class="collection-table">
                   <thead>
@@ -273,7 +273,7 @@ export class CollectionPage {
 
           <!-- Empty State -->
           <div id="emptyState" class="empty-state" style="display: none;">
-            <div class="glass-card">
+            <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
               <i class="lucide-icon" data-lucide="package-x"></i>
               <h3>No Cards Found</h3>
               <p>Your collection is empty or no cards match your filters.</p>
@@ -949,7 +949,7 @@ export class CollectionPage {
   showError(message) {
     if (this.container) {
       this.container.innerHTML = `
-        <div class="error-state glass-card">
+        <div class="error-state bg-neutral-900/40 backdrop-blur-sm border border-red-800/50 rounded-xl p-6">
           <i class="lucide-icon" data-lucide="alert-circle"></i>
           <h3>Error</h3>
           <p>${this.escapeHtml(message)}</p>

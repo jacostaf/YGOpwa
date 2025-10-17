@@ -146,7 +146,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--accent-color, #60a5fa);
+  background: var(--accent-primary, #737373);
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -161,7 +161,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--accent-color, #60a5fa);
+  background: var(--accent-primary, #737373);
   cursor: pointer;
   border: none;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -174,7 +174,7 @@
 }
 
 .setting-slider:focus {
-  outline: 2px solid var(--accent-color, #60a5fa);
+  outline: 2px solid var(--accent-primary, #737373);
   outline-offset: 2px;
 }
 
@@ -208,8 +208,8 @@
 .setting-input-number:focus {
   outline: none;
   background: rgba(255, 255, 255, 0.1);
-  border-color: var(--accent-color, #60a5fa);
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+  border-color: var(--accent-primary, #737373);
+  box-shadow: 0 0 0 3px rgba(115, 115, 115, 0.1);
 }
 
 .input-unit {
@@ -246,8 +246,8 @@
 .setting-select:focus {
   outline: none;
   background-color: rgba(255, 255, 255, 0.1);
-  border-color: var(--accent-color, #60a5fa);
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+  border-color: var(--accent-primary, #737373);
+  box-shadow: 0 0 0 3px rgba(115, 115, 115, 0.1);
 }
 
 .setting-select option {
@@ -295,8 +295,8 @@
   gap: 1.5rem;
   padding: 1.5rem 2rem;
   border-radius: 16px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(115, 115, 115, 0.1);
+  border: 1px solid rgba(115, 115, 115, 0.2);
 }
 
 .settings-info-card .info-icon {
@@ -307,8 +307,8 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(59, 130, 246, 0.2);
-  color: var(--info-color, #60a5fa);
+  background: rgba(115, 115, 115, 0.2);
+  color: var(--accent-primary, #737373);
 }
 
 .settings-info-card .info-content h3 {
@@ -438,7 +438,7 @@ body[data-theme="light"] .setting-select:focus {
 }
 
 body[data-theme="light"] .settings-info-card {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(115, 115, 115, 0.08);
 }
 
 /* Animation for unsaved indicator */

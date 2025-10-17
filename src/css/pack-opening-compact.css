@@ -65,7 +65,7 @@
 
 .input-compact:focus {
   outline: none;
-  border-color: var(--primary, #3b82f6);
+  border-color: var(--accent-primary, #737373);
 }
 
 .input-compact::placeholder {
@@ -135,7 +135,7 @@
   min-width: 1.25rem;
   height: 1.25rem;
   padding: 0 0.375rem;
-  background: var(--primary, #3b82f6);
+  background: var(--accent-primary, #737373);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 600;
@@ -153,7 +153,7 @@
 }
 
 .stats-mini .text-primary {
-  color: var(--primary, #3b82f6);
+  color: var(--accent-primary, #737373);
   font-weight: 600;
 }
 
@@ -173,7 +173,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--primary, #3b82f6);
+  background: var(--accent-primary, #737373);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -186,7 +186,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--primary, #3b82f6);
+  background: var(--accent-primary, #737373);
   cursor: pointer;
   border: none;
   transition: all 0.2s ease;

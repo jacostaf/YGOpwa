@@ -45,27 +45,10 @@ export default class CardGrid {
     const displayCards = this.consolidated ? this.consolidateCards() : this.cards;
 
     return `
-      <div class="card-grid grid gap-4 ${this.getGridClass()}">
+      <div class="card-grid">
         ${displayCards.map((card, index) => this.renderCard(card, index)).join('')}
       </div>
     `;
-  }
-
-  /**
-   * Get grid column class based on card size
-   * @returns {string} Grid class
-   */
-  getGridClass() {
-    // Responsive grid based on card size
-    if (this.cardSize >= 200) {
-      return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5';
-    } else if (this.cardSize >= 150) {
-      return 'grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6';
-    } else if (this.cardSize >= 120) {
-      return 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8';
-    } else {
-      return 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10';
-    }
   }
 
   /**
@@ -120,7 +103,7 @@ export default class CardGrid {
     return `
       <div class="card-item bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-lg p-3 hover:border-neutral-700/50 transition-all duration-200 hover:shadow-lg hover:shadow-neutral-900/20 relative group"
            data-card-index="${index}"
-           style="width: ${this.cardSize}px;">
+           style="width: min(${this.cardSize}px, 100%);">
 
         ${this.showRemoveButton ? `
           <button class="card-remove-btn absolute top-1 right-1 w-6 h-6 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"

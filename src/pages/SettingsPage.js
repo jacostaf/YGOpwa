@@ -46,17 +46,8 @@ export default class SettingsPage {
   render() {
     return `
       <div class="page-content settings-page">
-        <!-- Page Header -->
-        <div class="page-header">
-          <div class="page-title-section">
-            <h1><i data-lucide="settings"></i> Settings</h1>
-            <p class="page-subtitle">Configure application preferences and voice recognition options</p>
-          </div>
-          ${this.hasChanges ? '<div class="unsaved-indicator"><i data-lucide="alert-circle"></i> Unsaved changes</div>' : ''}
-        </div>
-
         <!-- Voice Recognition Settings -->
-        <div class="settings-section glass-card">
+        <div class="settings-section bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div class="section-header">
             <h2><i data-lucide="mic"></i> Voice Recognition</h2>
             <p class="section-description">Configure voice recognition behavior and accuracy</p>
@@ -154,7 +145,7 @@ export default class SettingsPage {
         </div>
 
         <!-- General Settings -->
-        <div class="settings-section glass-card">
+        <div class="settings-section bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div class="section-header">
             <h2><i data-lucide="sliders"></i> General Settings</h2>
             <p class="section-description">General application preferences</p>
@@ -208,7 +199,7 @@ export default class SettingsPage {
         </div>
 
         <!-- Action Buttons -->
-        <div class="settings-actions glass-card">
+        <div class="settings-actions bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <button class="btn btn-danger btn-reset">
             <i data-lucide="rotate-ccw"></i>
             Reset to Defaults
@@ -220,7 +211,7 @@ export default class SettingsPage {
         </div>
 
         <!-- Info Section -->
-        <div class="settings-info-card glass-card">
+        <div class="settings-info-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div class="info-icon">
             <i data-lucide="info"></i>
           </div>
