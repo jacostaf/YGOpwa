@@ -1035,36 +1035,6 @@ body {
   color: var(--text-primary);
 }
 
-/* Enhanced Card Set Selection */
-#set-select {
-  min-height: 200px !important;
-  width: 100% !important;
-  font-size: var(--font-size-base) !important;
-  line-height: 1.4 !important;
-}
-
-#set-select option {
-  padding: var(--spacing-sm) var(--spacing-md) !important;
-  min-height: 40px !important;
-  display: flex !important;
-  align-items: center !important;
-  border-bottom: 1px solid var(--border-primary) !important;
-  background-color: var(--card-bg) !important;
-  color: var(--text-primary) !important;
-  cursor: pointer !important;
-}
-
-#set-select option:hover {
-  background-color: var(--card-bg-hover) !important;
-  border-color: var(--accent-primary) !important;
-}
-
-#set-select option:selected {
-  background-color: var(--accent-primary) !important;
-  color: var(--text-primary) !important;
-  font-weight: 600 !important;
-}
-
 /* Set Information Display */
 .set-info {
   display: flex;
@@ -1096,15 +1066,6 @@ body {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
   color: var(--accent-primary);
-}
-
-/* Enhanced Search Input */
-.form-group input[type="text"]#set-search {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23999'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'%3E%3C/path%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right var(--spacing-md) center;
-  background-size: 20px;
-  padding-right: calc(var(--spacing-md) * 2 + 20px);
 }
 
 /* Loading States */
