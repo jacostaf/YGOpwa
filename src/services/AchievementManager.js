@@ -98,7 +98,7 @@ export class AchievementManager {
         category: 'pack',
         name: 'Pack Addict',
         description: 'Open 100 packs',
-        icon: 'PackageOpen',
+        icon: 'package-open',
         requirement: 100,
         checkProgress: (stats) => stats.packsOpened || 0,
         rarity: 'rare'
@@ -130,7 +130,7 @@ export class AchievementManager {
         category: 'collection',
         name: 'Collector',
         description: 'Own 100 cards in your collection',
-        icon: 'FolderOpen',
+        icon: 'folder-open',
         requirement: 100,
         checkProgress: (stats) => stats.totalCards || 0,
         rarity: 'uncommon'
@@ -150,7 +150,7 @@ export class AchievementManager {
         category: 'collection',
         name: 'Value Hunter',
         description: 'Collection worth $1000+',
-        icon: 'TrendingUp',
+        icon: 'trending-up',
         requirement: 1000,
         checkProgress: (stats) => stats.collectionValue || 0,
         rarity: 'epic'

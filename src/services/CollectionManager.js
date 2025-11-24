@@ -16,6 +16,43 @@ export class CollectionManager {
   }
 
   /**
+   * Inject externally sourced cards (e.g., Supabase) into the cache.
+   * @param {Array} cards
+   * @param {Object} [options]
+   * @param {number} [options.ttl] - Cache TTL in ms (default: effectively infinite)
+   */
+  setExternalCards(cards = [], options = {}) {
+    try {
+      const ttl = Number.isFinite(options.ttl) ? options.ttl : Number.MAX_SAFE_INTEGER;
+      const normalizedCards = Array.isArray(cards)
+        ? cards.map(card => ({ ...card }))
+        : [];
+
+      this.cache.allCards = normalizedCards;
+      this.cache.lastUpdate = Date.now();
+      this.cache.ttl = ttl;
+
+      // Invalidate derived stats cache since dataset changed
+      this.cache.stats = null;
+
+      return normalizedCards;
+    } catch (error) {
+      console.error('CollectionManager: Error setting external cards', error);
+      return [];
+    }
+  }
+
+  /**
+   * Clear cached cards forcing a reload from the backing store.
+   */
+  clearCache() {
+    this.cache.allCards = null;
+    this.cache.stats = null;
+    this.cache.lastUpdate = null;
+    this.cache.ttl = 5000;
+  }
+
+  /**
    * Get all cards from all sessions
    * @returns {Array} Array of all cards with session metadata
    */
@@ -79,16 +116,20 @@ export class CollectionManager {
 
       allCards.forEach(card => {
         const key = `${card.cardName || 'Unknown'}-${card.cardNumber || 'N/A'}`;
+        const cardQuantity = Number(card.quantity) && Number(card.quantity) > 0
+          ? Number(card.quantity)
+          : 1;
+        const unitValue = parseFloat(card.tcgLow) || 0;
 
         if (uniqueMap.has(key)) {
           const existing = uniqueMap.get(key);
-          existing.count += 1;
-          existing.totalValue = (existing.totalValue || 0) + (parseFloat(card.tcgLow) || 0);
+          existing.count += cardQuantity;
+          existing.totalValue = (existing.totalValue || 0) + (unitValue * cardQuantity);
         } else {
           uniqueMap.set(key, {
             ...card,
-            count: 1,
-            totalValue: parseFloat(card.tcgLow) || 0
+            count: cardQuantity,
+            totalValue: unitValue * cardQuantity
           });
         }
       });
@@ -252,6 +293,7 @@ export class CollectionManager {
           totalCards: 0,
           uniqueCards: 0,
           totalValue: 0,
+          rareScore: 0,
           rarestCard: null,
           commonestRarity: null,
           sets: 0,
@@ -260,21 +302,13 @@ export class CollectionManager {
         };
       }
 
-      // Total cards
-      const totalCards = allCards.length;
+      let totalCards = 0;
+      let totalValue = 0;
+      let rarestCard = null;
+      let highestRarityScore = -1;
+      let totalRareScore = 0;
 
-      // Unique cards
-      const uniqueCards = this.getUniqueCards().length;
-
-      // Total value (sum of TCG Low prices)
-      const totalValue = allCards.reduce((sum, card) => {
-        return sum + (parseFloat(card.tcgLow) || 0);
-      }, 0);
-
-      // Average value
-      const avgValue = totalCards > 0 ? totalValue / totalCards : 0;
-
-      // Rarest card (highest rarity value)
+      const rarityDistribution = {};
       const rarityOrder = {
         'starlight rare': 8,
         'ghost rare': 7,
@@ -286,23 +320,35 @@ export class CollectionManager {
         'common': 1
       };
 
-      let rarestCard = null;
-      let highestRarity = 0;
-
       allCards.forEach(card => {
-        const rarityValue = rarityOrder[(card.rarity || 'common').toLowerCase()] || 0;
-        if (rarityValue > highestRarity) {
-          highestRarity = rarityValue;
+        const quantity = Number(card.quantity) && Number(card.quantity) > 0 ? Number(card.quantity) : 1;
+        const unitValue = parseFloat(card.tcgLow) || 0;
+        const rarityKey = (card.rarity || 'Common');
+        const rarityScore = card.rareScoreContribution !== undefined
+          ? parseFloat(card.rareScoreContribution) || 0
+          : (rarityOrder[rarityKey.toLowerCase()] || 0) * quantity;
+
+        totalCards += quantity;
+        totalValue += unitValue * quantity;
+        totalRareScore += rarityScore;
+
+        rarityDistribution[rarityKey] = (rarityDistribution[rarityKey] || 0) + quantity;
+
+        const rarityValue = (card.rarityWeight !== undefined
+          ? parseFloat(card.rarityWeight) || 0
+          : rarityOrder[rarityKey.toLowerCase()] || 0);
+
+        if (rarityValue > highestRarityScore) {
+          highestRarityScore = rarityValue;
           rarestCard = card;
         }
       });
 
-      // Rarity distribution
-      const rarityDistribution = {};
-      allCards.forEach(card => {
-        const rarity = card.rarity || 'Common';
-        rarityDistribution[rarity] = (rarityDistribution[rarity] || 0) + 1;
-      });
+      // Unique cards
+      const uniqueCards = this.getUniqueCards().length;
+
+      // Average value
+      const avgValue = totalCards > 0 ? totalValue / totalCards : 0;
 
       // Commonest rarity
       let commonestRarity = null;
@@ -322,6 +368,7 @@ export class CollectionManager {
         totalCards,
         uniqueCards,
         totalValue,
+        rareScore: totalRareScore,
         rarestCard,
         commonestRarity,
         sets,
@@ -334,6 +381,7 @@ export class CollectionManager {
         totalCards: 0,
         uniqueCards: 0,
         totalValue: 0,
+        rareScore: 0,
         rarestCard: null,
         commonestRarity: null,
         sets: 0,
@@ -410,24 +458,6 @@ export class CollectionManager {
       console.error('CollectionManager: Error exporting collection', error);
       return null;
     }
-  }
-
-  /**
-   * Clear cache
-   */
-  clearCache() {
-    this.cache.allCards = null;
-    this.cache.stats = null;
-    this.cache.lastUpdate = null;
-  }
-
-  /**
-   * Refresh data (clear cache and fetch fresh)
-   * @returns {Array} Fresh cards data
-   */
-  refresh() {
-    this.clearCache();
-    return this.getAllCards();
   }
 }
 

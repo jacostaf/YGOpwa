@@ -649,9 +649,82 @@ export class AppErrorBoundary {
     }
 }
 
+/**
+ * Lightweight ErrorBoundary used by legacy unit tests to exercise
+ * retry behaviour without the full application boundary.
+ */
+export class ErrorBoundary {
+    constructor(logger = null) {
+        this.logger = logger || new Logger('ErrorBoundary');
+        this.errorCounts = new Map();
+    }
+
+    /**
+     * Retry an async operation with exponential backoff.
+     */
+    async retryAsync(operation, maxAttempts = 1, delayMs = 0) {
+        if (typeof operation !== 'function') {
+            throw new Error('retryAsync requires an operation function');
+        }
+
+        let attempt = 0;
+        let lastError = null;
+
+        while (attempt < maxAttempts) {
+            try {
+                return await operation();
+            } catch (error) {
+                lastError = error;
+                attempt += 1;
+                this.logger.warn(`Retry ${attempt}/${maxAttempts} failed`, error);
+
+                if (attempt >= maxAttempts) {
+                    break;
+                }
+
+                if (delayMs > 0) {
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
+                }
+            }
+        }
+
+        throw lastError;
+    }
+
+    /**
+     * Execute an operation and fall back if it throws.
+     */
+    withFallback(operation, fallback) {
+        try {
+            return operation();
+        } catch (error) {
+            this.logger.error('Critical error, using fallback:', error);
+            if (typeof fallback === 'function') {
+                return fallback(error);
+            }
+            return fallback;
+        }
+    }
+
+    trackError(error) {
+        const key = error?.message || 'Unknown Error';
+        const count = this.errorCounts.get(key) || 0;
+        this.errorCounts.set(key, count + 1);
+    }
+
+    getErrorStats() {
+        return Object.fromEntries(this.errorCounts.entries());
+    }
+
+    handleDOMError(error, operation = '') {
+        this.logger.warn('DOM operation failed:', operation, error);
+        this.trackError(error || new Error(operation || 'DOM error'));
+    }
+}
+
 // Create global error boundary instance
 const errorBoundary = new AppErrorBoundary();
 
 // Export for use in other modules
-export { errorBoundary };
+export { errorBoundary, AppErrorBoundary, ErrorBoundary };
 export default AppErrorBoundary;

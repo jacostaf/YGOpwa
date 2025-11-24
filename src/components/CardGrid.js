@@ -45,7 +45,7 @@ export default class CardGrid {
     const displayCards = this.consolidated ? this.consolidateCards() : this.cards;
 
     return `
-      <div class="card-grid">
+      <div class="card-grid" style="--card-width: ${this.cardSize}px">
         ${displayCards.map((card, index) => this.renderCard(card, index)).join('')}
       </div>
     `;
@@ -94,69 +94,55 @@ export default class CardGrid {
     const cardSet = this.escapeHtml(card.set || '');
     const cardNumber = this.escapeHtml(card.cardNumber || '');
     const cardRarity = this.escapeHtml(card.rarity || '');
-    const tcgLow = this.formatPrice(card.tcgLow);
-    const tcgMarket = this.formatPrice(card.tcgMarket);
+    const tcgLow = this.formatPrice(card.tcgLow || card.tcg_price);
+    const tcgMarket = this.formatPrice(card.tcgMarket || card.tcg_market_price);
     const quantity = card.quantity > 1 ? `x${card.quantity}` : '';
     const rarityClass = this.getRarityClass(cardRarity);
-    const cardImage = card.imageUrl || this.getDefaultCardImage();
+    const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
 
     return `
-      <div class="card-item bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-lg p-3 hover:border-neutral-700/50 transition-all duration-200 hover:shadow-lg hover:shadow-neutral-900/20 relative group"
-           data-card-index="${index}"
-           style="width: min(${this.cardSize}px, 100%);">
-
+      <div class="ygo-card" data-card-index="${index}" style="--card-size: ${this.cardSize}px;">
         ${this.showRemoveButton ? `
-          <button class="card-remove-btn absolute top-1 right-1 w-6 h-6 bg-red-500/80 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                  data-remove-index="${index}"
-                  title="Remove card">
-            <i data-lucide="X" class="w-4 h-4 text-white"></i>
+          <button class="ygo-card-remove-btn" data-remove-index="${index}" title="Remove card">
+            <i data-lucide="X" class="icon-sm"></i>
           </button>
         ` : ''}
 
         ${quantity ? `
-          <span class="card-quantity absolute top-1 left-1 px-2 py-1 bg-neutral-800/90 text-white text-xs font-bold rounded">
-            ${quantity}
-          </span>
+          <span class="ygo-card-quantity">${quantity}</span>
         ` : ''}
 
-        <div class="card-image mb-2 rounded overflow-hidden bg-neutral-800">
+        <div class="ygo-card-image-container">
           <img src="${cardImage}"
                alt="${cardName}"
-               class="w-full h-auto object-cover"
+               class="ygo-card-image"
                loading="lazy"
-               onerror="this.src='/src/assets/card-back.jpg'">
+               onerror="this.onerror=null;this.src='${this.getDefaultCardImage()}';">
         </div>
 
-        <div class="card-info text-xs">
-          <div class="card-name font-medium text-white mb-1 truncate" title="${cardName}">
-            ${cardName}
+        <div class="ygo-card-content">
+          <div class="ygo-card-header">
+            <div class="ygo-card-name" title="${cardName}">${cardName}</div>
+            ${cardNumber ? `<div class="ygo-card-number">${cardSet ? `${cardSet}-` : ''}${cardNumber}</div>` : ''}
           </div>
 
-          ${cardNumber ? `
-            <div class="card-number text-neutral-400 text-xs mb-1 truncate">
-              ${cardSet ? `${cardSet}-` : ''}${cardNumber}
-            </div>
-          ` : ''}
-
           ${cardRarity ? `
-            <div class="card-rarity mb-2">
-              <span class="rarity-badge ${rarityClass} text-xs px-2 py-0.5 rounded">
-                ${cardRarity}
-              </span>
+            <div class="ygo-card-rarity">
+              <span class="ygo-rarity-badge ${rarityClass}">${cardRarity}</span>
             </div>
           ` : ''}
 
-          <div class="card-prices space-y-1">
+          <div class="ygo-card-prices">
             ${tcgLow ? `
-              <div class="price-item flex justify-between text-xs">
-                <span class="text-neutral-500">TCG Low:</span>
-                <span class="text-green-400 font-medium">${tcgLow}</span>
+              <div class="ygo-price-row">
+                <span class="ygo-price-label">Low:</span>
+                <span class="ygo-price-value value-low">${tcgLow}</span>
               </div>
             ` : ''}
             ${tcgMarket ? `
-              <div class="price-item flex justify-between text-xs">
-                <span class="text-neutral-500">TCG Market:</span>
-                <span class="text-neutral-300 font-medium">${tcgMarket}</span>
+              <div class="ygo-price-row">
+                <span class="ygo-price-label">Mkt:</span>
+                <span class="ygo-price-value value-market">${tcgMarket}</span>
               </div>
             ` : ''}
           </div>
@@ -190,17 +176,17 @@ export default class CardGrid {
     const rarityLower = (rarity || '').toLowerCase();
 
     if (rarityLower.includes('secret') || rarityLower.includes('starlight') || rarityLower.includes('ghost')) {
-      return 'bg-purple-500/20 text-purple-300 border border-purple-500/30';
+      return 'rarity-secret';
     } else if (rarityLower.includes('ultra') || rarityLower.includes('ultimate')) {
-      return 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30';
+      return 'rarity-ultra';
     } else if (rarityLower.includes('super')) {
-      return 'bg-blue-500/20 text-blue-300 border border-blue-500/30';
+      return 'rarity-super';
     } else if (rarityLower.includes('rare')) {
-      return 'bg-neutral-500/20 text-neutral-300 border border-neutral-500/30';
+      return 'rarity-rare';
     } else if (rarityLower.includes('common')) {
-      return 'bg-neutral-600/20 text-neutral-400 border border-neutral-600/30';
+      return 'rarity-common';
     } else {
-      return 'bg-neutral-700/20 text-neutral-400 border border-neutral-700/30';
+      return 'rarity-unknown';
     }
   }
 
@@ -221,7 +207,23 @@ export default class CardGrid {
    * @returns {string} Default image URL
    */
   getDefaultCardImage() {
-    return '/src/assets/card-back.jpg';
+    return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 420" fill="none"><rect width="300" height="420" rx="16" fill="%231f2937"/><rect x="14" y="14" width="272" height="392" rx="12" fill="url(%23g)" stroke="%23374151" stroke-width="4"/><path d="M150 90 L180 210 L120 210 Z" fill="%238b5cf6" opacity="0.35"/><path d="M150 330 A80 80 0 1 1 149.9 330" stroke="%23a855f7" stroke-width="10" fill="none" opacity="0.4"/><circle cx="150" cy="210" r="42" fill="%2322c55e" opacity="0.4"/><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="420"><stop stop-color="%2321242c"/><stop offset="1" stop-color="%23111"/></linearGradient></defs></svg>';
+  }
+
+  /**
+   * Ensure we never request a missing local asset; fallback to placeholder for bad URLs
+   */
+  getSafeImage(imageUrl) {
+    if (!imageUrl) {
+      return this.getDefaultCardImage();
+    }
+
+    const lower = String(imageUrl).toLowerCase();
+    if (lower.includes('card-back.jpg') || lower.startsWith('/src/assets')) {
+      return this.getDefaultCardImage();
+    }
+
+    return imageUrl;
   }
 
   /**

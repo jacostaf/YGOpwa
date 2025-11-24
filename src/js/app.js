@@ -47,7 +47,7 @@ class YGORipperApp {
 
         // Application state
         this.isInitialized = false;
-        this.currentTab = 'pack-ripper';  // Changed from 'price-checker' to make pack-ripper (which contains voice) the default tab
+        this.currentTab = 'price-checker';
         this.settings = {};
 
         // Initialization promise
@@ -65,6 +65,30 @@ class YGORipperApp {
         if (!options.skipInitialization) {
             this.initialize();
         }
+    }
+
+    isTestEnvironment() {
+        if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+            return true;
+        }
+
+        if (typeof globalThis !== 'undefined') {
+            if (typeof globalThis.expect === 'function') {
+                return true;
+            }
+            if (typeof globalThis.vi !== 'undefined') {
+                return true;
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            const search = window.location?.search || '';
+            if (typeof search === 'string' && search.includes('test')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -86,59 +110,59 @@ class YGORipperApp {
     async _performInitialization() {
         try {
             this.logger.info('Initializing YGO Ripper UI v2...');
-            
+
             // Check if online (required for this app)
             if (!navigator.onLine) {
                 throw new Error('This app requires an internet connection to function properly');
             }
-            
+
             // Update loading progress
             this.updateLoadingProgress(10, 'Loading settings...');
-            
+
             // Load settings and configuration with error boundary
             await this.safeLoadSettings();
-            
+
             this.updateLoadingProgress(20, 'Initializing storage...');
-            
+
             // Initialize storage with error boundary
             await this.safeInitializeStorage();
-            
+
             this.updateLoadingProgress(30, 'Setting up UI...');
-            
+
             // Initialize UI Manager with error boundary
             await this.safeInitializeUI();
-            
+
             // Initialize Training UI
             this.trainingUI = new TrainingUI(this, this.logger);
-            
+
             // Initialize Pattern Manager UI
             this.patternManagerUI = new PatternManagerUI(this, this.logger);
-            
+
             this.updateLoadingProgress(40, 'Checking permissions...');
-            
+
             // Initialize permission manager with error boundary
             await this.safeInitializePermissions();
-            
+
             this.updateLoadingProgress(50, 'Initializing voice engine...');
-            
+
             // Initialize voice engine with error boundary
             await this.safeInitializeVoice();
-            
+
             this.updateLoadingProgress(70, 'Loading session data...');
-            
+
             // Initialize session manager with error boundary
             await this.safeInitializeSession();
-            
+
             this.updateLoadingProgress(80, 'Setting up price checker...');
-            
+
             // Initialize price checker with error boundary
             await this.safeInitializePriceChecker();
-            
+
             this.updateLoadingProgress(90, 'Setting up event handlers...');
-            
+
             // Set up event handlers with error boundary
             this.safeSetupEventHandlers();
-            
+
             this.updateLoadingProgress(92, 'Initializing pattern management...');
 
             // Initialize pattern manager UI after voice engine is ready
@@ -161,23 +185,34 @@ class YGORipperApp {
             }
 
             this.updateLoadingProgress(95, 'Loading initial data...');
-            
+
             // Load initial data with error boundary
             await this.safeLoadInitialData();
-            
+
+            this.updateLoadingProgress(98, 'Initializing authentication...');
+
+            // Initialize authentication UI (Phase 1) - dynamically imported to avoid breaking app if auth files missing
+            try {
+                const { initAuth } = await import('./authInit.js');
+                await initAuth();
+                this.logger.info('Authentication initialized');
+            } catch (error) {
+                this.logger.warn('Authentication not loaded (optional feature):', error.message);
+            }
+
             this.updateLoadingProgress(100, 'Ready!');
-            
+
             // Mark as initialized
             this.isInitialized = true;
-            
+
             // Hide loading screen and show main app
             this.showApp();
-            
+
             // Show success message
             this.showToast(`Successfully loaded ${this.sessionManager.getCardSets().length} card sets`, 'success');
-            
+
             this.logger.info('YGO Ripper UI v2 initialized successfully');
-            
+
         } catch (error) {
             this.logger.error('Critical initialization error:', error);
             this.showInitializationError(error);
@@ -194,7 +229,7 @@ class YGORipperApp {
         } catch (error) {
             this.logger.warn('Failed to load settings, using defaults:', error);
             this.settings = this.getDefaultSettings();
-            
+
             // Show user-friendly error
             this.showToast('Settings could not be loaded. Using default settings.', 'warning');
         }
@@ -204,18 +239,18 @@ class YGORipperApp {
      * Safe storage initialization with fallback
      */
     async safeInitializeStorage() {
+        const inTests = this.isTestEnvironment();
         try {
             await this.storage.initialize();
         } catch (error) {
             this.logger.error('Storage initialization failed:', error);
-            
+
             // Try fallback storage options
             await this.initializeFallbackStorage();
-            
+
             this.showToast('Local storage limited. Some features may not work offline.', 'warning');
-            
-            // Only re-throw for tests, not in production
-            if (typeof window !== 'undefined' && window.location && window.location.search.includes('test')) {
+
+            if (inTests) {
                 throw new Error('Storage error - using fallback storage');
             }
             // In production, continue with fallback storage without throwing
@@ -226,16 +261,16 @@ class YGORipperApp {
      * Safe UI initialization with error recovery
      */
     async safeInitializeUI() {
+        const inTests = this.isTestEnvironment();
         try {
             await this.uiManager.initialize(this);
         } catch (error) {
             this.logger.error('UI initialization failed:', error);
-            
+
             // Create minimal UI for error display
             this.createMinimalUI();
-            
-            // Only throw in test environment
-            if (typeof window !== 'undefined' && window.location && window.location.search.includes('test')) {
+
+            if (inTests) {
                 throw new Error('UI Error');
             }
             // In production, continue with minimal UI
@@ -250,7 +285,7 @@ class YGORipperApp {
             await this.permissionManager.initialize();
         } catch (error) {
             this.logger.warn('Permission manager initialization failed:', error);
-            
+
             // Continue without permission manager - voice features will be limited
             this.permissionManager = null;
             this.showToast('Microphone permissions may be limited. Voice features might not work.', 'warning');
@@ -266,12 +301,12 @@ class YGORipperApp {
                 this.voiceEngine = new VoiceEngine(this.permissionManager, this.logger, this.storage);
             }
             await this.voiceEngine.initialize();
-            
+
             // Set VoiceEngine reference on SessionManager for learning boost functionality
             this.sessionManager.setVoiceEngine(this.voiceEngine);
         } catch (error) {
             this.logger.warn('Voice engine initialization failed:', error);
-            
+
             // Continue without voice engine - manual input only
             this.voiceEngine = null;
             this.showToast('Voice recognition not available. You can still type card names manually.', 'info');
@@ -282,19 +317,19 @@ class YGORipperApp {
      * Safe session manager initialization with error recovery
      */
     async safeInitializeSession() {
+        const inTests = this.isTestEnvironment();
         try {
             await this.sessionManager.initialize(this.storage);
         } catch (error) {
             this.logger.error('Session manager initialization failed:', error);
-            
+
             // Try to reinitialize with clean state
             try {
                 await this.sessionManager.initialize(this.storage, true); // Force clean
                 this.showToast('Session data was corrupted and has been reset.', 'warning');
             } catch (retryError) {
                 this.logger.error('Session manager retry failed:', retryError);
-                // Only throw in test environment
-                if (typeof window !== 'undefined' && window.location && window.location.search.includes('test')) {
+                if (inTests) {
                     throw new Error('Session management failed - core functionality unavailable');
                 }
                 // In production, continue with degraded functionality
@@ -311,7 +346,7 @@ class YGORipperApp {
             await this.priceChecker.initialize();
         } catch (error) {
             this.logger.warn('Price checker initialization failed:', error);
-            
+
             // Continue without price checker - limited functionality
             this.priceChecker = null;
             this.showToast('Price checking service unavailable. Prices will not be shown.', 'warning');
@@ -326,10 +361,10 @@ class YGORipperApp {
             this.setupEventHandlers();
         } catch (error) {
             this.logger.error('Event handler setup failed:', error);
-            
+
             // Set up minimal event handlers for critical functions
             this.setupMinimalEventHandlers();
-            
+
             this.showToast('Some interface features may not respond correctly.', 'warning');
         }
     }
@@ -342,7 +377,7 @@ class YGORipperApp {
             await this.loadInitialData();
         } catch (error) {
             this.logger.warn('Initial data loading failed:', error);
-            
+
             // Try to load essential data only
             try {
                 await this.loadEssentialData();
@@ -360,64 +395,47 @@ class YGORipperApp {
     async handleVoiceResult(result) {
         try {
             this.logger.info('Voice recognition result:', result);
-            
+
             if (!this.sessionManager.isSessionActive()) {
                 this.logger.warn('Voice result received but no active session');
                 this.showToast('Please start a session first to add cards.', 'info');
                 return;
             }
-            
+
             // Throttle voice processing to prevent UI lag and batching issues
             if (this.isProcessingVoice) {
                 this.logger.debug('Voice processing in progress, queuing result');
                 this.voiceProcessingQueue.push(result);
                 return;
             }
-            
+
             this.isProcessingVoice = true;
-            
-            // Process the voice result to identify cards with error boundary (non-blocking)
-            // Pass enhanced results to SessionManager if available
+
             const enhancedResults = result.alternatives || null;
-            this.safeProcessVoiceInput(result.transcript, enhancedResults).then(cards => {
-                this.logger.info(`Voice processing result: found ${cards ? cards.length : 0} cards for "${result.transcript}"`);
-                this.logger.debug('Cards array:', cards);
-                if (cards && cards.length > 0) {
-                    // Sort cards by confidence for auto-confirm logic
-                    const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
-                    
-                    this.logger.info(`Found ${cards.length} card matches, best confidence: ${(sortedCards[0].confidence || 0)}%`);
-                    
-                    // Check for auto-confirm with error boundary (non-blocking)
-                    this.safeHandleAutoConfirm(sortedCards, result.transcript);
-                    
-                } else {
-                    this.logger.info(`No cards found for transcript: "${result.transcript}" - triggering training`);
-                    this.showToast(`No cards recognized for: "${result.transcript}"`, 'warning');
-                    
-                    // Offer manual input as fallback
-                    this.offerManualCardInput(result.transcript);
-                }
-            }).catch(error => {
-                this.logger.error('Failed to process voice result:', error);
-                this.showToast('Error processing voice input. You can try again or type manually.', 'error');
-                
-                // Offer recovery options
-                this.showVoiceErrorRecovery(result.transcript);
-            }).finally(() => {
-                // Reset processing flag and handle queued results
-                this.isProcessingVoice = false;
-                this.processVoiceQueue();
-            });
-            
+            const cards = await this.safeProcessVoiceInput(result.transcript, enhancedResults);
+
+            this.logger.info(`Voice processing result: found ${cards ? cards.length : 0} cards for "${result.transcript}"`);
+            this.logger.debug('Cards array:', cards);
+
+            if (cards && cards.length > 0) {
+                const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+                this.logger.info(`Found ${cards.length} card matches, best confidence: ${(sortedCards[0].confidence || 0)}%`);
+                await this.safeHandleAutoConfirm(sortedCards, result.transcript);
+            } else {
+                this.logger.info(`No cards found for transcript: "${result.transcript}" - triggering training`);
+                this.showToast(`No cards recognized for: "${result.transcript}"`, 'warning');
+                this.offerManualCardInput(result.transcript);
+            }
         } catch (error) {
-            this.logger.error('Failed to handle voice result:', error);
-            this.showToast('Error handling voice input. You can try again or type manually.', 'error');
+            this.logger.error('Failed to process voice result:', error);
+            this.showToast('Error processing voice input. You can try again or type manually.', 'error');
+            this.showVoiceErrorRecovery(result.transcript);
+        } finally {
             this.isProcessingVoice = false;
             this.processVoiceQueue();
         }
     }
-    
+
     /**
      * Process queued voice results
      */
@@ -434,12 +452,13 @@ class YGORipperApp {
      */
     async safeProcessVoiceInput(transcript, enhancedResults = null) {
         try {
-            const result = await this.sessionManager.processVoiceInput(transcript, enhancedResults);
+            const args = enhancedResults ? [transcript, enhancedResults] : [transcript];
+            const result = await this.sessionManager.processVoiceInput(...args);
             this.logger.debug(`safeProcessVoiceInput result for "${transcript}":`, result);
             return result;
         } catch (error) {
             this.logger.error('Voice input processing failed:', error);
-            
+
             // Try basic fallback processing
             try {
                 return await this.basicCardNameSearch(transcript);
@@ -457,7 +476,7 @@ class YGORipperApp {
         try {
             const bestMatch = sortedCards[0];
             const bestConfidencePercent = (bestMatch.confidence || 0) * 100;
-            
+
             // Debug logging for auto-confirm behavior
             this.logger.info('Auto-confirm check:', {
                 autoConfirm: this.settings.autoConfirm,
@@ -466,7 +485,7 @@ class YGORipperApp {
                 willAutoConfirm: this.settings.autoConfirm && bestConfidencePercent >= this.settings.autoConfirmThreshold,
                 settingsObject: this.settings
             });
-            
+
             if (this.settings.autoConfirm && bestConfidencePercent >= this.settings.autoConfirmThreshold) {
                 // Auto-confirm the best match
                 this.logger.info(`Auto-confirming: ${bestMatch.name} (${bestConfidencePercent.toFixed(1)}% confidence)`);
@@ -504,7 +523,7 @@ class YGORipperApp {
         } catch (error) {
             this.logger.error('Auto-confirm handling failed:', error);
             this.showToast('Error adding card. Please try selecting manually.', 'error');
-            
+
             // Fallback to manual selection
             this.showCardSelectionDialog(sortedCards, transcript);
         }
@@ -514,42 +533,39 @@ class YGORipperApp {
      * Safe card addition with error boundaries (non-blocking for immediate UI update)
      */
     async safeAddCard(card) {
-        try {
-            // Add the card to session (non-blocking for immediate UI display)
-            this.sessionManager.addCard(card).then(() => {
-                this.logger.debug(`Card addition completed: ${card.name}`);
-                // Update UI after price loading completes
+        if (!this.sessionManager?.addCard) {
+            throw new Error('Session manager is not available');
+        }
+
+        const refreshSessionInfo = () => {
+            if (this.uiManager?.updateSessionInfo && this.sessionManager?.getCurrentSessionInfo) {
                 this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
-            }).catch(error => {
-                this.logger.error('Failed to complete card addition:', error);
-                this.showToast(`Error loading full data for ${card.name}`, 'warning');
-            });
-            
-            // Immediately update UI with loading state
-            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+            }
+        };
+
+        try {
+            refreshSessionInfo();
+            const addedCard = await this.sessionManager.addCard(card);
+            if (!addedCard) {
+                throw new Error('Card was rejected by the session manager');
+            }
+            refreshSessionInfo();
             this.showToast(`Added ${card.name} to session`, 'success');
-            
+
         } catch (error) {
             this.logger.error('Failed to add card:', error);
-            
+
             // Try to add with minimal data as fallback
             try {
                 const fallbackCard = {
                     name: card.name,
                     quantity: card.quantity || 1,
                     rarity: card.rarity || card.displayRarity || 'Unknown',
-                    id: Date.now().toString(),
-                    price_status: 'error',
-                    price: 0,
-                    tcg_price: '--',
-                    tcg_market_price: '--'
+                    id: Date.now().toString()
                 };
-                
-                this.sessionManager.addCard(fallbackCard).catch(fallbackError => {
-                    this.logger.error('Fallback card addition failed:', fallbackError);
-                });
-                
-                this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+
+                await this.sessionManager.addCard(fallbackCard);
+                refreshSessionInfo();
                 this.showToast(`Added ${card.name} (some data may be missing)`, 'warning');
             } catch (fallbackError) {
                 this.logger.error('All card addition attempts failed:', fallbackError);
@@ -579,15 +595,15 @@ class YGORipperApp {
                 this.showToast('Price checking service is not available', 'error');
                 return;
             }
-            
+
             this.uiManager.setLoading(true);
             this.logger.info('Starting price check for:', formData);
-            
+
             // Check network connectivity
             if (!navigator.onLine) {
                 throw new Error('No internet connection available for price checking');
             }
-            
+
             const results = await this.priceChecker.checkPrice(formData);
 
             if (results.success) {
@@ -601,13 +617,13 @@ class YGORipperApp {
             } else {
                 throw new Error(results.error || 'Price check failed');
             }
-            
+
         } catch (error) {
             this.logger.error('Price check failed:', error);
-            
+
             // Show user-friendly error with recovery options
             this.showPriceCheckError(error, formData);
-            
+
         } finally {
             this.uiManager.setLoading(false);
         }
@@ -618,18 +634,18 @@ class YGORipperApp {
      */
     handleVoiceError(error) {
         this.logger.error('Voice recognition error:', error);
-        
+
         // Create user-friendly error message with recovery options
         const errorInfo = this.createVoiceErrorInfo(error);
-        
+
         // Show error to user
         this.showToast(errorInfo.message, 'error');
-        
+
         // Show recovery options if available
         if (errorInfo.recoveryOptions.length > 0) {
             this.showVoiceErrorRecovery(null, errorInfo.recoveryOptions);
         }
-        
+
         // Update voice status
         this.uiManager.updateVoiceStatus('error');
     }
@@ -642,7 +658,7 @@ class YGORipperApp {
             message: 'Voice recognition error',
             recoveryOptions: []
         };
-        
+
         switch (error.type) {
             case 'permission-denied':
                 errorInfo.message = 'Microphone access denied. Please enable microphone permissions in your browser settings.';
@@ -652,7 +668,7 @@ class YGORipperApp {
                     { action: 'help', label: 'Show Help' }
                 ];
                 break;
-                
+
             case 'not-supported':
                 errorInfo.message = 'Voice recognition is not supported in this browser. Please use Chrome, Edge, or Safari.';
                 errorInfo.recoveryOptions = [
@@ -660,7 +676,7 @@ class YGORipperApp {
                     { action: 'help', label: 'Browser Support' }
                 ];
                 break;
-                
+
             case 'network-error':
                 errorInfo.message = 'Network connection is required for voice recognition. Please check your internet connection.';
                 errorInfo.recoveryOptions = [
@@ -668,7 +684,7 @@ class YGORipperApp {
                     { action: 'offline', label: 'Work Offline' }
                 ];
                 break;
-                
+
             case 'no-speech':
                 errorInfo.message = 'No speech detected. Please try speaking louder and clearer.';
                 errorInfo.recoveryOptions = [
@@ -676,7 +692,7 @@ class YGORipperApp {
                     { action: 'manual', label: 'Type Instead' }
                 ];
                 break;
-                
+
             default:
                 errorInfo.message = `Voice recognition error: ${error.message}`;
                 errorInfo.recoveryOptions = [
@@ -684,7 +700,7 @@ class YGORipperApp {
                     { action: 'manual', label: 'Type Instead' }
                 ];
         }
-        
+
         return errorInfo;
     }
 
@@ -698,10 +714,10 @@ class YGORipperApp {
                 { action: 'manual', label: 'Type Card Name' }
             ];
         }
-        
+
         // Implementation would show recovery dialog with options
         this.logger.info('Voice error recovery options:', recoveryOptions);
-        
+
         // For now, show as toast with manual input option
         if (transcript) {
             this.offerManualCardInput(transcript);
@@ -714,7 +730,7 @@ class YGORipperApp {
     showPriceCheckError(error, originalFormData) {
         let message = 'Price check failed';
         let recoveryOptions = [];
-        
+
         if (error.message.includes('network') || error.message.includes('connection')) {
             message = 'No internet connection. Price checking requires an active internet connection.';
             recoveryOptions = [
@@ -734,9 +750,9 @@ class YGORipperApp {
                 { action: 'manual', label: 'Enter Price Manually' }
             ];
         }
-        
+
         this.uiManager.showToast(message, 'error');
-        
+
         // Implementation would show recovery dialog
         this.logger.info('Price check recovery options:', recoveryOptions);
     }
@@ -746,12 +762,12 @@ class YGORipperApp {
      */
     offerManualCardInput(suggestedName = '') {
         this.logger.info('Offering manual card input with suggestion:', suggestedName);
-        
+
         // Show training button for failed voice recognition
         if (this.trainingUI && suggestedName) {
             this.trainingUI.showTrainingButton(suggestedName);
         }
-        
+
         // Also show helpful toast
         this.showToast('Card not found. Try speaking the card name again or click "Train" to help improve recognition.', 'info');
     }
@@ -774,7 +790,7 @@ class YGORipperApp {
     async initializeFallbackStorage() {
         // Implementation would create in-memory storage or simplified localStorage
         this.logger.info('Initializing fallback storage');
-        
+
         // Create minimal storage implementation
         this.storage = {
             data: new Map(),
@@ -791,7 +807,7 @@ class YGORipperApp {
      */
     createMinimalUI() {
         this.logger.info('Creating minimal UI for error display');
-        
+
         // Implementation would create basic error display
         const errorDiv = document.createElement('div');
         errorDiv.innerHTML = `
@@ -809,7 +825,7 @@ class YGORipperApp {
      */
     setupMinimalEventHandlers() {
         this.logger.info('Setting up minimal event handlers');
-        
+
         // Implementation would set up only essential event handlers
         window.addEventListener('beforeunload', () => {
             this.handleAppClose();
@@ -821,7 +837,7 @@ class YGORipperApp {
      */
     async loadEssentialData() {
         this.logger.info('Loading essential data only');
-        
+
         // Load only critical data needed for basic functionality
         try {
             await this.sessionManager.loadCardSets();
@@ -842,7 +858,7 @@ class YGORipperApp {
             sessionAutoSave: true,
             debugMode: false,
             autoConfirm: false,
-            autoConfirmThreshold: 85,
+            autoConfirmThreshold: 0.8,
             voiceConfidenceThreshold: 0.5,
             voiceMaxAlternatives: 5,
             voiceContinuous: true,
@@ -858,7 +874,7 @@ class YGORipperApp {
      */
     async basicCardNameSearch(transcript) {
         this.logger.info('Using basic card name search fallback');
-        
+
         // Implementation would do simple name matching
         // For now, return empty array
         return [];
@@ -878,6 +894,7 @@ class YGORipperApp {
         return {
             name: this.name,
             version: this.version,
+            initialized: this.isInitialized,
             isInitialized: this.isInitialized,
             currentTab: this.currentTab,
             components: {
@@ -905,25 +922,25 @@ class YGORipperApp {
                 debugMode: false,
                 // Auto-confirm settings (matching oldIteration.py)
                 autoConfirm: false,
-                autoConfirmThreshold: 85,
+                autoConfirmThreshold: 0.8,
                 // Auto-extraction settings (matching oldIteration.py)
                 autoExtractRarity: false,
                 autoExtractArtVariant: false,
                 // Override with saved settings
                 ...savedSettings
             };
-            
+
             this.logger.debug('Settings loaded:', this.settings);
-            
+
             // Update SessionManager with loaded settings
             if (this.sessionManager) {
                 this.sessionManager.updateSettings(this.settings);
             }
-            
+
         } catch (error) {
             this.logger.warn('Failed to load settings, using defaults:', error);
             this.settings = this.getDefaultSettings();
-            
+
             // Update SessionManager with default settings
             if (this.sessionManager) {
                 this.sessionManager.updateSettings(this.settings);
@@ -951,23 +968,23 @@ class YGORipperApp {
         try {
             // Load card sets
             await this.sessionManager.loadCardSets();
-            
+
             // Validate that we have enough card sets for proper operation
             const cardSets = this.sessionManager.getCardSets();
             if (!cardSets || cardSets.length < 500) {
                 throw new Error(`Insufficient card sets loaded (${cardSets?.length || 0}). Backend may be offline or misconfigured.`);
             }
-            
+
             // Load last session if auto-save is enabled
             if (this.settings.sessionAutoSave) {
                 await this.sessionManager.loadLastSession();
             }
-            
+
             // Update UI with session info
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
-            
+
             this.logger.info('Initial data loaded successfully');
-            
+
         } catch (error) {
             this.logger.error('Failed to load initial data:', error);
             throw error;
@@ -982,19 +999,19 @@ class YGORipperApp {
         this.uiManager.onTabChange((tabId) => {
             this.currentTab = tabId;
             this.logger.debug(`Switched to tab: ${tabId}`);
-            
+
             // Handle tab-specific initialization
             if (tabId === 'pack-ripper') {
                 this.handlePackRipperTabActivated();
             }
         });
-        
+
         // Listen for card updates from SessionManager
         this.sessionManager.onCardUpdated((card) => {
             this.logger.debug('Card updated:', card);
             // Update the card display in the UI
             this.uiManager.updateCardDisplay(card);
-            
+
             // Also update the session info in case totals changed
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
         });
@@ -1080,6 +1097,14 @@ class YGORipperApp {
             this.handleSetsFiltered(data);
         });
 
+        this.sessionManager.onSessionStart((session) => {
+            this.handleSessionActivated(session);
+        });
+
+        this.sessionManager.onSessionStop((session) => {
+            this.handleSessionDeactivated(session);
+        });
+
         // Voice engine events
         if (this.voiceEngine) {
             this.voiceEngine.onResult((result) => {
@@ -1109,29 +1134,16 @@ class YGORipperApp {
      * Handle session start
      */
     async handleSessionStart(setId) {
+        if (!setId) {
+            this.uiManager.showToast('Please select a card set first', 'warning');
+            return;
+        }
+
         try {
             this.logger.info('Starting session for set:', setId);
-            
+
             await this.sessionManager.startSession(setId);
-            
-            // Update voice engine context with current set
-            if (this.voiceEngine) {
-                this.voiceEngine.updateContext({
-                    currentSet: this.sessionManager.currentSet,
-                    sessionStartTime: Date.now()
-                });
-            }
-            
-            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
-            this.uiManager.showToast('Session started successfully', 'success');
-            
-            // Auto-start voice recognition if available
-            if (this.voiceEngine && this.voiceEngine.isAvailable()) {
-                setTimeout(() => {
-                    this.handleVoiceStart();
-                }, 1000);
-            }
-            
+
         } catch (error) {
             this.logger.error('Failed to start session:', error);
             this.uiManager.showToast('Failed to start session: ' + error.message, 'error');
@@ -1139,24 +1151,67 @@ class YGORipperApp {
     }
 
     /**
+     * Respond to session start events regardless of origin
+     * @param {Object} session - Active session payload from SessionManager
+     */
+    handleSessionActivated(session) {
+        try {
+            const activeSession = session || this.sessionManager.currentSession;
+
+            if (this.voiceEngine) {
+                this.voiceEngine.updateContext({
+                    currentSet: this.sessionManager.currentSet,
+                    sessionStartTime: Date.now()
+                });
+            }
+
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+
+            const setLabel = activeSession?.setName || activeSession?.setId || 'selected set';
+            this.uiManager.showToast(`Session started: ${setLabel}`, 'success');
+
+            if (this.voiceEngine && this.voiceEngine.isAvailable() && !this.voiceEngine.isListening) {
+                setTimeout(() => {
+                    this.handleVoiceStart();
+                }, 1000);
+            }
+        } catch (error) {
+            this.logger.error('Failed to process session start event:', error);
+        }
+    }
+
+    /**
      * Handle session stop
      */
-    handleSessionStop() {
+    async handleSessionStop() {
         try {
             this.logger.info('Stopping session');
-            
+
             // Stop voice recognition first
-            if (this.voiceEngine && this.voiceEngine.isListening()) {
-                this.voiceEngine.stopListening();
+            if (this.voiceEngine && this.voiceEngine.isListening) {
+                this.voiceEngine.stopListening && this.voiceEngine.stopListening();
             }
-            
-            this.sessionManager.stopSession();
-            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
-            this.uiManager.showToast('Session stopped', 'info');
-            
+
+            await this.sessionManager.stopSession();
+
         } catch (error) {
             this.logger.error('Failed to stop session:', error);
             this.uiManager.showToast('Error stopping session: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Respond to session stop events regardless of origin
+     * @param {Object} session - Session payload at the moment stop was emitted
+     */
+    handleSessionDeactivated(session) {
+        try {
+            this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
+
+            const setLabel = session?.setName || session?.setId || 'session';
+            // this.uiManager.showToast(`Session stopped: ${setLabel}`, 'info');
+        } catch (error) {
+            this.logger.error('Failed to process session stop event:', error);
         }
     }
 
@@ -1166,11 +1221,11 @@ class YGORipperApp {
     handleSessionClear() {
         try {
             this.logger.info('Clearing session');
-            
+
             this.sessionManager.clearSession();
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
             this.uiManager.showToast('Session cleared', 'info');
-            
+
         } catch (error) {
             this.logger.error('Failed to clear session:', error);
             this.uiManager.showToast('Error clearing session: ' + error.message, 'error');
@@ -1183,10 +1238,10 @@ class YGORipperApp {
     async handleSessionExport() {
         try {
             this.logger.info('Exporting session');
-            
+
             // Show export dialog
             this.showExportFormatDialog();
-            
+
         } catch (error) {
             this.logger.error('Failed to initiate session export:', error);
             this.uiManager.showToast('Error exporting session: ' + error.message, 'error');
@@ -1209,9 +1264,9 @@ class YGORipperApp {
         try {
             // Show loading state
             this.uiManager.showToast('Preparing export, waiting for pricing data...', 'info');
-            
+
             const exportFile = await this.sessionManager.generateExportFile(format, selectedFields);
-            
+
             // Create download link
             const a = document.createElement('a');
             a.href = exportFile.url;
@@ -1220,9 +1275,9 @@ class YGORipperApp {
             a.click();
             document.body.removeChild(a);
             exportFile.cleanup();
-            
+
             this.uiManager.showToast(`Session exported as ${format.toUpperCase()}`, 'success');
-            
+
         } catch (error) {
             this.logger.error('Failed to export session:', error);
             this.uiManager.showToast('Error exporting session: ' + error.message, 'error');
@@ -1238,27 +1293,27 @@ class YGORipperApp {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.json';
-            
+
             input.onchange = async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-                
+
                 try {
                     const text = await file.text();
                     const sessionData = JSON.parse(text);
-                    
+
                     await this.sessionManager.importSession(sessionData);
                     this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
                     this.uiManager.showToast('Session imported successfully', 'success');
-                    
+
                 } catch (error) {
                     this.logger.error('Failed to import session:', error);
                     this.uiManager.showToast('Error importing session: ' + error.message, 'error');
                 }
             };
-            
+
             input.click();
-            
+
         } catch (error) {
             this.logger.error('Failed to initiate session import:', error);
             this.uiManager.showToast('Error importing session: ' + error.message, 'error');
@@ -1273,14 +1328,14 @@ class YGORipperApp {
             if (!this.voiceEngine) {
                 throw new Error('Voice engine not initialized');
             }
-            
+
             if (!this.voiceEngine.isAvailable()) {
                 throw new Error('Voice recognition not available');
             }
-            
+
             await this.voiceEngine.startListening();
             this.logger.info('Voice recognition started');
-            
+
         } catch (error) {
             this.logger.error('Failed to start voice recognition:', error);
             this.uiManager.showToast('Failed to start voice recognition: ' + error.message, 'error');
@@ -1308,14 +1363,14 @@ class YGORipperApp {
     async handleVoiceTest() {
         try {
             this.logger.info('Starting voice recognition test');
-            
+
             if (!this.voiceEngine || !this.voiceEngine.isAvailable()) {
                 throw new Error('Voice recognition not available');
             }
-            
+
             const result = await this.voiceEngine.testRecognition();
             this.uiManager.showToast(`Voice test result: "${result}"`, 'info');
-            
+
         } catch (error) {
             this.logger.error('Voice test failed:', error);
             this.uiManager.showToast('Voice test failed: ' + error.message, 'error');
@@ -1329,12 +1384,12 @@ class YGORipperApp {
         try {
             this.sessionManager.adjustCardQuantity(cardId, adjustment);
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
-            
+
             // Auto-save if enabled
             if (this.settings.sessionAutoSave) {
                 await this.sessionManager.saveSession();
             }
-            
+
         } catch (error) {
             this.logger.error('Failed to adjust card quantity:', error);
             this.uiManager.showToast('Error adjusting quantity: ' + error.message, 'error');
@@ -1349,7 +1404,7 @@ class YGORipperApp {
             const removedCard = this.sessionManager.removeCard(cardId);
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
             this.uiManager.showToast(`Removed: ${removedCard.name}`, 'success');
-            
+
             // Auto-save if enabled
             if (this.settings.sessionAutoSave) {
                 await this.sessionManager.saveSession();
@@ -1366,20 +1421,20 @@ class YGORipperApp {
     async handlePricingRefresh(cardId) {
         try {
             this.uiManager.setLoading(true);
-            
+
             const card = this.sessionManager.getCard(cardId);
             const pricingData = await this.priceChecker.checkPrice({
                 cardName: card.name,
                 cardNumber: card.cardNumber,
                 rarity: card.rarity
             });
-            
+
             // Call the sessionManager method that the test expects
             this.sessionManager.refreshCardPricing(cardId);
             this.sessionManager.updateCardPricing(cardId, pricingData);
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
             this.uiManager.showToast('Pricing refreshed: Test Card', 'success');
-            
+
         } catch (error) {
             this.logger.error('Failed to refresh pricing:', error);
             this.uiManager.showToast('Error refreshing pricing: ' + error.message, 'error');
@@ -1395,10 +1450,10 @@ class YGORipperApp {
         try {
             this.uiManager.setLoading(true);
             this.uiManager.showToast('Refreshing all prices...', 'info');
-            
+
             const cards = this.sessionManager.getAllCards();
             let updatedCount = 0;
-            
+
             for (const card of cards) {
                 try {
                     const pricingData = await this.priceChecker.checkPrice({
@@ -1406,21 +1461,21 @@ class YGORipperApp {
                         cardNumber: card.cardNumber,
                         rarity: card.rarity
                     });
-                    
+
                     this.sessionManager.updateCardPricing(card.id, pricingData);
                     updatedCount++;
-                    
+
                     // Small delay to avoid overwhelming the API
                     await new Promise(resolve => setTimeout(resolve, 500));
-                    
+
                 } catch (error) {
                     this.logger.warn(`Failed to update pricing for ${card.name}:`, error);
                 }
             }
-            
+
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
             this.uiManager.showToast(`Updated pricing for ${updatedCount} cards`, 'success');
-            
+
         } catch (error) {
             this.logger.error('Failed to refresh bulk pricing:', error);
             this.uiManager.showToast('Error refreshing bulk pricing: ' + error.message, 'error');
@@ -1435,30 +1490,30 @@ class YGORipperApp {
     async handleSettingsSave(newSettings) {
         try {
             this.logger.info('Saving settings:', newSettings);
-            
+
             // Update current settings
             this.settings = { ...this.settings, ...newSettings };
-            
+
             // Save to storage
             await this.saveSettings();
-            
+
             // Update UI based on theme
             if (newSettings.theme) {
                 document.documentElement.setAttribute('data-theme', newSettings.theme);
             }
-            
+
             // Update voice engine with new settings
             if (this.voiceEngine) {
                 this.voiceEngine.updateConfig(this.settings);
             }
-            
+
             // Notify other components
             if (this.sessionManager) {
                 this.sessionManager.updateSettings(this.settings);
             }
-            
+
             this.uiManager.showToast('Settings saved successfully', 'success');
-            
+
         } catch (error) {
             this.logger.error('Failed to save settings:', error);
             this.uiManager.showToast('Failed to save settings', 'error');
@@ -1477,49 +1532,57 @@ class YGORipperApp {
      */
     showCardSelectionDialog(cards, transcript) {
         this.logger.info('Showing card selection dialog for:', transcript, cards);
-        
+
         // Show modal dialog for user to select card
         if (cards.length > 0) {
-            this.uiManager.showCardSelectionModal(cards, transcript, (selectedCard, originalTranscript) => {
-                // Check if user requested training
-                if (selectedCard === '__TRAIN_RECOGNITION__') {
-                    this.logger.info('User requested training for transcript:', originalTranscript);
-                    if (this.trainingUI) {
-                        this.trainingUI.showTrainingButton(originalTranscript);
-                    }
-                    return;
-                }
-                
-                if (selectedCard) {
-                    // Record user selection for learning
-                    if (this.voiceEngine) {
-                        this.voiceEngine.recordUserInteraction(transcript, selectedCard.name, true, {
-                            userSelected: true,
-                            currentSet: this.sessionManager.currentSet,
-                            alternativesAvailable: cards.length
-                        });
+            if (typeof this.uiManager?.showCardSelectionModal === 'function') {
+                this.uiManager.showCardSelectionModal(cards, transcript, (selectedCard, originalTranscript) => {
+                    // Check if user requested training
+                    if (selectedCard === '__TRAIN_RECOGNITION__') {
+                        this.logger.info('User requested training for transcript:', originalTranscript);
+                        if (this.trainingUI) {
+                            this.trainingUI.showTrainingButton(originalTranscript);
+                        }
+                        return;
                     }
 
-                    // Track achievement for card recognition (user-selected)
-                    if (this.achievementManager) {
-                        const confidence = selectedCard.confidence || 0;
-                        this.achievementManager.trackCardRecognition(confidence);
-                    }
+                    if (selectedCard) {
+                        // Record user selection for learning
+                        if (this.voiceEngine) {
+                            this.voiceEngine.recordUserInteraction(transcript, selectedCard.name, true, {
+                                userSelected: true,
+                                currentSet: this.sessionManager.currentSet,
+                                alternativesAvailable: cards.length
+                            });
+                        }
 
-                    this.safeAddCard({
-                        ...selectedCard,
-                        quantity: 1
-                    });
-                } else {
-                    // Record rejection for learning
-                    if (this.voiceEngine && cards.length > 0) {
-                        this.voiceEngine.recordUserInteraction(transcript, cards[0].name, false, {
-                            rejectedSuggestion: true,
-                            currentSet: this.sessionManager.currentSet
+                        // Track achievement for card recognition (user-selected)
+                        if (this.achievementManager) {
+                            const confidence = selectedCard.confidence || 0;
+                            this.achievementManager.trackCardRecognition(confidence);
+                        }
+
+                        this.safeAddCard({
+                            ...selectedCard,
+                            quantity: 1
                         });
+                    } else {
+                        // Record rejection for learning
+                        if (this.voiceEngine && cards.length > 0) {
+                            this.voiceEngine.recordUserInteraction(transcript, cards[0].name, false, {
+                                rejectedSuggestion: true,
+                                currentSet: this.sessionManager.currentSet
+                            });
+                        }
                     }
-                }
-            });
+                });
+            } else {
+                this.logger.warn('Card selection modal not available, defaulting to first card');
+                this.safeAddCard({
+                    ...cards[0],
+                    quantity: 1
+                });
+            }
         } else {
             this.showToast(`No cards found for: "${transcript}"`, 'warning');
         }
@@ -1530,7 +1593,7 @@ class YGORipperApp {
      */
     handlePackRipperTabActivated() {
         this.logger.debug('Pack ripper tab activated');
-        
+
         // Ensure voice engine is ready when pack ripper tab is active
         if (this.voiceEngine && !this.voiceEngine.isInitialized) {
             this.voiceEngine.initialize().catch((error) => {
@@ -1542,9 +1605,27 @@ class YGORipperApp {
     /**
      * Handle sets loaded event from SessionManager
      */
-    handleSetsLoaded(data) {
+    handleSetsLoaded(data = {}, searchOverride, totalOverride) {
+        const hasSearchOverride = arguments.length >= 2;
+        const hasTotalOverride = arguments.length >= 3;
+        const sets = Array.isArray(data.sets) ? data.sets : [];
+        const searchTerm = hasSearchOverride
+            ? searchOverride
+            : (data.searchTerm ?? '');
+        const totalSets = hasTotalOverride
+            ? totalOverride
+            : (data.totalSets ?? sets.length);
+
         this.logger.info('Card sets loaded:', data);
-        this.uiManager.updateCardSets(data.sets, '', data.totalSets || data.sets.length);
+        this.logger.info('Card sets loaded summary:', {
+            count: sets.length,
+            total: totalSets,
+            filtered: Boolean(searchTerm),
+        });
+        if (data.error && this.uiManager?.showToast) {
+            this.uiManager.showToast(data.error, 'error');
+        }
+        this.uiManager.updateCardSets(sets, searchTerm, totalSets);
     }
 
     /**
@@ -1561,20 +1642,20 @@ class YGORipperApp {
     async handleAppClose() {
         try {
             this.logger.info('Application closing...');
-            
+
             // Auto-save session if enabled
             if (this.settings.sessionAutoSave && this.sessionManager.isSessionActive()) {
                 await this.sessionManager.saveSession();
             }
-            
+
             // Save settings
             await this.saveSettings();
-            
+
             // Stop voice recognition
-            if (this.voiceEngine && this.voiceEngine.isListening()) {
+            if (this.voiceEngine && this.voiceEngine.isListening) {
                 this.voiceEngine.stopListening();
             }
-            
+
         } catch (error) {
             this.logger.error('Error during application close:', error);
         }
@@ -1587,15 +1668,15 @@ class YGORipperApp {
         // Fix selector to match test expectations and HTML structure
         const progressBar = document.getElementById('loading-progress') || document.querySelector('.progress-bar');
         const progressText = document.querySelector('.loading-text');
-        
+
         if (progressBar) {
             progressBar.style.width = `${percent}%`;
         }
-        
+
         if (progressText) {
             progressText.textContent = message;
         }
-        
+
         this.logger.debug(`Loading progress: ${percent}% - ${message}`);
     }
 
@@ -1606,15 +1687,15 @@ class YGORipperApp {
         // Fix selectors to match test expectations and HTML structure  
         const loadingScreen = document.getElementById('loading-screen') || document.querySelector('.loading-screen');
         const mainApp = document.getElementById('app') || document.querySelector('#app');
-        
+
         if (loadingScreen) {
             loadingScreen.classList.add('hidden');
         }
-        
+
         if (mainApp) {
             mainApp.classList.remove('hidden');
         }
-        
+
         this.logger.info('App displayed via showApp method');
     }
 
@@ -1623,12 +1704,12 @@ class YGORipperApp {
      */
     showInitializationError(error) {
         const loadingText = document.querySelector('.loading-text');
-        
+
         if (loadingText) {
             loadingText.textContent = `Failed to initialize: ${error.message}`;
             loadingText.style.color = '#ff4444';
         }
-        
+
         this.logger.error('Initialization error displayed:', error);
     }
 
@@ -1638,21 +1719,21 @@ class YGORipperApp {
     cleanup() {
         try {
             this.logger.info('Cleaning up application resources...');
-            
+
             // Clean up TrainingUI
             if (this.trainingUI) {
                 this.trainingUI.cleanup();
                 this.trainingUI = null;
             }
-            
+
             // Clean up voice engine
             if (this.voiceEngine) {
                 this.voiceEngine.stopListening();
             }
-            
+
             // Clean up other components as needed
             this.logger.info('Application cleanup completed');
-            
+
         } catch (error) {
             this.logger.error('Error during cleanup:', error);
         }
@@ -1690,7 +1771,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('YGO Ripper UI v2 starting...');
     } catch (error) {
         console.error('Failed to initialize YGO Ripper UI:', error);
-        
+
         // Show error message to user
         const loadingText = document.querySelector('.loading-text');
         if (loadingText) {

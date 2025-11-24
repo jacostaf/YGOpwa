@@ -168,7 +168,7 @@ export class AchievementsPage {
         ">
           ${this.renderCategoryStat('Voice Recognition', 'Mic', stats.byCategory.voice, '#3B82F6')}
           ${this.renderCategoryStat('Pack Opening', 'Package', stats.byCategory.pack, '#A855F7')}
-          ${this.renderCategoryStat('Collection', 'FolderOpen', stats.byCategory.collection, '#22C55E')}
+          ${this.renderCategoryStat('Collection', 'folder-open', stats.byCategory.collection, '#22C55E')}
           ${this.renderCategoryStat('General', 'Star', stats.byCategory.general, '#EAB308')}
         </div>
       </div>
@@ -225,7 +225,7 @@ export class AchievementsPage {
       { id: 'all', label: 'All Achievements', icon: 'Grid' },
       { id: 'voice', label: 'Voice Recognition', icon: 'Mic' },
       { id: 'pack', label: 'Pack Opening', icon: 'Package' },
-      { id: 'collection', label: 'Collection', icon: 'FolderOpen' },
+      { id: 'collection', label: 'Collection', icon: 'folder-open' },
       { id: 'general', label: 'General', icon: 'Star' }
     ];
 

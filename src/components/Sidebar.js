@@ -23,6 +23,7 @@ export default class Sidebar {
     // Navigation items configuration
     this.navItems = [
       { id: 'dashboard', label: 'Dashboard', icon: 'home' },
+      { id: 'leaderboards', label: 'Leaderboards', icon: 'trophy' },
       { id: 'pack-opening', label: 'Pack Opening', icon: 'package' },
       { id: 'price-checker', label: 'Price Checker', icon: 'dollar-sign' },
       { id: 'collection', label: 'Collection', icon: 'folder-open' },

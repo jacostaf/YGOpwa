@@ -79,6 +79,12 @@ A modern, feature-rich Progressive Web Application for Yu-Gi-Oh card management 
 ### Prerequisites
 VoxRip requires the backend API from [tcg_ygoripper](https://github.com/jacostaf/tcg_ygoripper/tree/copilot/fix-5) to function properly.
 
+### Step 0: Configure runtime environment
+1. Copy `runtime-env.example.js` to `runtime-env.js` (already checked in for local dev).
+2. Update `VITE_CARD_API_BASE_URL` so it matches the port you run `tcgcsv_server.py` on (default `http://127.0.0.1:8081/api/v1`).
+3. If you change the backend port (`python tcgcsv_server.py --port 7001`), update the runtime env file to the same port before launching the PWA.
+4. After starting the backend, confirm it responds with `curl http://127.0.0.1:8081/api/v1/health` (replace port if needed). The Pack Opening page now surfaces this URL when misconfigured, so matching values avoids noisy alerts.
+
 ### Step 1: Start Backend API (Required)
 ```bash
 # Clone and start the backend API (separate repository)
@@ -90,6 +96,8 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python3 main.py  # Starts on http://127.0.0.1:8081
 ```
+
+> Always start (or restart) the backend before serving the front end; the PWA assumes the `/api/v1` host in `runtime-env.js` is reachable.
 
 ### Step 2: Start VoxRip
 ```bash
@@ -292,12 +300,12 @@ YGOpwa/
 ## ⚙️ Configuration
 
 ### Backend API Integration
-VoxRip connects to the backend API at `http://127.0.0.1:8081` with these endpoints:
-- **Card Sets**: `/card-sets/from-cache` - Loads all 992+ card sets
-- **Set Search**: `/card-sets/search/{term}` - Searches card sets by name/code
-- **Set Cards**: `/card-sets/{set_name}/cards` - Gets cards for specific set
-- **Price Check**: `/cards/price` - TCGPlayer price lookup
-- **Health Check**: `/health` - Verifies API connectivity
+VoxRip now speaks to the Phase 3 aggregation layer at `http://127.0.0.1:8081/api/v1`:
+- **Card Sets**: `/card-sets/from-cache` – Loads all 992+ card sets (cached)
+- **Set Search**: `/card-sets/search/{term}` – Searches card sets by name/code
+- **Set Cards**: `/card-sets/{set_name}/cards` – Returns cards + metadata for the selected set
+- **Price Check**: `/cards/price` – Builds slugs from user input and returns normalized pricing data
+- **Health Check**: `/health` – Aggregation/cache diagnostics
 
 ### Voice Recognition Settings
 Navigate to Settings page to configure:

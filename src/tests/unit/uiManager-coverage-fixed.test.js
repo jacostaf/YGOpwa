@@ -346,7 +346,7 @@ describe('UIManager - Coverage Enhancement Tests - Fixed', () => {
             uiManager.hideCardPopup();
             
             expect(uiManager.currentPopup).toBe(null);
-            expect(document.getElementById('test-popup')).toBe(null);
+            expect(document.body.contains(popup)).toBe(false);
         });
 
         it('should handle responsive class updates', () => {

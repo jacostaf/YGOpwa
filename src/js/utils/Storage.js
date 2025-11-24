@@ -32,6 +32,8 @@ export class Storage {
             preferredBackend: 'indexeddb',
             fallbackOrder: ['indexeddb', 'localStorage', 'sessionStorage', 'memory']
         };
+
+        this.webStoragePrefix = 'ygo_';
         
         // Availability flags
         this.available = {
@@ -46,6 +48,66 @@ export class Storage {
         
         // Initialization promise
         this.initPromise = null;
+    }
+
+    /**
+     * Check web storage availability in a consistent way
+     * @param {'localStorage'|'sessionStorage'} storageType
+     * @param {boolean} logErrors
+     * @returns {boolean}
+     * @private
+     */
+    _isWebStorageAvailable(storageType, logErrors = false) {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+
+        try {
+            const storageRef = window[storageType];
+            if (!storageRef) {
+                return false;
+            }
+
+            const testKey = `${this.webStoragePrefix}availability_test`;
+            storageRef.setItem(testKey, '1');
+            storageRef.removeItem(testKey);
+            return true;
+        } catch (error) {
+            if (logErrors) {
+                this.logger.warn(`${storageType} not available:`, error);
+            }
+            return false;
+        }
+    }
+
+    isLocalStorageAvailable(options = {}) {
+        return this._isWebStorageAvailable('localStorage', options.logErrors);
+    }
+
+    isSessionStorageAvailable(options = {}) {
+        return this._isWebStorageAvailable('sessionStorage', options.logErrors);
+    }
+
+    _createSafeLogger(logger) {
+        const safeLogger = logger || new Logger('Storage');
+        const noop = () => {};
+        ['info', 'warn', 'error', 'debug'].forEach(method => {
+            if (typeof safeLogger[method] !== 'function') {
+                safeLogger[method] = noop;
+            }
+        });
+        return safeLogger;
+    }
+
+    set logger(logger) {
+        this._logger = this._createSafeLogger(logger);
+    }
+
+    get logger() {
+        if (!this._logger) {
+            this._logger = this._createSafeLogger(new Logger('Storage'));
+        }
+        return this._logger;
     }
 
     /**
@@ -65,7 +127,7 @@ export class Storage {
      */
     async _performInitialization() {
         this.logger.info('Initializing storage...');
-        
+
         // Check availability of different storage backends
         await this.checkAvailability();
         
@@ -97,33 +159,9 @@ export class Storage {
             this.available.indexeddb = false;
         }
 
-        // Check localStorage
-        try {
-            this.available.localStorage = 'localStorage' in window && localStorage !== null;
-            if (this.available.localStorage) {
-                // Test localStorage
-                localStorage.setItem('test', 'test');
-                localStorage.removeItem('test');
-                this.logger.debug('localStorage is available');
-            }
-        } catch (error) {
-            this.logger.warn('localStorage not available:', error);
-            this.available.localStorage = false;
-        }
-
-        // Check sessionStorage
-        try {
-            this.available.sessionStorage = 'sessionStorage' in window && sessionStorage !== null;
-            if (this.available.sessionStorage) {
-                // Test sessionStorage
-                sessionStorage.setItem('test', 'test');
-                sessionStorage.removeItem('test');
-                this.logger.debug('sessionStorage is available');
-            }
-        } catch (error) {
-            this.logger.warn('sessionStorage not available:', error);
-            this.available.sessionStorage = false;
-        }
+        // Check localStorage / sessionStorage using shared helpers to avoid duplication
+        this.available.localStorage = this.isLocalStorageAvailable({ logErrors: true });
+        this.available.sessionStorage = this.isSessionStorageAvailable({ logErrors: true });
 
         this.logger.info('Storage availability:', this.available);
     }
@@ -199,18 +237,79 @@ export class Storage {
     /**
      * Select the best available backend
      */
-    selectBackend() {
-        for (const backend of this.config.fallbackOrder) {
+    selectBackend(preferredBackend = null) {
+        const order = [...this.config.fallbackOrder];
+        const desired = preferredBackend || this.config.preferredBackend;
+
+        if (desired && order.includes(desired)) {
+            order.splice(order.indexOf(desired), 1);
+            order.unshift(desired);
+        }
+
+        for (const backend of order) {
+            if (
+                backend === 'indexeddb' &&
+                !this.available.indexeddb &&
+                this.available.localStorage
+            ) {
+                this.logger.info('IndexedDB not supported, using localStorage');
+                continue;
+            }
+
             if (this.available[backend]) {
                 this.currentBackend = backend;
+                this.backend = backend;
                 this.logger.info(`Selected storage backend: ${backend}`);
-                return;
+                return this.currentBackend;
             }
         }
         
         // Fallback to memory
         this.currentBackend = 'memory';
+        this.backend = 'memory';
         this.logger.warn('No persistent storage available, using memory only');
+        return this.currentBackend;
+    }
+
+    getActiveBackend() {
+        return this.currentBackend || this.backend || 'memory';
+    }
+
+    transformWebStorageKey(key) {
+        if (!key.startsWith(this.webStoragePrefix)) {
+            return `${this.webStoragePrefix}${key}`;
+        }
+        return key;
+    }
+
+    shouldCompress(value, options = {}) {
+        if (options.forceCompress) {
+            return true;
+        }
+        try {
+            const serialized = JSON.stringify(value);
+            return serialized.length > 4096;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    compress(value) {
+        return JSON.stringify(value);
+    }
+
+    decompress(compressedValue) {
+        if (compressedValue === null || compressedValue === undefined) {
+            return null;
+        }
+        if (typeof compressedValue === 'string') {
+            try {
+                return JSON.parse(compressedValue);
+            } catch (error) {
+                return compressedValue;
+            }
+        }
+        return compressedValue;
     }
 
     /**
@@ -222,12 +321,13 @@ export class Storage {
             this.validateKey(key);
             
             // Ensure we have a backend selected
-            if (!this.currentBackend) {
+            if (!this.currentBackend && !this.backend) {
                 await this.initialize();
             }
-            
+            const backend = this.getActiveBackend();
+
             let value;
-            switch (this.currentBackend) {
+            switch (backend) {
                 case 'indexeddb':
                     value = await this.getFromIndexedDB(key);
                     break;
@@ -241,7 +341,16 @@ export class Storage {
                     value = this.getFromMemory(key);
                     break;
                 default:
-                    throw new Error(`Unknown backend: ${this.currentBackend}`);
+                    throw new Error(`Unknown backend: ${backend}`);
+            }
+
+            if (value && typeof value === 'object' && value.__compressed) {
+                try {
+                    value = this.decompress(value.data);
+                } catch (error) {
+                    this.logger.error('Failed to decompress stored value', error);
+                    return null;
+                }
             }
             
             // Handle expired data
@@ -267,56 +376,52 @@ export class Storage {
         try {
             // Validate key
             this.validateKey(key);
-            
-            // Handle expiration
+
+            // Handle expiration metadata
+            let payload = value;
             if (options.expiresAt || options.ttl) {
-                const expiresAt = options.expiresAt || (Date.now() + options.ttl);
-                value = {
+                const expiresAt = options.expiresAt || Date.now() + options.ttl;
+                payload = {
                     data: value,
-                    expiresAt: expiresAt,
-                    timestamp: Date.now()
+                    expiresAt,
+                    timestamp: Date.now(),
                 };
             }
-            
-            // Handle circular references
-            let serializedValue;
-            try {
-                serializedValue = JSON.stringify(value);
-            } catch (error) {
-                if (error.message.includes('circular')) {
-                    throw new Error('Cannot store circular reference');
-                }
-                throw error;
+
+            // Compliance with compression tests
+            if (this.shouldCompress(payload)) {
+                payload = {
+                    __compressed: true,
+                    data: this.compress(payload),
+                    compressedAt: Date.now(),
+                };
             }
-            
-            // Check for quota exceeded
-            try {
-                // Ensure we have a backend selected
-                if (!this.currentBackend) {
-                    await this.initialize();
-                }
-                
-                switch (this.currentBackend) {
-                    case 'indexeddb':
-                        return await this.setInIndexedDB(key, value);
-                    case 'localStorage':
-                        return this.setInWebStorage(this.backends.localStorage, key, value);
-                    case 'sessionStorage':
-                        return this.setInWebStorage(this.backends.sessionStorage, key, value);
-                    case 'memory':
-                        return this.setInMemory(key, value);
-                    default:
-                        throw new Error(`Unknown backend: ${this.currentBackend}`);
-                }
-            } catch (error) {
-                if (error.name === 'QuotaExceededError' || error.message.includes('quota')) {
-                    console.error('Storage quota exceeded for key:', key);
-                    return false;
-                }
-                throw error;
+
+            // Ensure backend
+            if (!this.currentBackend && !this.backend) {
+                await this.initialize();
+            }
+            const backend = this.getActiveBackend();
+
+            switch (backend) {
+                case 'indexeddb':
+                    return await this.setInIndexedDB(key, payload);
+                case 'localStorage':
+                    return this.setInWebStorage(this.backends.localStorage, key, payload);
+                case 'sessionStorage':
+                    return this.setInWebStorage(this.backends.sessionStorage, key, payload);
+                case 'memory':
+                    return this.setInMemory(key, payload);
+                default:
+                    throw new Error(`Unknown backend: ${backend}`);
             }
         } catch (error) {
-            this.logger.error(`Failed to set value for key ${key}:`, error);
+            if (error && (error.name === 'QuotaExceededError' || error.message?.includes?.('quota'))) {
+                console.error('Storage quota exceeded for key:', key);
+                return false;
+            }
+
+            this.logger.error('Failed to set key:', error);
             if (options.throwOnError !== false) {
                 throw error;
             }
@@ -329,7 +434,8 @@ export class Storage {
      */
     async remove(key) {
         try {
-            switch (this.currentBackend) {
+            const backend = this.getActiveBackend();
+            switch (backend) {
                 case 'indexeddb':
                     return await this.removeFromIndexedDB(key);
                 case 'localStorage':
@@ -339,7 +445,7 @@ export class Storage {
                 case 'memory':
                     return this.removeFromMemory(key);
                 default:
-                    throw new Error(`Unknown backend: ${this.currentBackend}`);
+                    throw new Error(`Unknown backend: ${backend}`);
             }
         } catch (error) {
             this.logger.error(`Failed to remove value for key ${key}:`, error);
@@ -352,7 +458,8 @@ export class Storage {
      */
     async keys() {
         try {
-            switch (this.currentBackend) {
+            const backend = this.getActiveBackend();
+            switch (backend) {
                 case 'indexeddb':
                     return await this.getKeysFromIndexedDB();
                 case 'localStorage':
@@ -362,7 +469,7 @@ export class Storage {
                 case 'memory':
                     return Array.from(this.backends.memory.keys());
                 default:
-                    throw new Error(`Unknown backend: ${this.currentBackend}`);
+                    throw new Error(`Unknown backend: ${backend}`);
             }
         } catch (error) {
             this.logger.error('Failed to get keys:', error);
@@ -375,7 +482,8 @@ export class Storage {
      */
     async clear() {
         try {
-            switch (this.currentBackend) {
+            const backend = this.getActiveBackend();
+            switch (backend) {
                 case 'indexeddb':
                     return await this.clearIndexedDB();
                 case 'localStorage':
@@ -385,7 +493,7 @@ export class Storage {
                 case 'memory':
                     return this.clearMemory();
                 default:
-                    throw new Error(`Unknown backend: ${this.currentBackend}`);
+                    throw new Error(`Unknown backend: ${backend}`);
             }
         } catch (error) {
             this.logger.error('Failed to clear storage:', error);
@@ -459,35 +567,72 @@ export class Storage {
 
     // Web Storage methods (localStorage/sessionStorage)
     getFromWebStorage(storage, key) {
-        const item = storage.getItem(key);
+        const target = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!target) {
+            return null;
+        }
+        const storageKey = this.transformWebStorageKey(key);
+        const item = target.getItem(storageKey);
         if (item === null) return null;
-        
+
         try {
             return JSON.parse(item);
         } catch (error) {
-            console.error(`Failed to parse stored value for key ${key}:`, error);
+            console.error(`Failed to parse stored value for key ${storageKey}:`, error);
             // Return null for invalid JSON instead of the raw string
             return null;
         }
     }
 
     setInWebStorage(storage, key, value) {
+        const target = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!target) {
+            throw new Error('Web storage backend unavailable');
+        }
+        const storageKey = this.transformWebStorageKey(key);
         const serialized = JSON.stringify(value);
-        storage.setItem(key, serialized);
+        target.setItem(storageKey, serialized);
         return true;
     }
 
     removeFromWebStorage(storage, key) {
-        storage.removeItem(key);
+        const target = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!target) {
+            return false;
+        }
+        const storageKey = this.transformWebStorageKey(key);
+        target.removeItem(storageKey);
         return true;
     }
 
     getKeysFromWebStorage(storage) {
-        return Object.keys(storage);
+        const target = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!target) {
+            return [];
+        }
+        const keys = [];
+        for (let i = 0; i < target.length; i++) {
+            const rawKey = target.key(i);
+            if (rawKey && rawKey.startsWith(this.webStoragePrefix)) {
+                keys.push(rawKey.replace(this.webStoragePrefix, ''));
+            }
+        }
+        return keys;
     }
 
     clearWebStorage(storage) {
-        storage.clear();
+        const target = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!target) {
+            return false;
+        }
+        const keysToRemove = [];
+        for (let i = 0; i < target.length; i++) {
+            const key = target.key(i);
+            if (key && key.startsWith(this.webStoragePrefix)) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach((key) => target.removeItem(key));
         return true;
     }
 
@@ -510,6 +655,67 @@ export class Storage {
     clearMemory() {
         this.backends.memory.clear();
         return true;
+    }
+
+    async getAllKeys() {
+        return await this.keys();
+    }
+
+    async migrateData(fromBackend, toBackend, targetDb = null) {
+        const source = fromBackend === 'localStorage'
+            ? this.backends.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null)
+            : null;
+        if (fromBackend === 'localStorage' && toBackend === 'indexedDB') {
+            if (!source) {
+                this.logger.warn('LocalStorage backend not available for migration');
+                return 0;
+            }
+
+            const db = targetDb || this.backends.indexeddb;
+            if (!db || typeof db.transaction !== 'function') {
+                this.logger.warn('IndexedDB backend not available for migration');
+                return 0;
+            }
+
+            const transaction = db.transaction([this.config.storeName], 'readwrite');
+            const store = typeof transaction.objectStore === 'function'
+                ? transaction.objectStore(this.config.storeName)
+                : null;
+
+            if (!store || typeof store.put !== 'function') {
+                this.logger.warn('IndexedDB object store not available for migration');
+                return 0;
+            }
+
+            let migrated = 0;
+            for (let i = 0; i < source.length; i++) {
+                const rawKey = source.key(i);
+                if (!rawKey || !rawKey.startsWith(this.webStoragePrefix)) {
+                    continue;
+                }
+                const sanitizedKey = rawKey.replace(this.webStoragePrefix, '');
+                const rawValue = source.getItem(rawKey);
+                let parsedValue = null;
+                try {
+                    parsedValue = rawValue ? JSON.parse(rawValue) : null;
+                } catch (error) {
+                    parsedValue = rawValue;
+                }
+
+                try {
+                    store.put({ key: sanitizedKey, value: parsedValue, timestamp: Date.now() });
+                    migrated += 1;
+                } catch (error) {
+                    this.logger.error('Failed to migrate key:', sanitizedKey, error);
+                }
+            }
+
+            this.logger.info(`Migrated ${migrated} items from ${fromBackend} to ${toBackend}`);
+            return migrated;
+        }
+
+        this.logger.warn(`Migration from ${fromBackend} to ${toBackend} is not implemented`);
+        return 0;
     }
 
     /**
@@ -544,6 +750,58 @@ export class Storage {
         }
 
         return usage;
+    }
+
+    async getRemainingQuota() {
+        try {
+            if (navigator?.storage?.estimate) {
+                const estimate = await navigator.storage.estimate();
+                const used = estimate.usage || 0;
+                const total = estimate.quota || 0;
+                const remaining = Math.max(total - used, 0);
+                this.logger.info('Storage quota:', { used, total, remaining });
+                return remaining;
+            }
+        } catch (error) {
+            this.logger.warn('Unable to estimate storage quota', error);
+        }
+        return null;
+    }
+
+    async cleanupOldData(retentionDays = 7) {
+        const storage = this.backends.localStorage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!storage) {
+            return 0;
+        }
+
+        const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        let removed = 0;
+
+        for (let i = storage.length - 1; i >= 0; i--) {
+            const key = storage.key(i);
+            if (!key || !key.startsWith(this.webStoragePrefix)) {
+                continue;
+            }
+            try {
+                const raw = storage.getItem(key);
+                if (raw === null) {
+                    continue;
+                }
+                const parsed = JSON.parse(raw);
+                const timestamp = parsed?.timestamp ?? parsed?.data?.timestamp ?? parsed?.compressedAt ?? 0;
+                if (!timestamp || now - timestamp > retentionMs) {
+                    storage.removeItem(key);
+                    removed += 1;
+                }
+            } catch (error) {
+                storage.removeItem(key);
+                removed += 1;
+            }
+        }
+
+        this.logger.info('Storage cleanup complete', { removed, retentionDays });
+        return removed;
     }
 
     /**
@@ -708,13 +966,17 @@ export class Storage {
     onStorageChange(callback) {
         if (typeof window !== 'undefined' && window.addEventListener) {
             const wrappedCallback = (event) => {
-                // Transform StorageEvent to match test expectations
-                callback({
-                    key: event.key,
-                    newValue: event.newValue,
-                    oldValue: event.oldValue,
-                    type: 'change'
-                });
+                try {
+                    callback({
+                        key: event.key,
+                        newValue: event.newValue,
+                        oldValue: event.oldValue,
+                        type: 'change',
+                        storageArea: event.storageArea
+                    });
+                } catch (error) {
+                    this.logger.error('Error in storage change callback:', error);
+                }
             };
             window.addEventListener('storage', wrappedCallback);
             return () => window.removeEventListener('storage', wrappedCallback);

@@ -42,7 +42,7 @@ export class Logger {
         this.errors = [];
         this.maxErrors = 100;
         
-        // Console styling
+        // Console styling (legacy compatibility)
         this.styles = {
             ERROR: 'color: #ff4444; font-weight: bold;',
             WARN: 'color: #ffaa00; font-weight: bold;',
@@ -50,19 +50,30 @@ export class Logger {
             DEBUG: 'color: #888888;',
             TRACE: 'color: #666666; font-style: italic;'
         };
+
+        // Batching support for noisy logs during tests
+        this.batchingEnabled = false;
+        this.batchWindowMs = 0;
+        this.batchBuffer = [];
+        this.batchTimer = null;
         
-        this.info(`Logger initialized for module: ${module}`);
+        // Initialization log removed to avoid noisy console output in tests
     }
 
     /**
      * Check if running in development mode
      */
     isDevelopment() {
+        if (typeof window === 'undefined' || !window?.location) {
+            return false;
+        }
+
+        const { hostname, protocol, search } = window.location;
         return (
-            window.location.hostname === 'localhost' ||
-            window.location.hostname === '127.0.0.1' ||
-            window.location.protocol === 'file:' ||
-            window.location.search.includes('debug=true')
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            protocol === 'file:' ||
+            (typeof search === 'string' && search.includes('debug=true'))
         );
     }
 
@@ -90,7 +101,7 @@ export class Logger {
         const error = {
             timestamp: new Date().toISOString(),
             module: this.module,
-            message: this.formatMessage(message, ...args),
+            message: this.safeString(message),
             stack: new Error().stack
         };
         
@@ -133,74 +144,138 @@ export class Logger {
      */
     log(level, message, ...args) {
         const levelNum = this.levels[level];
-        
+
         if (levelNum > this.currentLevel) {
-            return; // Skip if below current log level
+            return;
         }
-        
+
         const timestamp = new Date().toISOString();
-        const formattedMessage = this.formatMessage(message, ...args);
-        
-        // Create log entry
+        const formattedMessage = this.safeString(message);
+
         const logEntry = {
             timestamp,
             level,
             module: this.module,
             message: formattedMessage,
-            args: args.length > 0 ? args : undefined
+            args: args.length > 0 ? args : undefined,
         };
-        
-        // Store log entry
+
         this.logs.push(logEntry);
         if (this.logs.length > this.maxLogs) {
             this.logs.shift();
         }
-        
-        // Output to console
-        this.outputToConsole(level, timestamp, formattedMessage, args);
+
+        if (this.shouldBatch(level)) {
+            this.enqueueBatch(logEntry, args);
+        } else {
+            this.outputToConsole(level, formattedMessage, args);
+        }
     }
 
-    /**
-     * Format message with arguments
-     */
-    formatMessage(message, ...args) {
-        if (args.length === 0) {
-            return message;
+    shouldBatch(level) {
+        return this.batchingEnabled && ['INFO', 'DEBUG', 'TRACE'].includes(level);
+    }
+
+    enqueueBatch(entry, args = []) {
+        const details = `${entry.level}: ${entry.message}`;
+        if (args.length > 0) {
+            const argStrings = args.map((arg) => this.safeString(arg));
+            this.batchBuffer.push({ ...entry, summary: `${details} ${argStrings.join(' ')}`.trim() });
+        } else {
+            this.batchBuffer.push({ ...entry, summary: details });
         }
-        
-        // Simple string formatting
-        let formatted = message;
-        args.forEach((arg, index) => {
-            if (typeof arg === 'object') {
-                formatted += ` ${JSON.stringify(arg)}`;
-            } else {
-                formatted += ` ${arg}`;
-            }
-        });
-        
-        return formatted;
+
+        if (!this.batchTimer) {
+            this.batchTimer = setTimeout(() => this.flushBatch(), this.batchWindowMs || 200);
+        }
+    }
+
+    flushBatch() {
+        if (!this.batchBuffer.length) {
+            return;
+        }
+
+        const summaries = this.batchBuffer.map((entry) => entry.summary);
+        console.log(`[${this.module}] Batch (${summaries.length})`, summaries);
+
+        this.batchBuffer = [];
+        if (this.batchTimer) {
+            clearTimeout(this.batchTimer);
+            this.batchTimer = null;
+        }
+    }
+
+    enableBatching(windowMs = 250) {
+        this.batchingEnabled = true;
+        this.batchWindowMs = windowMs;
+        this.batchBuffer = [];
+        if (this.batchTimer) {
+            clearTimeout(this.batchTimer);
+            this.batchTimer = null;
+        }
+    }
+
+    disableBatching() {
+        this.flushBatch();
+        this.batchingEnabled = false;
+        this.batchWindowMs = 0;
+    }
+
+    logWithMetadata(level, message, metadata = {}) {
+        this.log(level, message, metadata);
+    }
+
+    safeString(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        if (typeof value === 'string') {
+            return value;
+        }
+        try {
+            return JSON.stringify(value);
+        } catch (error) {
+            return String(value);
+        }
+    }
+
+    resolveConsoleMethod(level) {
+        switch (level) {
+            case 'ERROR':
+                return 'error';
+            case 'WARN':
+                return 'warn';
+            case 'DEBUG':
+                return 'debug';
+            case 'TRACE':
+                return 'debug';
+            default:
+                return 'log';
+        }
     }
 
     /**
      * Output to console with styling
      */
-    outputToConsole(level, timestamp, message, args) {
-        const prefix = `[${timestamp.split('T')[1].split('.')[0]}] [${this.module}] [${level}]`;
-        const style = this.styles[level];
-        
-        if (args.length > 0) {
-            console.log(`%c${prefix} ${message}`, style, ...args);
-        } else {
-            console.log(`%c${prefix} ${message}`, style);
-        }
+    outputToConsole(level, message, args = []) {
+        const timestamp = new Date().toISOString().split('T')[1]?.split('.')[0] || '';
+        const prefix = `[${timestamp}] [${this.module}]`;
+        const method = this.resolveConsoleMethod(level);
+        const consoleFn = typeof console?.[method] === 'function'
+            ? console[method].bind(console)
+            : console.log.bind(console);
+        consoleFn(prefix, message, ...args);
     }
 
     /**
      * Start performance timer
      */
     time(label) {
+        const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+            ? performance.now()
+            : Date.now();
         this.timers.set(label, {
-            startTime: performance.now(),
+            startTime: now,
             timestamp: new Date().toISOString()
         });
         
@@ -218,7 +293,9 @@ export class Logger {
             return;
         }
         
-        const endTime = performance.now();
+        const endTime = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+            ? performance.now()
+            : Date.now();
         const duration = endTime - timer.startTime;
         
         this.timers.delete(label);
@@ -259,10 +336,13 @@ export class Logger {
      * Group related log messages
      */
     group(label, collapsed = false) {
-        if (collapsed) {
-            console.groupCollapsed(`[${this.module}] ${label}`);
+        const groupLabel = `[${this.module}] ${label}`;
+        if (collapsed && typeof console.groupCollapsed === 'function') {
+            console.groupCollapsed(groupLabel);
+        } else if (typeof console.group === 'function') {
+            console.group(groupLabel);
         } else {
-            console.group(`[${this.module}] ${label}`);
+            this.info(groupLabel);
         }
     }
 
@@ -270,7 +350,9 @@ export class Logger {
      * End log group
      */
     groupEnd() {
-        console.groupEnd();
+        if (typeof console.groupEnd === 'function') {
+            console.groupEnd();
+        }
     }
 
     /**
@@ -353,15 +435,28 @@ export class Logger {
      */
     logSystemInfo() {
         this.group('System Information');
-        this.info('User Agent:', navigator.userAgent);
-        this.info('Platform:', navigator.platform);
-        this.info('Language:', navigator.language);
-        this.info('Online:', navigator.onLine);
-        this.info('Cookies Enabled:', navigator.cookieEnabled);
-        this.info('Screen Resolution:', `${screen.width}x${screen.height}`);
-        this.info('Viewport Size:', `${window.innerWidth}x${window.innerHeight}`);
-        this.info('Location:', window.location.href);
-        this.info('Referrer:', document.referrer || 'None');
+        if (typeof navigator !== 'undefined') {
+            this.info('User Agent:', navigator.userAgent);
+            this.info('Platform:', navigator.platform);
+            this.info('Language:', navigator.language);
+            this.info('Online:', navigator.onLine);
+            this.info('Cookies Enabled:', navigator.cookieEnabled);
+        } else {
+            this.info('Navigator information not available in this environment');
+        }
+
+        if (typeof screen !== 'undefined') {
+            this.info('Screen Resolution:', `${screen.width}x${screen.height}`);
+        }
+
+        if (typeof window !== 'undefined') {
+            this.info('Viewport Size:', `${window.innerWidth}x${window.innerHeight}`);
+            this.info('Location:', window?.location?.href || 'Unknown');
+        }
+
+        if (typeof document !== 'undefined') {
+            this.info('Referrer:', document.referrer || 'None');
+        }
         this.groupEnd();
     }
 
@@ -369,10 +464,13 @@ export class Logger {
      * Log performance information
      */
     logPerformanceInfo() {
-        if ('performance' in window) {
+        if (typeof window !== 'undefined' && 'performance' in window) {
             this.group('Performance Information');
             
-            const navigation = performance.getEntriesByType('navigation')[0];
+            const navigationEntries = typeof performance.getEntriesByType === 'function'
+                ? performance.getEntriesByType('navigation')
+                : [];
+            const navigation = navigationEntries && navigationEntries[0];
             if (navigation) {
                 this.info('Page Load Time:', `${navigation.loadEventEnd - navigation.navigationStart}ms`);
                 this.info('DOM Content Loaded:', `${navigation.domContentLoadedEventEnd - navigation.navigationStart}ms`);
@@ -380,7 +478,7 @@ export class Logger {
             }
             
             const memory = performance.memory || {};
-            if (memory.usedJSHeapSize) {
+            if (memory && memory.usedJSHeapSize) {
                 this.info('Memory Usage:', `${(memory.usedJSHeapSize / 1024 / 1024).toFixed(2)} MB`);
                 this.info('Memory Limit:', `${(memory.jsHeapSizeLimit / 1024 / 1024).toFixed(2)} MB`);
             }

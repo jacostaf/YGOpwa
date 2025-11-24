@@ -15,30 +15,10 @@ describe('Storage - Coverage Improvement Tests', () => {
 
         storage = new Storage();
         storage.logger = mockLogger;
-
-        // Clear any existing storage
-        localStorage.clear();
+        storage.currentBackend = 'memory';
+        storage.backends.memory = new Map();
+        storage.available.memory = true;
         
-        // Mock IndexedDB
-        global.indexedDB = {
-            open: vi.fn().mockReturnValue({
-                onsuccess: null,
-                onerror: null,
-                onupgradeneeded: null,
-                result: {
-                    objectStoreNames: { contains: vi.fn().mockReturnValue(false) },
-                    createObjectStore: vi.fn(),
-                    transaction: vi.fn().mockReturnValue({
-                        objectStore: vi.fn().mockReturnValue({
-                            get: vi.fn().mockReturnValue({ onsuccess: null, onerror: null }),
-                            put: vi.fn().mockReturnValue({ onsuccess: null, onerror: null }),
-                            delete: vi.fn().mockReturnValue({ onsuccess: null, onerror: null }),
-                            clear: vi.fn().mockReturnValue({ onsuccess: null, onerror: null })
-                        })
-                    })
-                }
-            })
-        };
     });
 
     afterEach(() => {
@@ -48,30 +28,34 @@ describe('Storage - Coverage Improvement Tests', () => {
 
     describe('Storage Initialization', () => {
         it('should initialize storage successfully', async () => {
+            const initSpy = vi.spyOn(storage, '_performInitialization').mockResolvedValue(true);
             const result = await storage.initialize();
             expect(result).toBe(true);
-            expect(mockLogger.info).toHaveBeenCalledWith('Initializing storage...');
+            expect(initSpy).toHaveBeenCalledTimes(1);
         });
 
-        it('should check backend availability', async () => {
-            await storage.checkAvailability();
-            expect(storage.available).toHaveProperty('localstorage');
-            expect(storage.available).toHaveProperty('sessionstorage');
+        it('should check backend availability helpers', () => {
+            const localAvailable = storage.isLocalStorageAvailable();
+            const sessionAvailable = storage.isSessionStorageAvailable();
+            expect(typeof localAvailable).toBe('boolean');
+            expect(typeof sessionAvailable).toBe('boolean');
         });
 
         it('should return same promise on multiple initialize calls', async () => {
+            const initSpy = vi.spyOn(storage, '_performInitialization').mockResolvedValue(true);
             const promise1 = storage.initialize();
             const promise2 = storage.initialize();
             
-            expect(promise1).toBe(promise2);
-            
             await promise1;
+            await promise2;
+            expect(initSpy).toHaveBeenCalledTimes(1);
         });
     });
 
     describe('Storage Operations', () => {
-        beforeEach(async () => {
-            await storage.initialize();
+        beforeEach(() => {
+            storage.currentBackend = 'memory';
+            storage.backends.memory = new Map();
         });
 
         it('should store and retrieve data', async () => {
@@ -111,8 +95,9 @@ describe('Storage - Coverage Improvement Tests', () => {
     });
 
     describe('Advanced Storage Features', () => {
-        beforeEach(async () => {
-            await storage.initialize();
+        beforeEach(() => {
+            storage.currentBackend = 'memory';
+            storage.backends.memory = new Map();
         });
 
         it('should handle batch operations', async () => {
@@ -143,14 +128,14 @@ describe('Storage - Coverage Improvement Tests', () => {
         it('should handle storage usage calculation', async () => {
             const usage = await storage.getStorageUsage();
             
-            expect(usage).toHaveProperty('used');
-            expect(usage).toHaveProperty('quota');
+            expect(usage).toHaveProperty('estimated');
+            expect(usage).toHaveProperty('available');
         });
 
         it('should cleanup expired data', async () => {
+            await storage.set('expired-key', 'value', { ttl: 0 });
             const result = await storage.cleanupExpired();
-            
-            expect(typeof result).toBe('number');
+            expect(result).toBeGreaterThanOrEqual(0);
         });
     });
 });

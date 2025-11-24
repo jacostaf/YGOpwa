@@ -216,8 +216,17 @@ describe('Storage - Real Code Coverage Tests', () => {
 
     describe('Error Handling (Real Code)', () => {
         beforeEach(() => {
-            storage.currentBackend = 'memory';
-            storage.backends.memory = new Map();
+            const failingStorage = {
+                setItem: vi.fn(),
+                getItem: vi.fn().mockReturnValue(null),
+                removeItem: vi.fn(),
+                clear: vi.fn(),
+                key: vi.fn(),
+                length: 0
+            };
+            storage.available.localStorage = true;
+            storage.currentBackend = 'localStorage';
+            storage.backends.localStorage = failingStorage;
         });
 
         it('should handle circular references', async () => {
@@ -235,10 +244,9 @@ describe('Storage - Real Code Coverage Tests', () => {
                 enumerable: true
             });
 
-            // Should not throw by default but may still succeed in memory
+            // Should not throw by default
             const result = await storage.set('error-key', problematicData, { throwOnError: false });
-            // Memory backend might handle this differently, so just check it's boolean
-            expect(typeof result).toBe('boolean');
+            expect(result).toBe(false);
 
             // Should throw when explicitly requested
             await expect(storage.set('error-key', problematicData, { throwOnError: true }))

@@ -32,7 +32,8 @@
     "build": "node scripts/build.js",
     "install-electron": "npm install electron@32.3.3 --save-dev",
     "start-electron": "electron main.js",
-    "package-electron": "electron-builder"
+    "package-electron": "electron-builder",
+    "plan:set": "node scripts/admin/set-user-plan.js"
   },
   "keywords": [
     "yugioh",
@@ -59,6 +60,10 @@
     "jsdom": "^26.1.0",
     "playwright": "^1.54.1",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "supabase": "^2.51.0"
   },
   "engines": {
     "node": ">=16.0.0",

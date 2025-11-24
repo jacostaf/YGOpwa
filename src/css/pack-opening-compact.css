@@ -380,8 +380,27 @@
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: var(--spacing-sm, 0.75rem);
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-width, 120px), 1fr));
+  gap: var(--spacing-xs, 0.5rem);
+}
+
+.card-grid .card-image {
+  background: #0f172a;
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 63 / 88;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.card-grid .card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
 }
 
 .empty-state {
@@ -427,10 +446,13 @@
 }
 
 @keyframes pulse-dot {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.7;
     transform: scale(1.25);

@@ -347,6 +347,7 @@ describe('SessionManager', () => {
           tcgMarketTotal: 0
         }
       };
+      sessionManager.cards = sessionManager.currentSession.cards;
       sessionManager.sessionActive = true;
     });
 
@@ -354,7 +355,8 @@ describe('SessionManager', () => {
       const cardData = {
         name: 'Blue-Eyes White Dragon',
         rarity: 'Ultra Rare',
-        card_number: 'LOB-001'
+        card_number: 'LOB-001',
+        setCode: 'LOB'
       };
 
       global.fetch.mockResolvedValueOnce({
@@ -381,7 +383,8 @@ describe('SessionManager', () => {
       const cardData = {
         name: 'Blue-Eyes White Dragon',
         rarity: 'Ultra Rare',
-        card_number: 'LOB-001'
+        card_number: 'LOB-001',
+        setCode: 'LOB'
       };
 
       // Add card first time
@@ -1021,7 +1024,7 @@ describe('SessionManager', () => {
       sessionManager.sessionActive = false;
       sessionManager.currentSession = null;
 
-      const cardData = { name: 'Test Card' };
+      const cardData = { name: 'Test Card', setCode: 'TEST' };
       
       await expect(sessionManager.addCard(cardData)).rejects.toThrow('No active session');
     });
@@ -1237,9 +1240,10 @@ describe('SessionManager', () => {
     });
 
     test('should handle concurrent card additions', async () => {
-      const cardData1 = { name: 'Card 1', rarity: 'Common' };
-      const cardData2 = { name: 'Card 2', rarity: 'Rare' };
-      const cardData3 = { name: 'Card 3', rarity: 'Ultra Rare' };
+      const baseCard = { setCode: 'LOB', quantity: 1 };
+      const cardData1 = { ...baseCard, name: 'Card 1', rarity: 'Common' };
+      const cardData2 = { ...baseCard, name: 'Card 2', rarity: 'Rare' };
+      const cardData3 = { ...baseCard, name: 'Card 3', rarity: 'Ultra Rare' };
 
       global.fetch.mockResolvedValue({
         ok: true,
@@ -1319,8 +1323,8 @@ describe('SessionManager', () => {
 
       // Concurrent operations
       const operations = [
-        sessionManager.addCard({ name: 'Card A' }),
-        sessionManager.addCard({ name: 'Card B' }),
+        sessionManager.addCard({ name: 'Card A', setCode: 'LOB' }),
+        sessionManager.addCard({ name: 'Card B', setCode: 'LOB' }),
         sessionManager.updateSessionStatistics(),
         sessionManager.saveSession()
       ];

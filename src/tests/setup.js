@@ -7,15 +7,14 @@
 import { vi, beforeEach, afterEach } from 'vitest';
 import { setupSpeechRecognitionMocks } from './mockSpeechRecognition.js';
 
-// Enable manual mocks
-vi.mock('../js/utils/Logger.js');
-
-// Mock localStorage
+// Mock localStorage / sessionStorage with resets that survive vi.clearAllMocks
 const createStorageMock = () => {
-  let storage = {}; // Use let instead of const to allow reassignment
-  
+  let storage = {};
+
   const mock = {
-    getItem: vi.fn((key) => storage[key] || null),
+    getItem: vi.fn((key) =>
+      Object.prototype.hasOwnProperty.call(storage, key) ? storage[key] : null
+    ),
     setItem: vi.fn((key, value) => {
       storage[key] = String(value);
     }),
@@ -23,26 +22,35 @@ const createStorageMock = () => {
       delete storage[key];
     }),
     clear: vi.fn(() => {
-      // Reset the storage object and clear all references
       storage = {};
     }),
     key: vi.fn((index) => Object.keys(storage)[index] || null),
     get length() {
       return Object.keys(storage).length;
     },
-    // Add reference to internal storage for debugging
-    _storage: storage,
-    // Method to reset storage reference
+    get _storage() {
+      return storage;
+    },
     _reset: () => {
       storage = {};
     }
   };
-  
+
   return mock;
 };
 
-global.localStorage = createStorageMock();
-global.sessionStorage = createStorageMock();
+const resetWebStorageMocks = () => {
+  const local = createStorageMock();
+  const session = createStorageMock();
+  global.localStorage = local;
+  global.sessionStorage = session;
+  if (global.window) {
+    global.window.localStorage = local;
+    global.window.sessionStorage = session;
+  }
+};
+
+resetWebStorageMocks();
 
 // Mock Web Speech API
 global.webkitSpeechRecognition = vi.fn().mockImplementation(() => ({
@@ -108,7 +116,7 @@ global.indexedDB = {
 };
 
 // Mock Service Worker and navigator
-global.navigator = {
+const createNavigatorMock = () => ({
   userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
   platform: 'MacIntel',
   language: 'en-US',
@@ -151,7 +159,32 @@ global.navigator = {
       removeEventListener: vi.fn()
     })
   }
+});
+
+const resetNavigatorMocks = () => {
+  const navigatorMock = createNavigatorMock();
+  if (!global.navigator) {
+    global.navigator = {};
+  }
+
+  Object.entries(navigatorMock).forEach(([key, value]) => {
+    Object.defineProperty(global.navigator, key, {
+      value,
+      configurable: true,
+      writable: true
+    });
+  });
+
+  if (global.window) {
+    Object.defineProperty(global.window, 'navigator', {
+      value: global.navigator,
+      configurable: true,
+      writable: true
+    });
+  }
 };
+
+resetNavigatorMocks();
 
 // Mock console methods to reduce noise in tests
 global.console = {
@@ -174,112 +207,116 @@ if (!global.URL) {
 global.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url');
 global.URL.revokeObjectURL = vi.fn();
 
-// Enhanced DOM element factory for UIManager DOM element mocking
-function createMockDOMElement(tagName = 'div') {
-    const element = {
-        tagName: tagName.toUpperCase(),
-        id: '',
-        className: '',
-        classList: {
-            add: vi.fn(),
-            remove: vi.fn(),
-            toggle: vi.fn((className, force) => {
-                const hasClass = element.className.includes(className);
-                if (force === true || (force === undefined && !hasClass)) {
-                    element.classList.add(className);
-                    return true;
-                } else if (force === false || (force === undefined && hasClass)) {
-                    element.classList.remove(className);
-                    return false;
-                }
-                return hasClass;
-            }),
-            contains: vi.fn((className) => element.className.includes(className))
-        },
-        style: {
-            display: '',
-            visibility: '',
-            opacity: '',
-            setProperty: vi.fn(),
-            removeProperty: vi.fn(),
-            getPropertyValue: vi.fn().mockReturnValue('')
-        },
-        dataset: {},
-        innerHTML: '',
-        textContent: '',
-        value: '',
-        checked: false,
-        disabled: false,
-        hidden: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        setAttribute: vi.fn((name, value) => {
-            element[name] = value;
-            if (name === 'class') element.className = value;
-        }),
-        getAttribute: vi.fn((attr) => {
-            if (attr === 'id') return element.id;
-            if (attr === 'class') return element.className;
-            return element[attr] || null;
-        }),
-        removeAttribute: vi.fn((name) => {
-            delete element[name];
-            if (name === 'class') element.className = '';
-        }),
-        hasAttribute: vi.fn((name) => {
-            if (name === 'class') return Boolean(element.className);
-            return element[name] !== undefined;
-        }),
-        appendChild: vi.fn(),
-        removeChild: vi.fn(),
-        querySelector: vi.fn(),
-        querySelectorAll: vi.fn(() => []),
-        getBoundingClientRect: vi.fn(() => ({
-            top: 0, left: 0, right: 100, bottom: 100, width: 100, height: 100
-        })),
-        scrollIntoView: vi.fn(),
-        focus: vi.fn(),
-        blur: vi.fn(),
-        click: vi.fn(),
-        remove: vi.fn(),
-        toggleAttribute: vi.fn(),
-        title: '',
-        parentNode: null,
-        children: [],
-        firstChild: null,
-        lastChild: null
-    };
+const originalGetElementById = document.getElementById.bind(document);
+const originalQuerySelector = document.querySelector.bind(document);
+const originalQuerySelectorAll = document.querySelectorAll.bind(document);
+
+const wrapMethod = (object, method) => {
+    if (object && typeof object[method] === 'function') {
+        const original = object[method].bind(object);
+        object[method] = vi.fn((...args) => original(...args));
+    } else if (object && object[method] === undefined) {
+        object[method] = vi.fn();
+    }
+};
+
+const ensureProperty = (object, key, defaultValue) => {
+    if (!(key in object)) {
+        Object.defineProperty(object, key, {
+            configurable: true,
+            writable: true,
+            value: defaultValue
+        });
+    }
+};
+
+function augmentDomElement(element) {
+    if (!element || element.__yg_augmented) {
+        return element;
+    }
+
+    if (element.classList) {
+        wrapMethod(element.classList, 'add');
+        wrapMethod(element.classList, 'remove');
+        wrapMethod(element.classList, 'toggle');
+        wrapMethod(element.classList, 'contains');
+    }
+
+    if (element.style) {
+        wrapMethod(element.style, 'setProperty');
+        wrapMethod(element.style, 'removeProperty');
+        wrapMethod(element.style, 'getPropertyValue');
+    }
+
+    wrapMethod(element, 'appendChild');
+    wrapMethod(element, 'removeChild');
+    wrapMethod(element, 'querySelector');
+    wrapMethod(element, 'querySelectorAll');
+    wrapMethod(element, 'getBoundingClientRect');
+    wrapMethod(element, 'scrollIntoView');
+    wrapMethod(element, 'focus');
+    wrapMethod(element, 'blur');
+    wrapMethod(element, 'click');
+    wrapMethod(element, 'remove');
+    wrapMethod(element, 'addEventListener');
+    wrapMethod(element, 'removeEventListener');
+    wrapMethod(element, 'setAttribute');
+    wrapMethod(element, 'getAttribute');
+    wrapMethod(element, 'removeAttribute');
+    wrapMethod(element, 'toggleAttribute');
+
+    ensureProperty(element, 'dataset', {});
+    ensureProperty(element, 'value', '');
+    ensureProperty(element, 'checked', false);
+    ensureProperty(element, 'disabled', false);
+    ensureProperty(element, 'hidden', false);
+
+    element.__yg_augmented = true;
     return element;
 }
 
-// Override document methods to return properly mocked elements for UIManager
-global.document.getElementById = vi.fn((id) => {
-    if (id) {
+// Enhanced DOM element factory for UIManager DOM element mocking
+function createMockDOMElement(tagName = 'div') {
+    const element = document.createElement(tagName);
+    return augmentDomElement(element);
+}
+
+const assignDocumentMocks = () => {
+    document.getElementById = vi.fn((id) => {
+        const existing = originalGetElementById(id);
+        if (existing) {
+            return augmentDomElement(existing);
+        }
+        if (!id) return null;
         const element = createMockDOMElement('div');
         element.id = id;
         return element;
-    }
-    return null;
-});
+    });
 
-global.document.querySelector = vi.fn((selector) => {
-    if (selector) {
-        const element = createMockDOMElement('div');
-        return element;
-    }
-    return null;
-});
+    document.querySelector = vi.fn((selector) => {
+        const existing = originalQuerySelector(selector);
+        if (existing) {
+            return augmentDomElement(existing);
+        }
+        if (!selector) return null;
+        return createMockDOMElement('div');
+    });
 
-global.document.querySelectorAll = vi.fn((selector) => {
-    if (selector) {
-        // Return array of mock elements for common selectors
+    document.querySelectorAll = vi.fn((selector) => {
+        const existing = originalQuerySelectorAll(selector);
+        if (existing && existing.length) {
+            existing.forEach(node => augmentDomElement(node));
+            return existing;
+        }
+        if (!selector) return [];
         if (selector === '.tab-btn' || selector === '.tab-panel') {
             return [createMockDOMElement('div'), createMockDOMElement('div')];
         }
         return [createMockDOMElement('div')];
-    }
-    return [];
-});
+    });
+};
+
+assignDocumentMocks();
 
 // Mock requestAnimationFrame
 global.requestAnimationFrame = vi.fn().mockImplementation((cb) => {
@@ -292,6 +329,11 @@ global.cancelAnimationFrame = vi.fn();
 beforeEach(() => {
   // Reset all mocks
   vi.clearAllMocks();
+
+  // Reapply DOM/storage/navigator mocks because vi.clearAllMocks removes implementations
+  resetWebStorageMocks();
+  resetNavigatorMocks();
+  assignDocumentMocks();
   
   // Reset storage
   if (global.localStorage && global.localStorage.clear) {

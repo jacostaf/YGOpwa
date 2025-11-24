@@ -6,6 +6,21 @@
 
 import { CollectionManager } from '../services/CollectionManager.js';
 import CardGrid from '../components/CardGrid.js';
+import {
+  fetchCollectionItems,
+  fetchCollectionSummary,
+  upsertCollectionItem,
+  removeCollectionQuantity,
+  resolveCardVariantId,
+} from '../services/collectionsService.js';
+import {
+  fetchPackEventSummaries,
+  fetchTopPackPull,
+} from '../services/packEventsService.js';
+import {
+  fetchActivePlan,
+  evaluateCollectionQuota,
+} from '../services/subscriptionService.js';
 
 export class CollectionPage {
   constructor(app) {
@@ -20,6 +35,10 @@ export class CollectionPage {
       filteredCards: [],
       sortedCards: [],
       stats: null,
+      summary: null,
+      error: null,
+      isLoading: false,
+      isMutating: false,
       filters: {
         set: 'all',
         rarity: 'all',
@@ -32,8 +51,44 @@ export class CollectionPage {
         order: 'desc'
       },
       viewMode: 'grid', // 'grid' or 'list'
-      cardSize: 150
+      cardSize: 150,
+      pack: {
+        eventsAll: [],
+        events: [],
+        stats: null,
+        bestPull: null,
+        error: null,
+        isLoading: true,
+        filters: {
+          profitableOnly: false,
+          source: 'all'
+        }
+      },
+      subscription: {
+        plan: null,
+        error: null,
+        isLoading: true,
+        quota: null
+      }
     };
+
+    this.currencyFormatter = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+
+    this.numberFormatter = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+
+    this.dateFormatter = new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
 
     // Bound handlers
     this.boundHandlers = {
@@ -44,8 +99,14 @@ export class CollectionPage {
       handleExport: this.handleExport.bind(this),
       handleCardRemove: this.handleCardRemove.bind(this),
       handleSearchInput: this.handleSearchInput.bind(this),
-      handleCardSizeChange: this.handleCardSizeChange.bind(this)
+      handleCardSizeChange: this.handleCardSizeChange.bind(this),
+      handleAddCard: this.handleAddCard.bind(this),
+      handlePackProfitToggle: this.handlePackProfitToggle.bind(this),
+      handlePackSourceChange: this.handlePackSourceChange.bind(this),
+      handlePackRefresh: this.handlePackRefresh.bind(this)
     };
+
+    this.optimisticRollbacks = [];
   }
 
   /**
@@ -68,6 +129,10 @@ export class CollectionPage {
             <button class="btn-secondary" id="refreshCollectionBtn">
               <i class="lucide-icon" data-lucide="refresh-cw"></i>
               Refresh
+            </button>
+            <button class="btn-primary" id="addCardBtn">
+              <i class="lucide-icon" data-lucide="plus"></i>
+              Add Card
             </button>
             <button class="btn-primary" id="exportCollectionBtn">
               <i class="lucide-icon" data-lucide="download"></i>
@@ -119,6 +184,17 @@ export class CollectionPage {
               <div class="stat-label">Rarest Card</div>
               <div class="stat-value" id="statRarestCard">-</div>
               <div class="stat-change" id="statRarestRarity">-</div>
+            </div>
+          </div>
+
+          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card" id="planQuotaCard">
+            <div class="stat-icon" style="background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);">
+              <i class="lucide-icon" data-lucide="shield-check"></i>
+            </div>
+            <div class="stat-content">
+              <div class="stat-label" id="statPlanName">Plan</div>
+              <div class="stat-value" id="statPlanLimit">Loading…</div>
+              <div class="stat-change" id="statPlanHint">Fetching quota…</div>
             </div>
           </div>
         </div>
@@ -258,6 +334,7 @@ export class CollectionPage {
                       <th>Number</th>
                       <th>Set</th>
                       <th>Rarity</th>
+                      <th>Quantity</th>
                       <th>Value</th>
                       <th>Date Added</th>
                       <th>Session</th>
@@ -268,16 +345,127 @@ export class CollectionPage {
                   </tbody>
                 </table>
               </div>
-            </div>
           </div>
+        </div>
 
-          <!-- Empty State -->
-          <div id="emptyState" class="empty-state" style="display: none;">
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state" style="display: none;">
             <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
               <i class="lucide-icon" data-lucide="package-x"></i>
               <h3>No Cards Found</h3>
               <p>Your collection is empty or no cards match your filters.</p>
               <p>Start adding cards from Pack Opening sessions!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pack Performance -->
+        <div class="pack-performance-section">
+          <div class="section-header">
+            <div class="section-title">
+              <i class="lucide-icon" data-lucide="trending-up"></i>
+              <div>
+                <h3>Pack Performance</h3>
+                <p class="section-subtitle">ROI metrics based on your recorded pack events</p>
+              </div>
+            </div>
+            <div class="section-actions">
+              <button class="btn-secondary btn-sm" id="refreshPackHistoryBtn">
+                <i class="lucide-icon" data-lucide="refresh-cw"></i>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div class="pack-insights-grid" id="packInsightsGrid">
+            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
+              <div class="insight-header">
+                <i class="lucide-icon" data-lucide="line-chart"></i>
+                <span>Lifetime Gain</span>
+              </div>
+              <div class="insight-value" id="packTotalGain">$0.00</div>
+              <div class="insight-subtitle" id="packProfitableCount">0 profitable packs</div>
+            </div>
+
+            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
+              <div class="insight-header">
+                <i class="lucide-icon" data-lucide="wallet"></i>
+                <span>Net vs Pack Cost</span>
+              </div>
+              <div class="insight-value" id="packNetGain">$0.00</div>
+              <div class="insight-subtitle" id="packTotalSpend">Total spend $0.00</div>
+            </div>
+
+            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
+              <div class="insight-header">
+                <i class="lucide-icon" data-lucide="percent"></i>
+                <span>Average ROI</span>
+              </div>
+              <div class="insight-value" id="packAverageRoi">—</div>
+              <div class="insight-subtitle" id="packVisiblePacks">Based on visible history</div>
+            </div>
+
+            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
+              <div class="insight-header">
+                <i class="lucide-icon" data-lucide="star"></i>
+                <span>Most Valuable Pull</span>
+              </div>
+              <div class="insight-value" id="packBestPullValue">—</div>
+              <div class="insight-subtitle" id="packBestPullName">Log more pack events to surface highlights</div>
+            </div>
+          </div>
+
+          <div class="pack-history-panel bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
+            <div class="pack-history-header">
+              <div>
+                <h4>Pack History</h4>
+                <p class="section-subtitle">Compare pack-time prices with current valuations</p>
+              </div>
+              <div class="pack-history-filters">
+                <label class="inline-toggle">
+                  <input type="checkbox" id="packProfitableToggle" class="form-checkbox rounded">
+                  <span>Profitable only</span>
+                </label>
+                <select id="packSourceFilter" class="form-select form-select-sm">
+                  <option value="all">All Sources</option>
+                  <option value="pack">Booster Pack</option>
+                  <option value="purchase">Single Purchase</option>
+                  <option value="trade">Trade</option>
+                  <option value="gift">Gift</option>
+                  <option value="reward">Reward</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="packHistoryError" class="pack-history-error" style="display: none;"></div>
+
+            <div class="table-container pack-history-table-container">
+              <table class="pack-history-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Set</th>
+                    <th>Cards</th>
+                    <th>Pack Value</th>
+                    <th>Current Value</th>
+                    <th>Gain</th>
+                    <th>ROI</th>
+                    <th>Net vs Cost</th>
+                  </tr>
+                </thead>
+                <tbody id="packHistoryTableBody">
+                  <tr class="loading-row">
+                    <td colspan="8">Loading pack history...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="packHistoryEmpty" class="pack-history-empty" style="display: none;">
+              <i class="lucide-icon" data-lucide="archive-restore"></i>
+              <p>No pack events recorded yet.</p>
+              <p>Open packs and sync them to Supabase to unlock ROI insights.</p>
             </div>
           </div>
         </div>
@@ -294,34 +482,19 @@ export class CollectionPage {
       this.container = container;
       this.container.innerHTML = this.render();
 
-      // Initialize CollectionManager
-      if (this.app.sessionManager) {
-        this.collectionManager = new CollectionManager(this.app.sessionManager);
-      } else {
-        console.error('CollectionPage: SessionManager not available');
-        this.showError('Unable to load collection data');
-        return;
-      }
+      // Initialize CollectionManager (Supabase-backed, session fallback)
+      this.collectionManager = new CollectionManager(this.app?.sessionManager || null);
 
-      // Load initial data
-      await this.loadData();
-
-      // Initialize CardGrid component
-      this.initializeCardGrid();
-
-      // Populate filters
-      this.populateFilters();
-
-      // Attach event listeners
+      // Attach event listeners immediately
       this.attachEvents();
 
-      // Initialize Lucide icons
       if (typeof lucide !== 'undefined') {
         lucide.createIcons();
       }
 
-      // Update display
-      this.updateDisplay();
+      // Load initial data from Supabase
+      await this.loadData({ initial: true });
+      await this.loadPackInsights({ initial: true });
 
     } catch (error) {
       console.error('CollectionPage: Error mounting', error);
@@ -355,16 +528,73 @@ export class CollectionPage {
   /**
    * Load collection data
    */
-  async loadData() {
+  async loadData(options = {}) {
+    const { initial = false, silent = false } = options;
+
     try {
-      // Get all cards from collection manager
-      this.state.cards = this.collectionManager.getAllCards();
+      this.state.isLoading = true;
+      if (!silent) {
+        this.toggleLoadingIndicator(true);
+      }
 
-      // Apply filters and sorting
-      this.applyFiltersAndSort();
+      const [itemsResult, summaryResult, planResult] = await Promise.all([
+        fetchCollectionItems(),
+        fetchCollectionSummary(),
+        fetchActivePlan()
+      ]);
 
-      // Get statistics
-      this.state.stats = this.collectionManager.getCollectionStats(this.state.cards);
+      if (itemsResult.error) {
+        throw itemsResult.error;
+      }
+
+      const cards = Array.isArray(itemsResult.items)
+        ? itemsResult.items.map(item => this.transformCollectionItem(item)).filter(Boolean)
+        : [];
+
+      this.state.cards = cards;
+      this.collectionManager.setExternalCards(cards, { ttl: Number.MAX_SAFE_INTEGER });
+
+      if (!summaryResult.error) {
+        this.state.summary = summaryResult.summary;
+      } else {
+        console.warn('CollectionPage: Summary fetch error', summaryResult.error);
+        this.state.summary = null;
+      }
+
+      if (!planResult.error) {
+        const uniqueVariantCount = new Set(cards.map((card) => card.cardVariantId)).size;
+        const quota = evaluateCollectionQuota(planResult.plan, uniqueVariantCount);
+        this.state.subscription = {
+          plan: planResult.plan,
+          error: null,
+          isLoading: false,
+          quota
+        };
+      } else {
+        console.warn('CollectionPage: Plan fetch error', planResult.error);
+        this.state.subscription = {
+          plan: null,
+          error: planResult.error,
+          isLoading: false,
+          quota: null
+        };
+        if (this.app?.showToast) {
+          this.app.showToast('Unable to load subscription details', 'warning');
+        }
+      }
+
+      this.recalculateDerivedState();
+      this.populateFilters(true);
+
+      if (this.cardGrid) {
+        this.cardGrid.update(this.state.sortedCards);
+      } else {
+        this.initializeCardGrid();
+      }
+
+      this.updateDisplay();
+      this.updatePlanControls();
+      this.state.error = null;
 
     } catch (error) {
       console.error('CollectionPage: Error loading data', error);
@@ -372,7 +602,690 @@ export class CollectionPage {
       this.state.filteredCards = [];
       this.state.sortedCards = [];
       this.state.stats = null;
+      this.state.summary = null;
+      this.state.error = error;
+      this.state.subscription = {
+        plan: null,
+        error,
+        isLoading: false,
+        quota: null
+      };
+
+      if (initial) {
+        this.showError('Unable to load collection data. Please verify your Supabase connection.');
+      } else if (this.app?.showToast) {
+        this.app.showToast('Failed to refresh collection', 'error');
+      }
+      this.updatePlanControls();
+    } finally {
+      this.state.isLoading = false;
+      if (!silent) {
+        this.toggleLoadingIndicator(false);
+      }
     }
+  }
+
+  transformCollectionItem(item) {
+    if (!item) {
+      return null;
+    }
+
+    const unitPrice = item?.pricing?.currentPrice !== undefined
+      ? Number(item.pricing.currentPrice) || 0
+      : 0;
+    const totalValue = item?.pricing?.totalValue !== undefined
+      ? Number(item.pricing.totalValue) || unitPrice * (item.quantity || 0)
+      : unitPrice * (item.quantity || 0);
+
+    return {
+      id: item.id,
+      collectionId: item.id,
+      cardVariantId: item.cardVariantId,
+      cardName: item.card?.name || 'Unknown Card',
+      name: item.card?.name || 'Unknown Card',
+      cardNumber: item.card?.number || null,
+      setName: item.set?.name || null,
+      setCode: item.set?.code || null,
+      set: item.set?.code || null,
+      rarity: item.rarity?.name || null,
+      rarityKey: item.rarity?.key || null,
+      rarityWeight: item.rarity?.weight ?? null,
+      rareScoreContribution: item.rarity?.rareScoreContribution ?? null,
+      quantity: Number(item.quantity) || 0,
+      tcgLow: unitPrice,
+      tcgMarket: unitPrice,
+      priceSource: item.pricing?.priceSource || null,
+      totalValue,
+      imageUrl: item.card?.imageUrl || null,
+      language: item.card?.language || null,
+      addedAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      sessionDate: item.createdAt,
+      sessionName: 'Supabase',
+      notes: item.notes || null,
+      priceGain: Number.isFinite(Number(item.pricing?.priceGain))
+        ? Number(item.pricing.priceGain)
+        : null,
+      percentageGain: Number.isFinite(Number(item.pricing?.percentageGain))
+        ? Number(item.pricing.percentageGain)
+        : null,
+      packPrice: Number.isFinite(Number(item.pricing?.priceAtPack))
+        ? Number(item.pricing.priceAtPack)
+        : null,
+      packCurrency: item.pricing?.packCurrency || item.pack?.currency || null,
+      packedAt: item.pricing?.packedAt || item.pack?.packedAt || null,
+      packEventId: item.pricing?.packEventId || item.pack?.eventId || null,
+      pack: item.pack || null,
+    };
+  }
+
+  recalculateDerivedState() {
+    this.collectionManager.setExternalCards(this.state.cards, { ttl: Number.MAX_SAFE_INTEGER });
+
+    this.applyFiltersAndSort();
+
+    const stats = this.collectionManager.getCollectionStats(this.state.cards);
+
+    if (this.state.summary) {
+      stats.totalCards = this.state.summary.totalQuantity ?? stats.totalCards;
+      stats.totalValue = this.state.summary.totalMarketValue ?? stats.totalValue;
+      if (this.state.summary.rareScore !== undefined) {
+        stats.rareScore = this.state.summary.rareScore;
+      }
+    }
+
+    this.state.stats = stats;
+  }
+
+  getVisibleQuantity(cards = []) {
+    return cards.reduce((sum, card) => sum + (Number(card.quantity) || 0), 0);
+  }
+
+  getUniqueCardCount() {
+    try {
+      const unique = this.collectionManager?.getUniqueCards?.();
+      return Array.isArray(unique) ? unique.length : 0;
+    } catch (error) {
+      console.error('CollectionPage: Error calculating unique card count', error);
+      return 0;
+    }
+  }
+
+  toggleLoadingIndicator(isLoading) {
+    const refreshBtn = document.getElementById('refreshCollectionBtn');
+    if (!refreshBtn) return;
+
+    if (isLoading) {
+      if (!refreshBtn.dataset.originalLabel) {
+        refreshBtn.dataset.originalLabel = refreshBtn.innerHTML;
+      }
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = '<i class="lucide-icon" data-lucide="loader"></i> Loading…';
+    } else {
+      refreshBtn.disabled = false;
+      if (refreshBtn.dataset.originalLabel) {
+        refreshBtn.innerHTML = refreshBtn.dataset.originalLabel;
+      }
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    }
+  }
+
+  togglePackLoading(isLoading) {
+    const tableBody = document.getElementById('packHistoryTableBody');
+    if (!tableBody) {
+      return;
+    }
+
+    if (isLoading) {
+      tableBody.innerHTML = `
+        <tr class="loading-row">
+          <td colspan="8">Loading pack history...</td>
+        </tr>
+      `;
+    }
+  }
+
+  showPackError(message) {
+    const errorEl = document.getElementById('packHistoryError');
+    if (!errorEl) {
+      return;
+    }
+
+    if (message) {
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+    } else {
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+    }
+  }
+
+  formatCurrency(value, options = {}) {
+    const { fallback = '$0.00', showSign = false, absolute = false } = options;
+
+    if (!Number.isFinite(Number(value))) {
+      return fallback;
+    }
+
+    const numeric = absolute ? Math.abs(Number(value)) : Number(value);
+    const formatted = this.currencyFormatter.format(numeric);
+
+    if (!showSign) {
+      return formatted;
+    }
+
+    if (Number(value) > 0) {
+      return `+${this.currencyFormatter.format(Math.abs(Number(value)))}`;
+    }
+
+    if (Number(value) < 0) {
+      return `-${this.currencyFormatter.format(Math.abs(Number(value)))}`;
+    }
+
+    return this.currencyFormatter.format(0);
+  }
+
+  formatPercent(value, options = {}) {
+    const { fallback = '—', showSign = false } = options;
+
+    if (!Number.isFinite(Number(value))) {
+      return fallback;
+    }
+
+    const numeric = Number(value);
+    const formatted = this.numberFormatter.format(Math.abs(numeric));
+
+    if (showSign) {
+      if (numeric > 0) {
+        return `+${formatted}%`;
+      }
+      if (numeric < 0) {
+        return `-${formatted}%`;
+      }
+    }
+
+    const prefix = numeric < 0 ? '-' : '';
+    return `${prefix}${formatted}%`;
+  }
+
+  formatDate(value) {
+    if (!value) {
+      return '—';
+    }
+
+    try {
+      return this.dateFormatter.format(new Date(value));
+    } catch (error) {
+      console.warn('CollectionPage: Failed to format date', value, error);
+      return '—';
+    }
+  }
+
+  formatPackSource(source) {
+    const map = {
+      pack: 'Booster Pack',
+      purchase: 'Single Purchase',
+      trade: 'Trade',
+      gift: 'Gift',
+      reward: 'Reward',
+      other: 'Other',
+    };
+
+    if (!source) {
+      return map.pack;
+    }
+
+    return map[source] || 'Other';
+  }
+
+  filterPackEvents(events = []) {
+    const filters = this.state.pack?.filters || {};
+    const profitableOnly = !!filters.profitableOnly;
+    const source = filters.source || 'all';
+
+    return (events || []).filter((event) => {
+      if (!event) {
+        return false;
+      }
+
+      const gain = Number(event.totalGain) || 0;
+      if (profitableOnly && gain <= 0) {
+        return false;
+      }
+
+      if (source && source !== 'all' && event.source !== source) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  computePackStats(events = []) {
+    const safeEvents = Array.isArray(events) ? events : [];
+    let totalGain = 0;
+    let totalPackValue = 0;
+    let totalCurrentValue = 0;
+    let totalSpend = 0;
+    let netGain = 0;
+    let profitableCount = 0;
+    let losingCount = 0;
+    const roiValues = [];
+
+    let bestPack = null;
+
+    safeEvents.forEach((event) => {
+      if (!event) {
+        return;
+      }
+
+      const gain = Number(event.totalGain) || 0;
+      const packValue = Number(event.totalPackValue) || 0;
+      const currentValue = Number(event.totalCurrentValue) || 0;
+      const spend = Number(event.packCost) || 0;
+      const net = Number.isFinite(Number(event.netGainVsPackCost))
+        ? Number(event.netGainVsPackCost)
+        : currentValue - spend;
+
+      totalGain += gain;
+      totalPackValue += packValue;
+      totalCurrentValue += currentValue;
+      totalSpend += spend;
+      netGain += net;
+
+      if (gain > 0) {
+        profitableCount += 1;
+      } else if (gain < 0) {
+        losingCount += 1;
+      }
+
+      if (Number.isFinite(Number(event.roiPercentage))) {
+        roiValues.push(Number(event.roiPercentage));
+      }
+
+      if (!bestPack || gain > (Number(bestPack.totalGain) || Number.NEGATIVE_INFINITY)) {
+        bestPack = event;
+      }
+    });
+
+    const averageRoi = roiValues.length
+      ? roiValues.reduce((sum, value) => sum + value, 0) / roiValues.length
+      : null;
+
+    return {
+      totalGain,
+      netGain,
+      averageRoi,
+      totalPackValue,
+      totalCurrentValue,
+      totalSpend,
+      profitablePacks: profitableCount,
+      losingPacks: losingCount,
+      totalPacks: safeEvents.length,
+      bestPack,
+    };
+  }
+
+  updatePackInsightsUI() {
+    const stats = this.state.pack?.stats || {
+      totalGain: 0,
+      netGain: 0,
+      averageRoi: null,
+      totalSpend: 0,
+      totalPacks: 0,
+      profitablePacks: 0,
+      losingPacks: 0,
+    };
+
+    const totalGainEl = document.getElementById('packTotalGain');
+    if (totalGainEl) {
+      totalGainEl.textContent = this.formatCurrency(stats.totalGain || 0);
+    }
+
+    const profitableCountEl = document.getElementById('packProfitableCount');
+    if (profitableCountEl) {
+      const profitable = stats.profitablePacks || 0;
+      profitableCountEl.textContent = `${profitable} profitable pack${profitable === 1 ? '' : 's'}`;
+    }
+
+    const netGainEl = document.getElementById('packNetGain');
+    if (netGainEl) {
+      netGainEl.textContent = this.formatCurrency(stats.netGain || 0);
+    }
+
+    const totalSpendEl = document.getElementById('packTotalSpend');
+    if (totalSpendEl) {
+      totalSpendEl.textContent = `Total spend ${this.formatCurrency(stats.totalSpend || 0)}`;
+    }
+
+    const averageRoiEl = document.getElementById('packAverageRoi');
+    if (averageRoiEl) {
+      averageRoiEl.textContent = this.formatPercent(stats.averageRoi, { fallback: '—', showSign: true });
+    }
+
+    const visiblePacksEl = document.getElementById('packVisiblePacks');
+    if (visiblePacksEl) {
+      const total = stats.totalPacks || 0;
+      const losses = stats.losingPacks || 0;
+      visiblePacksEl.textContent = `Showing ${total} pack${total === 1 ? '' : 's'} · ${losses} at a loss`;
+    }
+
+    const bestPull = this.state.pack?.bestPull || null;
+    const bestPullValueEl = document.getElementById('packBestPullValue');
+    const bestPullNameEl = document.getElementById('packBestPullName');
+
+    if (bestPullValueEl && bestPullNameEl) {
+      if (bestPull && (Number.isFinite(bestPull.currentPrice) || Number.isFinite(bestPull.priceAtPack))) {
+        const value = Number.isFinite(bestPull.currentPrice)
+          ? bestPull.currentPrice
+          : bestPull.priceAtPack;
+        bestPullValueEl.textContent = this.formatCurrency(value || 0);
+
+        const parts = [];
+        if (bestPull.cardName) {
+          parts.push(bestPull.cardName);
+        } else if (bestPull.cardSlug) {
+          parts.push(bestPull.cardSlug);
+        }
+        if (bestPull.setName) {
+          parts.push(bestPull.setName);
+        }
+        if (bestPull.packEventId) {
+          parts.push(`pack ${this.formatDate(bestPull.packedAt || bestPull.recordedAt)}`);
+        }
+        bestPullNameEl.textContent = parts.length > 0
+          ? `${parts.join(' · ')}`
+          : 'Tracked from pack history';
+      } else {
+        bestPullValueEl.textContent = '—';
+        bestPullNameEl.textContent = 'Log more pack events to surface highlights';
+      }
+    }
+  }
+
+  updatePackHistoryTable() {
+    const tableBody = document.getElementById('packHistoryTableBody');
+    const emptyState = document.getElementById('packHistoryEmpty');
+
+    if (!tableBody) {
+      return;
+    }
+
+    const events = Array.isArray(this.state.pack?.events) ? this.state.pack.events : [];
+
+    if (events.length === 0) {
+      if (!this.state.pack?.isLoading) {
+        tableBody.innerHTML = '';
+        if (emptyState) {
+          emptyState.style.display = 'block';
+        }
+      }
+      return;
+    }
+
+    if (emptyState) {
+      emptyState.style.display = 'none';
+    }
+
+    const rows = events.map((event) => {
+      const setName = event?.set?.name || 'Unknown Set';
+      const setCode = event?.set?.code ? ` (${event.set.code})` : '';
+      const cardsTracked = Number(event?.cardsTracked) || 0;
+      const totalQuantity = Number(event?.totalQuantity) || 0;
+      const packValue = Number(event?.totalPackValue) || 0;
+      const currentValue = Number(event?.totalCurrentValue) || 0;
+      const gain = Number(event?.totalGain) || 0;
+      const roi = Number(event?.roiPercentage);
+      const net = Number.isFinite(Number(event?.netGainVsPackCost))
+        ? Number(event.netGainVsPackCost)
+        : (currentValue - (Number(event?.packCost) || 0));
+
+      const gainClass = gain > 0
+        ? 'text-success'
+        : gain < 0
+          ? 'text-danger'
+          : 'text-neutral-300';
+
+      const roiClass = Number.isFinite(roi)
+        ? (roi > 0 ? 'text-success' : roi < 0 ? 'text-danger' : 'text-neutral-300')
+        : 'text-neutral-400';
+
+      return `
+        <tr data-pack-event-id="${event.id}">
+          <td>${this.formatDate(event.packedAt || event.recordedAt)}</td>
+          <td>
+            <div class="table-cell-title">${setName}${setCode}</div>
+            <div class="table-cell-subtitle">${this.formatPackSource(event.source)}</div>
+          </td>
+          <td>
+            <div class="table-cell-title">${cardsTracked.toLocaleString()}</div>
+            <div class="table-cell-subtitle">${totalQuantity.toLocaleString()} total</div>
+          </td>
+          <td>${this.formatCurrency(packValue)}</td>
+          <td>${this.formatCurrency(currentValue)}</td>
+          <td class="${gainClass}">${this.formatCurrency(gain, { showSign: true })}</td>
+          <td class="${roiClass}">${this.formatPercent(roi, { showSign: true })}</td>
+          <td class="${gainClass}">${this.formatCurrency(net, { showSign: true })}</td>
+        </tr>
+      `;
+    }).join('');
+
+    tableBody.innerHTML = rows;
+  }
+
+  applyPackFiltersAndStats() {
+    const eventsAll = Array.isArray(this.state.pack?.eventsAll) ? this.state.pack.eventsAll : [];
+    const filtered = this.filterPackEvents(eventsAll);
+    this.state.pack.events = filtered;
+    this.state.pack.stats = this.computePackStats(filtered);
+    this.updatePackInsightsUI();
+    this.updatePackHistoryTable();
+  }
+
+  async loadPackInsights(options = {}) {
+    const { force = true } = options;
+
+    if (!force && Array.isArray(this.state.pack?.eventsAll) && this.state.pack.eventsAll.length > 0) {
+      this.applyPackFiltersAndStats();
+      return;
+    }
+
+    const refreshButton = document.getElementById('refreshPackHistoryBtn');
+    if (refreshButton) {
+      refreshButton.disabled = true;
+    }
+
+    try {
+      this.state.pack.isLoading = true;
+      this.togglePackLoading(true);
+      this.showPackError(null);
+
+      const [summaryResult, topPullResult] = await Promise.all([
+        fetchPackEventSummaries({ limit: 200 }),
+        fetchTopPackPull({ sortBy: 'current_price' }),
+      ]);
+
+      if (summaryResult.error) {
+        throw summaryResult.error;
+      }
+
+      if (topPullResult?.error) {
+        console.warn('CollectionPage: fetchTopPackPull warning', topPullResult.error);
+      }
+
+      this.state.pack.eventsAll = Array.isArray(summaryResult.events) ? summaryResult.events : [];
+      this.state.pack.bestPull = topPullResult?.card || null;
+      this.state.pack.error = null;
+
+      this.applyPackFiltersAndStats();
+    } catch (error) {
+      console.error('CollectionPage: Error loading pack history', error);
+      const message = error?.message || 'Unable to load pack history. Check your Supabase connection.';
+      this.state.pack.error = message;
+      this.state.pack.eventsAll = [];
+      this.state.pack.events = [];
+      this.state.pack.stats = this.computePackStats([]);
+      this.state.pack.bestPull = null;
+      this.updatePackInsightsUI();
+      this.updatePackHistoryTable();
+      this.showPackError(message);
+    } finally {
+      this.state.pack.isLoading = false;
+      this.togglePackLoading(false);
+      if (refreshButton) {
+        refreshButton.disabled = false;
+      }
+    }
+  }
+
+  handlePackProfitToggle(event) {
+    const isChecked = !!event?.target?.checked;
+    if (this.state.pack?.filters) {
+      this.state.pack.filters.profitableOnly = isChecked;
+    }
+    this.applyPackFiltersAndStats();
+  }
+
+  handlePackSourceChange(event) {
+    const value = event?.target?.value || 'all';
+    if (this.state.pack?.filters) {
+      this.state.pack.filters.source = value;
+    }
+    this.applyPackFiltersAndStats();
+  }
+
+  handlePackRefresh() {
+    this.loadPackInsights({ force: true });
+  }
+
+  setMutating(isMutating) {
+    this.state.isMutating = isMutating;
+    const buttons = [
+      document.getElementById('addCardBtn'),
+      document.getElementById('exportCollectionBtn')
+    ];
+
+    buttons.forEach((btn) => {
+      if (btn) {
+        btn.disabled = isMutating;
+      }
+    });
+  }
+
+  applyOptimisticMutation({ cardVariantId, quantityDelta, provisionalCard = null, pricePerUnit = null }) {
+    const previousState = {
+      cards: this.state.cards.map(card => ({ ...card })),
+      summary: this.state.summary ? { ...this.state.summary } : null,
+      stats: this.state.stats ? { ...this.state.stats } : null,
+    };
+
+    const cards = this.state.cards.map(card => ({ ...card }));
+    let targetIndex = cards.findIndex(card => card.cardVariantId === cardVariantId);
+    let targetCard = targetIndex >= 0 ? cards[targetIndex] : null;
+
+    if (targetIndex === -1 && provisionalCard) {
+      targetCard = { ...provisionalCard, quantity: Number(provisionalCard.quantity) || 0 };
+      cards.push(targetCard);
+      targetIndex = cards.length - 1;
+    }
+
+    if (targetIndex === -1) {
+      return () => {};
+    }
+
+    const unit = pricePerUnit !== null && pricePerUnit !== undefined
+      ? Number(pricePerUnit) || 0
+      : Number(targetCard.tcgLow) || 0;
+
+    targetCard.quantity = Math.max(0, (Number(targetCard.quantity) || 0) + quantityDelta);
+    targetCard.totalValue = unit * targetCard.quantity;
+
+    const updatedCards = cards.filter(card => (Number(card.quantity) || 0) > 0);
+    this.state.cards = updatedCards;
+
+    if (this.state.summary) {
+      const totalQuantity = (this.state.summary.totalQuantity || 0) + quantityDelta;
+      const totalValue = (this.state.summary.totalMarketValue || 0) + (unit * quantityDelta);
+      this.state.summary = {
+        ...this.state.summary,
+        totalQuantity,
+        totalMarketValue: totalValue < 0 ? 0 : totalValue,
+      };
+    }
+
+    this.recalculateDerivedState();
+    this.populateFilters();
+    this.updateDisplay();
+
+    return () => {
+      this.state.cards = previousState.cards;
+      this.state.summary = previousState.summary;
+      this.state.stats = previousState.stats;
+      this.recalculateDerivedState();
+      this.populateFilters();
+      this.updateDisplay();
+    };
+  }
+
+  mergeCollectionItem(item) {
+    if (!item) {
+      return;
+    }
+
+    const card = this.transformCollectionItem(item);
+    if (!card) {
+      return;
+    }
+
+    const existingIndex = this.state.cards.findIndex(c => c.cardVariantId === card.cardVariantId);
+
+    if (existingIndex >= 0) {
+      this.state.cards[existingIndex] = card;
+    } else {
+      this.state.cards.push(card);
+    }
+
+    this.recalculateDerivedState();
+    this.populateFilters();
+    if (this.cardGrid) {
+      this.cardGrid.update(this.state.sortedCards);
+    }
+    this.updateDisplay();
+  }
+
+  async refreshSummary() {
+    const [summaryResult, planResult] = await Promise.all([
+      fetchCollectionSummary(),
+      fetchActivePlan()
+    ]);
+
+    if (!summaryResult.error) {
+      this.state.summary = summaryResult.summary;
+      this.recalculateDerivedState();
+    }
+
+    if (!planResult.error) {
+      const uniqueVariantCount = this.getUniqueCardCount();
+      const quota = evaluateCollectionQuota(planResult.plan, uniqueVariantCount);
+      this.state.subscription = {
+        plan: planResult.plan,
+        error: null,
+        isLoading: false,
+        quota
+      };
+    } else {
+      this.state.subscription = {
+        plan: this.state.subscription?.plan ?? null,
+        error: planResult.error,
+        isLoading: false,
+        quota: this.state.subscription?.quota ?? null
+      };
+    }
+
+    this.updateDisplay();
+    this.updatePlanControls();
   }
 
   /**
@@ -387,8 +1300,8 @@ export class CollectionPage {
         container: gridContainer,
         cards: this.state.sortedCards,
         cardSize: this.state.cardSize,
-        onRemove: this.boundHandlers.handleCardRemove,
-        showRemoveButton: false, // Don't show remove in collection view
+        onRemoveCard: this.boundHandlers.handleCardRemove,
+        showRemoveButton: true,
         emptyMessage: 'No cards to display'
       });
 
@@ -406,24 +1319,34 @@ export class CollectionPage {
       const setFilter = document.getElementById('setFilter');
       if (setFilter && this.collectionManager) {
         const sets = this.collectionManager.getUniqueSets();
+        const previousValue = setFilter.value;
+        setFilter.innerHTML = '<option value="all">All Sets</option>';
         sets.forEach(set => {
           const option = document.createElement('option');
           option.value = set;
           option.textContent = set;
           setFilter.appendChild(option);
         });
+        if (sets.includes(previousValue)) {
+          setFilter.value = previousValue;
+        }
       }
 
       // Populate rarity filter
       const rarityFilter = document.getElementById('rarityFilter');
       if (rarityFilter && this.collectionManager) {
         const rarities = this.collectionManager.getUniqueRarities();
+        const previousValue = rarityFilter.value;
+        rarityFilter.innerHTML = '<option value="all">All Rarities</option>';
         rarities.forEach(rarity => {
           const option = document.createElement('option');
           option.value = rarity.toLowerCase();
           option.textContent = rarity;
           rarityFilter.appendChild(option);
         });
+        if (rarities.map(r => r.toLowerCase()).includes(previousValue)) {
+          rarityFilter.value = previousValue;
+        }
       }
 
     } catch (error) {
@@ -478,11 +1401,29 @@ export class CollectionPage {
       // Action buttons
       const refreshBtn = document.getElementById('refreshCollectionBtn');
       const exportBtn = document.getElementById('exportCollectionBtn');
+      const addBtn = document.getElementById('addCardBtn');
       if (refreshBtn) {
         refreshBtn.addEventListener('click', this.boundHandlers.handleRefresh);
       }
       if (exportBtn) {
         exportBtn.addEventListener('click', this.boundHandlers.handleExport);
+      }
+      if (addBtn) {
+        addBtn.addEventListener('click', this.boundHandlers.handleAddCard);
+      }
+
+      const packProfitableToggle = document.getElementById('packProfitableToggle');
+      const packSourceFilter = document.getElementById('packSourceFilter');
+      const refreshPackHistoryBtn = document.getElementById('refreshPackHistoryBtn');
+
+      if (packProfitableToggle) {
+        packProfitableToggle.addEventListener('change', this.boundHandlers.handlePackProfitToggle);
+      }
+      if (packSourceFilter) {
+        packSourceFilter.addEventListener('change', this.boundHandlers.handlePackSourceChange);
+      }
+      if (refreshPackHistoryBtn) {
+        refreshPackHistoryBtn.addEventListener('click', this.boundHandlers.handlePackRefresh);
       }
 
     } catch (error) {
@@ -505,6 +1446,10 @@ export class CollectionPage {
       const cardSizeSlider = document.getElementById('cardSizeSlider');
       const refreshBtn = document.getElementById('refreshCollectionBtn');
       const exportBtn = document.getElementById('exportCollectionBtn');
+      const addBtn = document.getElementById('addCardBtn');
+      const packProfitableToggle = document.getElementById('packProfitableToggle');
+      const packSourceFilter = document.getElementById('packSourceFilter');
+      const refreshPackHistoryBtn = document.getElementById('refreshPackHistoryBtn');
 
       if (searchInput) searchInput.removeEventListener('input', this.boundHandlers.handleSearchInput);
       if (setFilter) setFilter.removeEventListener('change', this.boundHandlers.handleFilterChange);
@@ -516,6 +1461,10 @@ export class CollectionPage {
       if (cardSizeSlider) cardSizeSlider.removeEventListener('input', this.boundHandlers.handleCardSizeChange);
       if (refreshBtn) refreshBtn.removeEventListener('click', this.boundHandlers.handleRefresh);
       if (exportBtn) exportBtn.removeEventListener('click', this.boundHandlers.handleExport);
+      if (addBtn) addBtn.removeEventListener('click', this.boundHandlers.handleAddCard);
+      if (packProfitableToggle) packProfitableToggle.removeEventListener('change', this.boundHandlers.handlePackProfitToggle);
+      if (packSourceFilter) packSourceFilter.removeEventListener('change', this.boundHandlers.handlePackSourceChange);
+      if (refreshPackHistoryBtn) refreshPackHistoryBtn.removeEventListener('click', this.boundHandlers.handlePackRefresh);
 
     } catch (error) {
       console.error('CollectionPage: Error removing events', error);
@@ -633,8 +1582,12 @@ export class CollectionPage {
       }
 
       // Update CardGrid size
-      if (this.cardGrid && this.cardGrid.setCardSize) {
-        this.cardGrid.setCardSize(size);
+      if (this.cardGrid) {
+        if (typeof this.cardGrid.updateConfig === 'function') {
+          this.cardGrid.updateConfig({ cardSize: size });
+        } else if (typeof this.cardGrid.setCardSize === 'function') {
+          this.cardGrid.setCardSize(size);
+        }
       }
 
     } catch (error) {
@@ -647,33 +1600,16 @@ export class CollectionPage {
    */
   async handleRefresh() {
     try {
-      // Show loading state
-      const refreshBtn = document.getElementById('refreshCollectionBtn');
-      if (refreshBtn) {
-        refreshBtn.disabled = true;
-        refreshBtn.innerHTML = '<i class="lucide-icon" data-lucide="loader"></i> Refreshing...';
-      }
-
-      // Clear cache and reload
+      this.toggleLoadingIndicator(true);
       if (this.collectionManager) {
         this.collectionManager.clearCache();
       }
-      await this.loadData();
-      this.populateFilters();
-      this.updateDisplay();
 
-      // Show success message
-      if (this.app.showToast) {
+      await this.loadData({ silent: true });
+      await this.refreshSummary();
+
+      if (this.app?.showToast) {
         this.app.showToast('Collection refreshed', 'success');
-      }
-
-      // Restore button
-      if (refreshBtn) {
-        refreshBtn.disabled = false;
-        refreshBtn.innerHTML = '<i class="lucide-icon" data-lucide="refresh-cw"></i> Refresh';
-        if (typeof lucide !== 'undefined') {
-          lucide.createIcons();
-        }
       }
 
     } catch (error) {
@@ -681,6 +1617,8 @@ export class CollectionPage {
       if (this.app.showToast) {
         this.app.showToast('Failed to refresh collection', 'error');
       }
+    } finally {
+      this.toggleLoadingIndicator(false);
     }
   }
 
@@ -697,6 +1635,10 @@ export class CollectionPage {
       const data = this.collectionManager.exportCollection();
       if (!data) {
         throw new Error('Failed to export collection data');
+      }
+
+      if (this.state.summary) {
+        data.summary = this.state.summary;
       }
 
       // Create JSON blob
@@ -730,7 +1672,175 @@ export class CollectionPage {
    * Handle card remove (not implemented in collection view)
    */
   handleCardRemove(card) {
-    console.log('Card remove not supported in collection view', card);
+    this.handleRemoveCardAsync(card);
+  }
+
+  async handleRemoveCardAsync(card) {
+    if (!card || !card.cardVariantId) {
+      return;
+    }
+
+    const quantity = Number(card.quantity) || 0;
+    if (quantity === 0) {
+      return;
+    }
+
+    const confirmRemoval = window.confirm(
+      `Remove all ${quantity} copie${quantity === 1 ? '' : 's'} of ${card.cardName || 'this card'}?`
+    );
+
+    if (!confirmRemoval) {
+      return;
+    }
+
+    this.setMutating(true);
+    const rollback = this.applyOptimisticMutation({
+      cardVariantId: card.cardVariantId,
+      quantityDelta: -quantity,
+      pricePerUnit: Number(card.tcgLow) || 0,
+    });
+
+    try {
+      const { error } = await removeCollectionQuantity({
+        cardVariantId: card.cardVariantId,
+        quantityDelta: quantity,
+      });
+
+      if (error) {
+        rollback();
+        if (this.app?.showToast) {
+          this.app.showToast(error.message || 'Failed to remove card', 'error');
+        }
+        return;
+      }
+
+      await this.refreshSummary();
+
+      if (this.app?.showToast) {
+        this.app.showToast('Card removed from collection', 'success');
+      }
+    } catch (error) {
+      console.error('CollectionPage: Error removing card', error);
+      rollback();
+      if (this.app?.showToast) {
+        this.app.showToast('Failed to remove card', 'error');
+      }
+    } finally {
+      this.setMutating(false);
+    }
+  }
+
+  async handleAddCard() {
+    const quota = this.state.subscription?.quota;
+    const planName = this.state.subscription?.plan?.planName || this.state.subscription?.plan?.planKey || 'current';
+
+    if (quota && quota.willExceed) {
+      if (this.app?.showToast) {
+        this.app.showToast(`Your ${planName} plan has reached its collection limit. Upgrade to add more variants.`, 'warning');
+      }
+      return;
+    }
+
+    const slugInput = prompt('Enter card slug (e.g., blue-eyes-white-dragon-lob-001-1st)');
+    if (!slugInput) {
+      return;
+    }
+
+    const quantityInput = prompt('How many copies are you adding?', '1');
+    const quantity = Number(quantityInput);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      if (this.app?.showToast) {
+        this.app.showToast('Quantity must be a positive number', 'warning');
+      }
+      return;
+    }
+
+    this.setMutating(true);
+
+    let rollback = () => {};
+
+    try {
+      const { cardVariantId, error: resolveError } = await resolveCardVariantId(slugInput.trim());
+      if (resolveError || !cardVariantId) {
+        if (this.app?.showToast) {
+          this.app.showToast(resolveError?.message || 'Unable to resolve card slug', 'error');
+        }
+        return;
+      }
+
+      const provisionalCard = {
+        cardVariantId,
+        cardName: slugInput.trim(),
+        name: slugInput.trim(),
+        cardNumber: null,
+        setName: null,
+        setCode: null,
+        rarity: null,
+        rarityKey: null,
+        quantity,
+        tcgLow: 0,
+        tcgMarket: 0,
+        totalValue: 0,
+        addedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sessionDate: new Date().toISOString(),
+        sessionName: 'Pending',
+        notes: null,
+      };
+
+      rollback = this.applyOptimisticMutation({
+        cardVariantId,
+        quantityDelta: quantity,
+        provisionalCard,
+      });
+
+      const { item, error } = await upsertCollectionItem({
+        cardVariantId,
+        quantityDelta: quantity,
+        changeType: 'add',
+        source: 'manual',
+      });
+
+      if (error) {
+        rollback();
+        if (this.app?.showToast) {
+          if (error.code === 'PLAN_LIMIT_REACHED') {
+            const exceededPlan = error.details?.planKey || planName;
+            this.app.showToast(
+              `Collection limit reached for the ${exceededPlan} plan. Upgrade to add more cards.`,
+              'warning'
+            );
+          } else {
+            this.app.showToast(error.message || 'Failed to add card', 'error');
+          }
+        }
+        this.updatePlanControls();
+        return;
+      }
+
+      if (item) {
+        this.mergeCollectionItem(item);
+      } else {
+        await this.loadData({ silent: true });
+      }
+
+      await this.refreshSummary();
+
+      if (this.app?.showToast) {
+        this.app.showToast('Card added to collection', 'success');
+      }
+
+      this.updatePlanControls();
+
+    } catch (error) {
+      console.error('CollectionPage: Error adding card', error);
+      rollback();
+      if (this.app?.showToast) {
+        this.app.showToast('Failed to add card', 'error');
+      }
+    } finally {
+      this.setMutating(false);
+    }
   }
 
   /**
@@ -765,11 +1875,14 @@ export class CollectionPage {
     try {
       // Update statistics
       this.updateStats();
+      this.updatePackInsightsUI();
+      this.updatePackHistoryTable();
 
       // Update card count
       const cardCount = document.getElementById('cardCount');
       if (cardCount) {
-        cardCount.textContent = this.state.sortedCards.length;
+        const visibleQuantity = this.getVisibleQuantity(this.state.sortedCards);
+        cardCount.textContent = visibleQuantity.toLocaleString();
       }
 
       // Show/hide empty state
@@ -813,36 +1926,78 @@ export class CollectionPage {
    */
   updateStats() {
     try {
-      if (!this.state.stats) return;
+      const stats = this.state.stats || {};
+      const summary = this.state.summary || {};
 
-      // Total Cards
+      const totalCardsSource = summary.totalQuantity ?? stats.totalCards ?? 0;
+      const totalValueSource = summary.totalMarketValue ?? stats.totalValue ?? 0;
+      const uniqueCardsSource = stats.uniqueCards ?? this.getUniqueCardCount();
+
+      const totalCardsValue = Number.isFinite(Number(totalCardsSource)) ? Number(totalCardsSource) : 0;
+      const totalValueDollars = Number.isFinite(Number(totalValueSource)) ? Number(totalValueSource) : 0;
+      const uniqueCardsValue = Number.isFinite(Number(uniqueCardsSource)) ? Number(uniqueCardsSource) : 0;
+
       const totalCards = document.getElementById('statTotalCards');
       if (totalCards) {
-        totalCards.textContent = this.state.stats.totalCards.toLocaleString();
+        totalCards.textContent = totalCardsValue.toLocaleString();
       }
 
-      // Unique Cards
       const uniqueCards = document.getElementById('statUniqueCards');
       if (uniqueCards) {
-        uniqueCards.textContent = this.state.stats.uniqueCards.toLocaleString();
+        uniqueCards.textContent = uniqueCardsValue.toLocaleString();
       }
 
-      // Total Value
       const totalValue = document.getElementById('statTotalValue');
       if (totalValue) {
-        totalValue.textContent = `$${this.state.stats.totalValue.toFixed(2)}`;
+        totalValue.textContent = `$${totalValueDollars.toFixed(2)}`;
       }
 
-      // Rarest Card
-      const rarestCard = document.getElementById('statRarestCard');
+      const rarestCardNode = document.getElementById('statRarestCard');
       const rarestRarity = document.getElementById('statRarestRarity');
-      if (rarestCard && rarestRarity) {
-        if (this.state.stats.rarestCard) {
-          rarestCard.textContent = this.truncate(this.state.stats.rarestCard.cardName || 'Unknown', 20);
-          rarestRarity.textContent = this.state.stats.rarestCard.rarity || 'Unknown';
+      if (rarestCardNode && rarestRarity) {
+        if (stats.rarestCard) {
+          rarestCardNode.textContent = this.truncate(stats.rarestCard.cardName || 'Unknown', 20);
+          rarestRarity.textContent = stats.rarestCard.rarity || 'Unknown';
         } else {
-          rarestCard.textContent = '-';
+          rarestCardNode.textContent = '-';
           rarestRarity.textContent = '-';
+        }
+      }
+
+      const planNameEl = document.getElementById('statPlanName');
+      const planLimitEl = document.getElementById('statPlanLimit');
+      const planHintEl = document.getElementById('statPlanHint');
+
+      if (planNameEl || planLimitEl || planHintEl) {
+        const subscription = this.state.subscription || {};
+        const plan = subscription.plan;
+        const quota = subscription.quota;
+        const planDisplayName = plan?.planName || (plan?.planKey ? plan.planKey.toUpperCase() : 'Unknown');
+
+        if (planNameEl) {
+          planNameEl.textContent = planDisplayName;
+        }
+
+        if (planLimitEl) {
+          if (quota?.isUnlimited) {
+            planLimitEl.textContent = 'Unlimited';
+          } else if (Number.isFinite(quota?.limit)) {
+            planLimitEl.textContent = `${quota.limit.toLocaleString()} slots`;
+          } else {
+            planLimitEl.textContent = '—';
+          }
+        }
+
+        if (planHintEl) {
+          if (quota?.isUnlimited) {
+            planHintEl.textContent = 'No collection limit';
+          } else if (Number.isFinite(quota?.remaining)) {
+            planHintEl.textContent = `${Math.max(quota.remaining, 0).toLocaleString()} variants remaining`;
+          } else if (subscription.error) {
+            planHintEl.textContent = 'Plan unavailable';
+          } else {
+            planHintEl.textContent = 'Checking quota…';
+          }
         }
       }
 
@@ -851,13 +2006,40 @@ export class CollectionPage {
     }
   }
 
+  updatePlanControls() {
+    try {
+      const addBtn = document.getElementById('addCardBtn');
+      const exportBtn = document.getElementById('exportCollectionBtn');
+      const subscription = this.state.subscription || {};
+      const plan = subscription.plan;
+      const quota = subscription.quota;
+
+      if (addBtn) {
+        const atCapacity = Boolean(quota?.willExceed);
+        addBtn.disabled = atCapacity;
+        addBtn.title = atCapacity
+          ? `Your ${plan?.planName || plan?.planKey || 'current'} plan has reached its collection limit.`
+          : '';
+      }
+
+      if (exportBtn) {
+        const canExport = Boolean(plan?.features?.export_collection);
+        exportBtn.disabled = !canExport;
+        exportBtn.title = canExport ? '' : 'Upgrade required to export collections.';
+      }
+    } catch (error) {
+      console.error('CollectionPage: Error updating plan controls', error);
+    }
+  }
+
   /**
    * Update grid view
    */
   updateGridView() {
     try {
-      if (this.cardGrid && this.cardGrid.updateCards) {
-        this.cardGrid.updateCards(this.state.sortedCards);
+      if (this.cardGrid) {
+        this.cardGrid.update(this.state.sortedCards);
+        this.cardGrid.updateConfig({ cardSize: this.state.cardSize });
       }
     } catch (error) {
       console.error('CollectionPage: Error updating grid view', error);
@@ -923,6 +2105,11 @@ export class CollectionPage {
     const rarityCell = document.createElement('td');
     rarityCell.textContent = card.rarity || 'Common';
     row.appendChild(rarityCell);
+
+    // Quantity
+    const quantityCell = document.createElement('td');
+    quantityCell.textContent = Number(card.quantity || 0).toLocaleString();
+    row.appendChild(quantityCell);
 
     // Value
     const valueCell = document.createElement('td');

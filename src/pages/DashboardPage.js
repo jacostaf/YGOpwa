@@ -13,14 +13,24 @@
 
 import StatsCard from '../components/StatsCard.js';
 import DashboardService from '../services/DashboardService.js';
+import LeaderboardService, { LEADERBOARD_TYPES } from '../services/leaderboardService.js';
+
+let lastDashboardMountHash = null;
 
 export default class DashboardPage {
   constructor(router) {
     this.router = router;
     this.container = null;
     this.dashboardService = null;
+    this.leaderboardService = null;
     this.statsCards = [];
     this.refreshInterval = null;
+    this.mountHash = null;
+    this.leaderboardError = null;
+    this.boundHandlers = {
+      handleViewAllLeaderboards: this.handleViewAllLeaderboards.bind(this),
+      handleHighlightNavigate: this.handleHighlightNavigate.bind(this),
+    };
   }
 
   /**
@@ -41,6 +51,194 @@ export default class DashboardPage {
     });
 
     console.log('Dashboard service initialized');
+  }
+
+  initializeLeaderboardService() {
+    if (!this.leaderboardService) {
+      this.leaderboardService = new LeaderboardService({ ttlMs: 120000 });
+      console.log('Leaderboard service initialized');
+    }
+  }
+
+  formatCurrency(value) {
+    if (!Number.isFinite(value)) {
+      return '$0.00';
+    }
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+  }
+
+  formatNumber(value) {
+    if (!Number.isFinite(value)) {
+      return '0';
+    }
+    return new Intl.NumberFormat('en-US').format(value);
+  }
+
+  formatLeaderboardMetric(type, entry) {
+    if (!entry) {
+      return '--';
+    }
+
+    switch (type) {
+      case LEADERBOARD_TYPES.VALUE:
+        return this.formatCurrency(entry.metric_value);
+      case LEADERBOARD_TYPES.QUANTITY:
+        return `${this.formatNumber(entry.total_quantity)} cards`;
+      case LEADERBOARD_TYPES.RARITY:
+      default:
+        return `${this.formatNumber(Math.round(entry.metric_value || 0))} pts`;
+    }
+  }
+
+  getLeaderboardLabel(type) {
+    switch (type) {
+      case LEADERBOARD_TYPES.VALUE:
+        return 'Value';
+      case LEADERBOARD_TYPES.QUANTITY:
+        return 'Quantity';
+      case LEADERBOARD_TYPES.RARITY:
+      default:
+        return 'Rarity';
+    }
+  }
+
+  buildHighlightCard(type, winner, source) {
+    const label = this.getLeaderboardLabel(type);
+    const metric = this.formatLeaderboardMetric(type, winner);
+    const userName = winner?.display_name || 'No leader yet';
+    const secondary = type === LEADERBOARD_TYPES.VALUE
+      ? `${this.formatCurrency(winner?.total_market_value || 0)} total value`
+      : type === LEADERBOARD_TYPES.QUANTITY
+        ? `${this.formatNumber(winner?.total_quantity || 0)} cards logged`
+        : `${this.formatNumber(Math.round(winner?.rare_score || 0))} rarity pts`;
+
+    const meta = source === 'fallback' ? '<span class="leaderboard-highlight-badge">Sample Data</span>' : '';
+
+    return `
+      <article class="leaderboard-highlight-card" data-type="${type}" data-testid="leaderboard-highlight">
+        <header class="leaderboard-highlight-header">
+          <span class="leaderboard-highlight-title">${label} Leaderboard ${meta}</span>
+          <span class="leaderboard-highlight-metric">${metric}</span>
+        </header>
+        <div class="leaderboard-highlight-body">
+          <h3>${userName}</h3>
+          <p>${secondary}</p>
+        </div>
+        <footer class="leaderboard-highlight-footer">
+          <button class="leaderboard-highlight-btn" data-action="view-leaderboard" data-leaderboard-type="${type}">
+            View leaderboard
+            <i data-lucide="arrow-right"></i>
+          </button>
+        </footer>
+      </article>
+    `;
+  }
+
+  buildHighlightSkeleton() {
+    return `
+      <article class="leaderboard-highlight-card skeleton">
+        <div class="leaderboard-highlight-header">
+          <span class="leaderboard-highlight-title">Loading…</span>
+          <span class="leaderboard-highlight-metric">--</span>
+        </div>
+        <div class="leaderboard-highlight-body">
+          <h3>Fetching leaders</h3>
+          <p>Please wait</p>
+        </div>
+      </article>
+    `;
+  }
+
+  buildLeaderboardErrorCard(message) {
+    const friendlyMessage = this.escapeHtml(message || 'Leaderboards are unavailable right now.');
+    return `
+      <article class="leaderboard-highlight-card error" data-testid="leaderboard-highlight-error">
+        <div class="leaderboard-highlight-body">
+          <h3>Leaderboards unavailable</h3>
+          <p>${friendlyMessage}</p>
+          <p class="text-neutral-500 text-xs mt-2">We'll show highlights once Supabase responds.</p>
+        </div>
+      </article>
+    `;
+  }
+
+  async renderLeaderboardHighlights() {
+    if (!this.container) {
+      return;
+    }
+
+    const grid = this.container.querySelector('#dashboard-leaderboard-highlights');
+    if (!grid) {
+      return;
+    }
+
+    if (!this.leaderboardService) {
+      this.initializeLeaderboardService();
+    }
+
+    grid.innerHTML = [0, 1, 2].map(() => this.buildHighlightSkeleton()).join('');
+
+    try {
+      const types = [LEADERBOARD_TYPES.VALUE, LEADERBOARD_TYPES.QUANTITY, LEADERBOARD_TYPES.RARITY];
+      const results = await Promise.all(types.map((type) => this.leaderboardService.fetchLeaderboard(type, { limit: 1 }))); 
+
+      const erroredResult = results.find((result) => result && result.error);
+      if (erroredResult) {
+        this.leaderboardError = erroredResult.error;
+        grid.innerHTML = this.buildLeaderboardErrorCard(erroredResult.error);
+        return;
+      }
+
+      this.leaderboardError = null;
+
+      const cards = results.map(({ data, source }, index) => {
+        const leader = Array.isArray(data) && data.length > 0 ? data[0] : null;
+        return this.buildHighlightCard(types[index], leader, source);
+      });
+
+      grid.innerHTML = cards.join('');
+
+      grid.querySelectorAll('[data-action="view-leaderboard"]').forEach((button) => {
+        button.addEventListener('click', this.boundHandlers.handleHighlightNavigate);
+      });
+
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    } catch (error) {
+      console.warn('Failed to render leaderboard highlights', error);
+      this.leaderboardError = error?.message || 'Unable to load highlights right now.';
+      grid.innerHTML = this.buildLeaderboardErrorCard(this.leaderboardError);
+    }
+  }
+
+  handleViewAllLeaderboards() {
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem('voxrip:leaderboard:lastType', LEADERBOARD_TYPES.VALUE);
+      } catch (error) {
+        console.warn('DashboardPage: failed to persist leaderboard preference', error);
+      }
+    }
+
+    if (this.router) {
+      this.router.navigate('leaderboards');
+    }
+  }
+
+  handleHighlightNavigate(event) {
+    const type = event.currentTarget?.dataset?.leaderboardType;
+    if (type && typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem('voxrip:leaderboard:lastType', type);
+      } catch (error) {
+        console.warn('DashboardPage: failed to persist leaderboard type', error);
+      }
+    }
+
+    if (this.router) {
+      this.router.navigate('leaderboards');
+    }
   }
 
   /**
@@ -72,13 +270,30 @@ export default class DashboardPage {
           <section class="dashboard-quick-stats bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6" role="region" aria-label="Quick statistics">
             <div class="section-header flex items-center justify-between mb-6">
               <h2 class="text-lg font-semibold text-white">Quick Stats</h2>
-              <i data-lucide="TrendingUp" class="w-5 h-5 text-neutral-500" aria-hidden="true"></i>
+              <i data-lucide="trending-up" class="w-5 h-5 text-neutral-500" aria-hidden="true"></i>
             </div>
             <div class="quick-stats-grid grid gap-4" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
               <!-- Quick stats will be inserted here -->
             </div>
           </section>
         </div>
+
+        <!-- Leaderboard Highlights -->
+        <section class="dashboard-leaderboards bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6" role="region" aria-label="Leaderboard highlights">
+          <div class="section-header flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-lg font-semibold text-white">Leaderboard Highlights</h2>
+              <p class="text-neutral-500 text-sm">Top performers across value, quantity, and rarity.</p>
+            </div>
+            <button class="btn-secondary" id="dashboardViewLeaderboardsBtn" data-testid="dashboard-view-leaderboards">
+              <i data-lucide="trophy"></i>
+              View all
+            </button>
+          </div>
+          <div class="leaderboard-highlight-grid" id="dashboard-leaderboard-highlights">
+            <!-- Highlight cards rendered dynamically -->
+          </div>
+        </section>
       </div>
     `;
   }
@@ -250,6 +465,12 @@ export default class DashboardPage {
 
       console.log('Dashboard data refreshed');
     }
+
+    if (this.leaderboardService) {
+      this.leaderboardService.clearAllCaches();
+    }
+
+    this.renderLeaderboardHighlights();
   }
 
   /**
@@ -294,6 +515,15 @@ export default class DashboardPage {
    * @param {HTMLElement} container - Container element
    */
   async mount(container) {
+    const currentHash = typeof window !== 'undefined' ? (window.location.hash || '#/dashboard') : '#/dashboard';
+    if (lastDashboardMountHash === currentHash && this.container && this.container.childElementCount > 0) {
+      console.info('DashboardPage: duplicate mount skipped for hash', currentHash);
+      return;
+    }
+
+    lastDashboardMountHash = currentHash;
+    this.mountHash = currentHash;
+
     try {
       this.container = container;
 
@@ -307,6 +537,8 @@ export default class DashboardPage {
       this.renderMainStats();
       this.renderRecentActivity();
       this.renderQuickStats();
+      this.initializeLeaderboardService();
+      this.renderLeaderboardHighlights();
 
       // Initialize Lucide icons
       if (window.lucide) {
@@ -355,14 +587,32 @@ export default class DashboardPage {
       // Note: VoiceEngine would need to emit events for this to work
       // For now, we rely on auto-refresh
     }
+
+    if (this.container) {
+      const viewAllBtn = this.container.querySelector('#dashboardViewLeaderboardsBtn');
+      if (viewAllBtn) {
+        viewAllBtn.addEventListener('click', this.boundHandlers.handleViewAllLeaderboards);
+      }
+    }
   }
 
   /**
    * Unmount the page
    */
   async unmount() {
+    if (this.mountHash && lastDashboardMountHash === this.mountHash) {
+      lastDashboardMountHash = null;
+    }
+
     // Stop auto-refresh
     this.stopAutoRefresh();
+
+    if (this.container) {
+      const viewAllBtn = this.container.querySelector('#dashboardViewLeaderboardsBtn');
+      if (viewAllBtn) {
+        viewAllBtn.removeEventListener('click', this.boundHandlers.handleViewAllLeaderboards);
+      }
+    }
 
     // Destroy stat cards
     this.statsCards.forEach(card => card.destroy());
@@ -372,6 +622,9 @@ export default class DashboardPage {
     if (this.container) {
       this.container.innerHTML = '';
     }
+
+    this.mountHash = null;
+    this.leaderboardError = null;
 
     console.log('DashboardPage unmounted');
   }

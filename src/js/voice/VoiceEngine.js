@@ -22,23 +22,23 @@ export class VoiceEngine {
         this.permissionManager = permissionManager;
         this.logger = logger || new Logger('VoiceEngine');
         this.storage = storage;
-        
+
         // Recognition engines
         this.engines = new Map();
         this.currentEngine = null;
         this.fallbackEngines = [];
-        
+
         // State management
         this.isInitialized = false;
         this.isListening = false;
         this.isPaused = false;
         this.shouldKeepListening = false; // Track if user wants continuous listening
-        
+
         // Enhanced fantasy name processing components
         this.phoneticMapper = new PhoneticMapper(this.logger);
         this.confidenceManager = new AdaptiveConfidenceManager(this.storage, this.logger);
         this.learningEngine = new ProgressiveLearningEngine(this.storage, this.logger);
-        
+
         // Configuration
         this.config = {
             language: 'en-US',
@@ -58,7 +58,7 @@ export class VoiceEngine {
             phoneticEnhancement: true,
             multiLanguageSupport: true
         };
-        
+
         // Event listeners
         this.listeners = {
             result: [],
@@ -67,27 +67,27 @@ export class VoiceEngine {
             permissionChange: [],
             interimResult: []
         };
-        
+
         // Recognition state
         this.lastResult = null;
         this.recognitionAttempts = 0;
         this.isRecovering = false;
         this.retryCount = 0;
-        
+
         // Platform detection
         this.platform = this.detectPlatform();
-        
+
         // Yu-Gi-Oh specific optimizations (legacy support)
         this.cardNamePatterns = new Map();
         this.commonCardTerms = [];
-        
+
         // Context for enhanced processing
         this.currentContext = {
             currentSet: null,
             sessionLength: 0,
             userPreferences: {}
         };
-        
+
         this.logger.info('Enhanced VoiceEngine initialized for platform:', this.platform);
     }
 
@@ -100,7 +100,7 @@ export class VoiceEngine {
      */
     updateConfig(settings = {}) {
         if (!settings) return;
-        
+
         // Map settings to our internal config
         const configUpdates = {
             confidenceThreshold: settings.voiceConfidenceThreshold,
@@ -109,22 +109,22 @@ export class VoiceEngine {
             interimResults: settings.voiceInterimResults,
             language: settings.voiceLanguage || this.config.language
         };
-        
+
         // Apply updates
         Object.keys(configUpdates).forEach(key => {
             if (configUpdates[key] !== undefined) {
                 this.config[key] = configUpdates[key];
             }
         });
-        
+
         this.logger.debug('Voice engine config updated:', this.config);
-        
+
         // Reinitialize if already initialized
         if (this.isInitialized) {
             this.reinitialize();
         }
     }
-    
+
     /**
      * Reinitialize the voice engine with current config
      */
@@ -133,7 +133,7 @@ export class VoiceEngine {
         this.stopListening();
         await this.initialize();
     }
-    
+
     async initialize() {
         if (this.isInitialized) {
             return true;
@@ -142,52 +142,52 @@ export class VoiceEngine {
         try {
             this.logger.info('Initializing voice engine...');
             this.logger.debug('Voice engine config:', this.config);
-            
+
             // Reset retry count
             this.retryCount = 0;
-            
+
             // Check environment compatibility
             if (!this.isEnvironmentSupported()) {
                 throw new Error('Voice recognition is not supported in this environment');
             }
-            
+
             // Initialize permission manager
             await this.permissionManager.initialize();
-            
+
             // Request microphone permissions
             const hasPermission = await this.requestMicrophonePermission();
             if (!hasPermission) {
                 throw new Error('Microphone permission denied');
             }
-            
+
             // Initialize recognition engines
             await this.initializeEngines();
-            
+
             // Select best engine
             this.selectBestEngine();
-            
+
             // Load Yu-Gi-Oh optimizations (legacy)
             await this.loadCardNameOptimizations();
-            
+
             // Initialize enhanced components
             await this.initializeEnhancedComponents();
-            
+
             // Apply platform-specific optimizations
             this.applyPlatformOptimizations();
-            
+
             // Set up error recovery
             this.setupErrorRecovery();
-            
+
             this.isInitialized = true;
             this.emitStatusChange('ready');
-            
+
             this.logger.info('Voice engine initialized successfully');
             return true;
-            
+
         } catch (error) {
             this.logger.error('Failed to initialize voice engine:', error);
             this.isInitialized = false;
-            
+
             // Return user-friendly error object instead of throwing
             return this.handleError(error, 'initialization');
         }
@@ -202,15 +202,15 @@ export class VoiceEngine {
             this.logger.warn('Voice recognition requires secure context (HTTPS)');
             return false;
         }
-        
+
         // Check for Web Speech API support
         const hasWebSpeech = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
-        
+
         if (!hasWebSpeech) {
             this.logger.warn('Web Speech API not available');
             return false;
         }
-        
+
         return true;
     }
 
@@ -220,9 +220,9 @@ export class VoiceEngine {
     async requestMicrophonePermission() {
         try {
             this.logger.info('Requesting microphone permission...');
-            
+
             const permission = await this.permissionManager.requestMicrophone();
-            
+
             if (permission.state === 'granted') {
                 this.logger.info('Microphone permission granted');
                 return true;
@@ -238,10 +238,10 @@ export class VoiceEngine {
                 this.logger.info('Microphone permission prompt shown');
                 return false;
             }
-            
+
         } catch (error) {
             this.logger.error('Error requesting microphone permission:', error);
-            
+
             // Try direct media access as fallback
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -264,14 +264,14 @@ export class VoiceEngine {
      */
     async initializeEngines() {
         this.logger.info('Initializing recognition engines...');
-        
+
         // Primary engine: Web Speech API
         await this.initializeWebSpeechEngine();
-        
+
         // Future: Add fallback engines here
         // - Cloud-based recognition services
         // - Local recognition libraries
-        
+
         this.logger.info(`Initialized ${this.engines.size} recognition engine(s)`);
     }
 
@@ -281,30 +281,30 @@ export class VoiceEngine {
     async initializeWebSpeechEngine() {
         try {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            
+
             if (!SpeechRecognition) {
                 throw new Error('Web Speech API not available');
             }
-            
+
             const recognition = new SpeechRecognition();
-            
+
             // Configure recognition
             recognition.continuous = this.config.continuous;
             recognition.interimResults = this.config.interimResults;
             recognition.lang = this.config.language;
             recognition.maxAlternatives = this.config.maxAlternatives;
-            
+
             // Set up event handlers
             recognition.onstart = () => {
                 this.logger.debug('Web Speech recognition started');
                 this.isListening = true;
                 this.emitStatusChange('listening');
             };
-            
+
             recognition.onend = () => {
                 this.logger.debug('Web Speech recognition ended');
                 this.isListening = false;
-                
+
                 // Auto-restart if user wants continuous listening and not manually stopped
                 if (this.shouldKeepListening && !this.isPaused && this.isInitialized) {
                     // Give more time for result processing and training UI to appear
@@ -319,16 +319,16 @@ export class VoiceEngine {
                     this.emitStatusChange('ready');
                 }
             };
-            
+
             recognition.onresult = (event) => {
                 console.log('🎯 RAW VOICE RESULT DETECTED:', event);
                 this.handleRecognitionResult(event, 'webspeech');
             };
-            
+
             recognition.onerror = (event) => {
                 this.handleRecognitionError(event, 'webspeech');
             };
-            
+
             // Store engine
             this.engines.set('webspeech', {
                 name: 'Web Speech API',
@@ -337,9 +337,9 @@ export class VoiceEngine {
                 available: true,
                 platform: ['all']
             });
-            
+
             this.logger.info('Web Speech API engine initialized successfully');
-            
+
         } catch (error) {
             this.logger.error('Failed to initialize Web Speech API engine:', error);
         }
@@ -351,7 +351,7 @@ export class VoiceEngine {
     selectBestEngine() {
         let bestEngine = null;
         let highestPriority = -1;
-        
+
         for (const [key, engine] of this.engines) {
             if (engine.available && engine.priority > highestPriority) {
                 if (engine.platform.includes('all') || engine.platform.includes(this.platform)) {
@@ -360,7 +360,7 @@ export class VoiceEngine {
                 }
             }
         }
-        
+
         if (bestEngine) {
             this.currentEngine = bestEngine;
             this.logger.info(`Selected engine: ${this.engines.get(bestEngine).name}`);
@@ -377,28 +377,28 @@ export class VoiceEngine {
             const error = new Error('Voice engine not initialized');
             return this.handleError(error, 'start listening');
         }
-        
+
         if (this.isListening) {
             this.logger.warn('Already listening');
             return true;
         }
-        
+
         try {
             this.logger.info('Starting voice recognition...');
             this.isPaused = false;
             this.shouldKeepListening = true; // Enable continuous listening
             this.recognitionAttempts = 0;
-            
+
             const engine = this.engines.get(this.currentEngine);
             if (!engine) {
                 throw new Error('No recognition engine available');
             }
-            
+
             // Start recognition with timeout
             await this.startEngineWithTimeout(engine);
-            
+
             return true;
-            
+
         } catch (error) {
             this.logger.error('Failed to start voice recognition:', error);
             this.emitError({
@@ -419,7 +419,7 @@ export class VoiceEngine {
                 this.logger.error('Voice recognition start timeout');
                 reject(new Error('Voice recognition start timeout'));
             }, 5000);
-            
+
             try {
                 engine.instance.onstart = () => {
                     clearTimeout(timeout);
@@ -427,9 +427,9 @@ export class VoiceEngine {
                     this.emitStatusChange('listening');
                     resolve();
                 };
-                
+
                 engine.instance.start();
-                
+
             } catch (error) {
                 clearTimeout(timeout);
                 reject(error);
@@ -445,20 +445,20 @@ export class VoiceEngine {
             this.logger.warn('Not currently listening');
             return;
         }
-        
+
         try {
             this.logger.info('Stopping voice recognition...');
             this.isPaused = true;
             this.shouldKeepListening = false; // Disable continuous listening
-            
+
             const engine = this.engines.get(this.currentEngine);
             if (engine && engine.instance) {
                 engine.instance.stop();
             }
-            
+
             this.isListening = false;
             this.emitStatusChange('ready');
-            
+
         } catch (error) {
             this.logger.error('Error stopping voice recognition:', error);
         }
@@ -469,16 +469,16 @@ export class VoiceEngine {
      */
     async testRecognition() {
         this.logger.info('Starting voice recognition test...');
-        
+
         return new Promise((resolve, reject) => {
             const originalListeners = {
                 result: [...this.listeners.result],
                 error: [...this.listeners.error]
             };
-            
+
             // Store reject function for error simulation in tests
             this.currentTestReject = reject;
-            
+
             // Set up test listeners
             const testResultHandler = (result) => {
                 this.logger.info('Voice test completed:', result);
@@ -486,21 +486,21 @@ export class VoiceEngine {
                 this.currentTestReject = null;
                 resolve(result.transcript);
             };
-            
+
             const testErrorHandler = (error) => {
                 this.logger.error('Voice test failed:', error);
                 this.restoreListeners(originalListeners);
                 this.currentTestReject = null;
                 reject(error);
             };
-            
+
             // Replace listeners temporarily
             this.listeners.result = [testResultHandler];
             this.listeners.error = [testErrorHandler];
-            
+
             // Start listening
             this.startListening().catch(reject);
-            
+
             // Set timeout
             setTimeout(() => {
                 if (this.isListening) {
@@ -516,80 +516,76 @@ export class VoiceEngine {
     /**
      * Handle recognition result
      */
-    async handleRecognitionResult(event, engineType) {
-        console.log('🔍 HANDLE RECOGNITION RESULT CALLED');
+    handleRecognitionResult(event, engineType) {
         try {
-            const results = Array.from(event.results);
+            const results = Array.from(event.results || []);
+            if (!results.length) {
+                return;
+            }
+
             const lastResult = results[results.length - 1];
-            
-            // Always log what's being heard for debugging
-            const transcript = lastResult[0].transcript;
-            const confidence = lastResult[0].confidence || 0;
-            
+            const primary = lastResult && lastResult[0];
+            if (!primary) {
+                return;
+            }
+
+            const transcript = (primary.transcript || '').trim();
+            const confidence = Number(primary.confidence) || 0;
+
             if (!lastResult.isFinal) {
-                // Show interim results (what's being heard in real-time)
-                this.logger.info(`[LIVE] Hearing: "${transcript}" (interim, ${(confidence * 100).toFixed(1)}%)`);
-                this.emitInterimResult(transcript, confidence);
-                return;
-            } else {
-                // Show final results
-                console.log('🎯 FINAL RESULT DETECTED:', transcript, 'confidence:', confidence);
-                this.logger.info(`[FINAL] Heard: "${transcript}" (final, ${(confidence * 100).toFixed(1)}%)`);
-            }
-            
-            if (!lastResult.isFinal && !this.config.interimResults) {
+                if (this.config.interimResults) {
+                    this.logger.info(`[LIVE] Hearing: "${transcript}" (interim, ${(confidence * 100).toFixed(1)}%)`);
+                    this.emitInterimResult(transcript, confidence);
+                }
                 return;
             }
-            
-            const alternatives = Array.from(lastResult).map(alt => ({
+
+            if (!transcript) {
+                return;
+            }
+
+            if (confidence < (this.config.confidenceThreshold ?? 0)) {
+                this.logger.warn('Recognition confidence below threshold', { transcript, confidence });
+                return;
+            }
+
+            const alternatives = Array.from(lastResult).map((alt) => ({
                 transcript: alt.transcript,
-                confidence: alt.confidence || 0
+                confidence: alt.confidence || 0,
             }));
-            
-            // Apply enhanced fantasy name processing
-            console.log('📝 About to enhance results:', alternatives);
-            const enhancedResults = await this.enhanceRecognitionResults(alternatives, engineType);
-            console.log('✨ Enhanced results:', enhancedResults);
-            
-            if (enhancedResults.length === 0) {
-                console.log('❌ NO ENHANCED RESULTS - EXITING EARLY');
-                this.logger.warn('No valid recognition results after enhancement');
-                return;
-            }
-            
-            console.log('✅ CONTINUING WITH ENHANCED RESULTS');
-            // Select best enhanced result
-            const bestResult = enhancedResults[0];
-            
-            const result = {
-                transcript: bestResult.transcript,
-                confidence: bestResult.confidence,
-                alternatives: enhancedResults,
+
+            let result = {
+                transcript,
+                confidence,
+                alternatives,
                 engine: engineType,
                 timestamp: new Date().toISOString(),
-                isFinal: lastResult.isFinal,
-                // Enhanced metadata
-                phoneticProcessed: bestResult.phoneticProcessed || false,
-                learningApplied: bestResult.learningApplied || false,
-                adaptiveThreshold: bestResult.adaptiveThreshold || this.config.confidenceThreshold,
-                originalTranscript: bestResult.originalTranscript || bestResult.transcript
+                isFinal: true,
             };
-            
+
+            if (this.config.cardNameOptimization !== false) {
+                const optimized = this.optimizeCardNameRecognition(result);
+                result = {
+                    ...result,
+                    transcript: optimized.transcript,
+                    confidence: optimized.confidence,
+                    originalTranscript: optimized.originalTranscript || transcript,
+                };
+            }
+
             this.lastResult = result;
-            this.recognitionAttempts = 0; // Reset retry counter on success
-            
+            this.recognitionAttempts = 0;
             this.logger.info('Voice recognition result:', result);
-            console.log('🚀 ABOUT TO EMIT RESULT:', result.transcript);
             this.emitResult(result);
-            console.log('✅ RESULT EMITTED');
-            
+            return result;
         } catch (error) {
             this.logger.error('Error processing recognition result:', error);
             this.emitError({
                 type: 'result-processing-error',
                 message: error.message,
-                error
+                error,
             });
+            return null;
         }
     }
 
@@ -598,11 +594,11 @@ export class VoiceEngine {
      */
     handleRecognitionError(event, engineType) {
         this.logger.error(`Recognition error from ${engineType}:`, event.error);
-        
+
         let errorType = 'unknown-error';
         let message = 'Voice recognition error';
         let isRetryable = true;
-        
+
         switch (event.error) {
             case 'not-allowed':
                 errorType = 'permission-denied';
@@ -639,16 +635,16 @@ export class VoiceEngine {
                 message = `Voice recognition error: ${event.error}`;
                 isRetryable = true;
         }
-        
+
         this.isListening = false;
-        
+
         // Attempt recovery for retryable errors
         if (isRetryable && !this.isRecovering) {
             this.attemptRecovery();
         } else {
             this.emitStatusChange('error');
         }
-        
+
         this.emitError({
             type: errorType,
             message,
@@ -668,16 +664,16 @@ export class VoiceEngine {
             this.emitStatusChange('error');
             return;
         }
-        
+
         this.isRecovering = true;
         this.recognitionAttempts++;
-        
+
         this.logger.info(`Attempting recovery (attempt ${this.recognitionAttempts}/${this.config.retryAttempts})`);
         this.emitStatusChange('recovering');
-        
+
         // Wait before retry
         await new Promise(resolve => setTimeout(resolve, this.config.retryDelay));
-        
+
         try {
             await this.startListening();
             this.isRecovering = false;
@@ -694,9 +690,9 @@ export class VoiceEngine {
         if (!this.config.cardNameOptimization) {
             return;
         }
-        
+
         this.logger.info('Loading Yu-Gi-Oh card name optimizations...');
-        
+
         // Common Yu-Gi-Oh terms and their phonetic variations
         this.commonCardTerms = [
             // Card types and common mispronunciations
@@ -708,7 +704,7 @@ export class VoiceEngine {
             { pattern: /ex[cs]ee?z/gi, replacement: 'XYZ' },
             { pattern: /linku?/gi, replacement: 'Link' },
             { pattern: /pendulum/gi, replacement: 'Pendulum' },
-            
+
             // Specific problematic cards
             { pattern: /mulch?army\s*me[ao]wls?/gi, replacement: 'Mulcharmy Meowls' },
             { pattern: /mulch?army\s*p[ue]r[uo]lia/gi, replacement: 'Mulcharmy Purulia' },
@@ -721,17 +717,17 @@ export class VoiceEngine {
             { pattern: /mirror\s*force/gi, replacement: 'Mirror Force' },
             { pattern: /ryu[ -]?jin/gi, replacement: 'Raigeki' },
             { pattern: /har[ip]e[iy]e?/gi, replacement: 'Harpie' },
-            { 
-                pattern: /toon\s*([^\s]*)/gi, 
-                replacement: (match, p1) => 'Toon ' + p1 
+            {
+                pattern: /toon\s*([^\s]*)/gi,
+                replacement: (match, p1) => 'Toon ' + p1
             },
-            
+
             // Japanese card name patterns
             { pattern: /shin?d[ou]\s*in?sh[ou]k[au]n/gi, replacement: 'Shin Do Inshoukan' },
             { pattern: /y[ou]?[ -]?g[ie]?[ -]?[ou]h?[ou]?/gi, replacement: 'Yu-Gi-Oh' },
             { pattern: /m[ae]k[ou]?sh[aei]/gi, replacement: 'Mekk-Knight' },
             { pattern: /salamangreat/gi, replacement: 'Salamangreat' },
-            
+
             // Common prefixes and suffixes - be much more conservative
             // Only remove standalone articles at the beginning
             { pattern: /^(?:the|a|an)\s+/gi, replacement: '' },
@@ -741,12 +737,12 @@ export class VoiceEngine {
             // NOTE: Removed aggressive removal of "monster", "card", "spell", "trap" 
             // as this was filtering out important parts of card names
         ];
-        
+
         // Configure recognition settings for better fantasy name recognition
         this.config.confidenceThreshold = 0.5; // Lower threshold for better acceptance
         this.config.maxAlternatives = 5; // Consider more alternatives
         this.config.continuous = true; // Better for multi-word card names
-        
+
         this.logger.info(`Loaded ${this.commonCardTerms.length} card name optimizations`);
     }
 
@@ -756,13 +752,13 @@ export class VoiceEngine {
     async initializeEnhancedComponents() {
         try {
             this.logger.info('Initializing enhanced fantasy name processing components...');
-            
+
             // Load confidence manager history
             await this.confidenceManager.loadUserHistory();
-            
+
             // Load learning engine patterns
             await this.learningEngine.loadPatterns();
-            
+
             this.logger.info('Enhanced components initialized successfully');
         } catch (error) {
             this.logger.warn('Failed to initialize enhanced components:', error);
@@ -780,9 +776,9 @@ export class VoiceEngine {
             const enhancedResults = [];
 
             for (const alternative of alternatives) {
-                let enhanced = { 
+                let enhanced = {
                     ...alternative,
-                    originalTranscript: alternative.transcript 
+                    originalTranscript: alternative.transcript
                 };
 
                 // Step 1: Apply phonetic normalization if enabled
@@ -806,7 +802,7 @@ export class VoiceEngine {
                     );
                     enhanced.adaptiveThreshold = adaptiveThreshold;
                     enhanced.isAboveThreshold = enhanced.confidence >= adaptiveThreshold;
-                    
+
                     this.logger.debug(`Adaptive threshold for "${enhanced.transcript}": ${adaptiveThreshold.toFixed(3)}`);
                 } else {
                     enhanced.isAboveThreshold = enhanced.confidence >= this.config.confidenceThreshold;
@@ -850,12 +846,12 @@ export class VoiceEngine {
                 adaptiveThreshold: r.adaptiveThreshold,
                 isAboveThreshold: r.isAboveThreshold
             })));
-            
+
             // Allow low-confidence results for training - don't filter out everything
             const validResults = finalResults
                 .filter(result => result.isAboveThreshold || result.confidence > 0.1) // Keep anything above 10% for training
                 .sort((a, b) => b.confidence - a.confidence);
-            
+
             console.log('🎯 AFTER FILTERING:', validResults.length, 'valid results');
 
             this.logger.debug(`Enhanced recognition: ${alternatives.length} → ${validResults.length} valid results`);
@@ -864,7 +860,7 @@ export class VoiceEngine {
 
         } catch (error) {
             this.logger.error('Error in enhanced recognition processing:', error);
-            
+
             // Fallback to basic processing
             return alternatives
                 .filter(alt => alt.confidence >= this.config.confidenceThreshold)
@@ -931,7 +927,7 @@ export class VoiceEngine {
             ...this.currentContext,
             ...context
         };
-        
+
         this.logger.debug('Updated voice recognition context:', this.currentContext);
     }
 
@@ -940,7 +936,7 @@ export class VoiceEngine {
      */
     getEnhancedStats() {
         const baseStats = this.getStatus();
-        
+
         try {
             return {
                 ...baseStats,
@@ -981,7 +977,7 @@ export class VoiceEngine {
                     progressiveLearning: this.config.progressiveLearning
                 }
             };
-            
+
             return data;
         } catch (error) {
             this.logger.error('Failed to export learning data:', error);
@@ -996,12 +992,12 @@ export class VoiceEngine {
         if (!data || data.version !== '1.0') {
             throw new Error('Invalid learning data format');
         }
-        
+
         try {
             if (data.learnedPatterns) {
                 this.learningEngine.importPatterns(data.learnedPatterns);
             }
-            
+
             this.logger.info('Successfully imported learning data');
         } catch (error) {
             this.logger.error('Failed to import learning data:', error);
@@ -1016,7 +1012,7 @@ export class VoiceEngine {
         try {
             this.confidenceManager.resetHistory();
             this.learningEngine.reset();
-            
+
             this.logger.info('All learning data has been reset');
         } catch (error) {
             this.logger.error('Failed to reset learning data:', error);
@@ -1031,10 +1027,10 @@ export class VoiceEngine {
         if (!this.config.cardNameOptimization) {
             return result;
         }
-        
+
         let optimizedTranscript = result.transcript;
         const originalTranscript = result.transcript;
-        
+
         // Apply pattern replacements - log each step for debugging
         for (const term of this.commonCardTerms) {
             const beforeReplace = optimizedTranscript;
@@ -1043,7 +1039,7 @@ export class VoiceEngine {
                 console.log(`🔄 Pattern replacement: "${beforeReplace}" → "${optimizedTranscript}"`);
             }
         }
-        
+
         // Clean up common issues - be more conservative with special character removal
         const beforeCleanup = optimizedTranscript;
         optimizedTranscript = optimizedTranscript
@@ -1051,13 +1047,13 @@ export class VoiceEngine {
             .replace(/["""''`]/g, '') // Only remove quotes and backticks
             .replace(/[^\w\s-'"]/g, '') // Remove special chars but keep apostrophes and quotes
             .trim();
-            
+
         if (beforeCleanup !== optimizedTranscript) {
             console.log(`🧹 Cleanup: "${beforeCleanup}" → "${optimizedTranscript}"`);
         }
-        
+
         console.log(`🎯 Final optimization: "${originalTranscript}" → "${optimizedTranscript}"`);
-        
+
         return {
             transcript: optimizedTranscript,
             confidence: result.confidence,
@@ -1070,7 +1066,7 @@ export class VoiceEngine {
      */
     applyPlatformOptimizations() {
         this.logger.info(`Applying optimizations for platform: ${this.platform}`);
-        
+
         switch (this.platform) {
             case 'ios':
             case 'mac':
@@ -1078,12 +1074,12 @@ export class VoiceEngine {
                 this.config.continuous = false; // Better compatibility
                 this.config.timeout = 15000; // Longer timeout
                 break;
-                
+
             case 'windows':
                 // Windows optimizations
                 this.config.maxAlternatives = 5; // More alternatives
                 break;
-                
+
             case 'android':
                 // Android optimizations
                 this.config.interimResults = true; // Better feedback
@@ -1096,7 +1092,7 @@ export class VoiceEngine {
      */
     detectPlatform() {
         const userAgent = navigator.userAgent.toLowerCase();
-        
+
         if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
             return 'ios';
         } else if (userAgent.includes('mac')) {
@@ -1120,6 +1116,13 @@ export class VoiceEngine {
     }
 
     /**
+     * Check if a recognition session is currently active (reader for the boolean flag)
+     */
+    isListeningActive() {
+        return this.isListening === true;
+    }
+
+    /**
      * Get current status
      */
     getStatus() {
@@ -1139,7 +1142,7 @@ export class VoiceEngine {
      */
     updateConfig(newConfig) {
         if (!newConfig) return;
-        
+
         // Map settings to our internal config (support both formats)
         const configUpdates = {
             confidenceThreshold: newConfig.voiceConfidenceThreshold || newConfig.confidenceThreshold,
@@ -1148,16 +1151,16 @@ export class VoiceEngine {
             interimResults: newConfig.voiceInterimResults !== undefined ? newConfig.voiceInterimResults : newConfig.interimResults,
             language: newConfig.voiceLanguage || newConfig.language
         };
-        
+
         // Apply updates
         Object.keys(configUpdates).forEach(key => {
             if (configUpdates[key] !== undefined) {
                 this.config[key] = configUpdates[key];
             }
         });
-        
+
         this.logger.info('Configuration updated:', this.config);
-        
+
         // Apply new config to current engine if available
         if (this.currentEngine && this.engines.has(this.currentEngine)) {
             const engine = this.engines.get(this.currentEngine);
@@ -1168,7 +1171,7 @@ export class VoiceEngine {
                 engine.instance.maxAlternatives = this.config.maxAlternatives;
             }
         }
-        
+
         // Reinitialize if already initialized
         if (this.isInitialized) {
             this.reinitialize();
@@ -1183,15 +1186,15 @@ export class VoiceEngine {
 
         // Create user-friendly error with recovery options
         const userError = this.createUserFriendlyError(error, operation);
-        
+
         // Emit error to UI with recovery options
         this.emitError(userError);
-        
+
         // Auto-retry for transient errors
         if (userError.isRetryable && this.retryCount < (this.config.maxRetries || 3)) {
             this.scheduleRetry(operation);
         }
-        
+
         return userError;
     }
 
@@ -1247,25 +1250,25 @@ export class VoiceEngine {
         if (!this.retryCount) this.retryCount = 0;
         this.retryCount++;
         const delay = Math.min(1000 * Math.pow(2, this.retryCount), 10000); // Exponential backoff
-        
+
         this.logger.info(`Scheduling retry ${this.retryCount} for ${operation} in ${delay}ms`);
-        
+
         setTimeout(() => {
             this.logger.info(`Retrying ${operation} (attempt ${this.retryCount})`);
-            
+
             switch (operation) {
                 case 'initialization':
                     this.initialize().catch(error => {
                         this.handleError(error, 'initialization');
                     });
                     break;
-                    
+
                 case 'start listening':
                     this.startListening().catch(error => {
                         this.handleError(error, 'start listening');
                     });
                     break;
-                    
+
                 default:
                     this.logger.warn(`Unknown operation for retry: ${operation}`);
             }
@@ -1280,7 +1283,7 @@ export class VoiceEngine {
         if (this.currentEngine && this.engines.has(this.currentEngine)) {
             return this.engines.get(this.currentEngine);
         }
-        
+
         // Select best engine if none is currently selected
         try {
             this.selectBestEngine();
@@ -1299,7 +1302,7 @@ export class VoiceEngine {
         if (this.retryCount === undefined) {
             this.retryCount = 0;
         }
-        
+
         this.logger.debug('Error recovery mechanisms initialized');
     }
 
@@ -1322,6 +1325,30 @@ export class VoiceEngine {
 
     onInterimResult(callback) {
         this.listeners.interimResult.push(callback);
+    }
+
+    /**
+     * Remove event listener
+     * @param {string} eventName - Name of the event
+     * @param {Function} callback - Callback to remove
+     */
+    removeListener(eventName, callback) {
+        // Map event names to listener arrays
+        const eventMap = {
+            'result': 'result',
+            'error': 'error',
+            'statusChange': 'statusChange',
+            'permissionChange': 'permissionChange',
+            'interimResult': 'interimResult'
+        };
+
+        const targetArray = eventMap[eventName];
+        if (targetArray && this.listeners[targetArray]) {
+            const index = this.listeners[targetArray].indexOf(callback);
+            if (index > -1) {
+                this.listeners[targetArray].splice(index, 1);
+            }
+        }
     }
 
     emitResult(result) {

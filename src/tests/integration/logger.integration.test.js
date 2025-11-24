@@ -93,11 +93,11 @@ describe('Logger Integration Tests', () => {
 
     // Clear previous logs
     logger.clearLogs();
-    consoleSpy.log.mockClear();
+    consoleSpy.error.mockClear();
 
     // Should log error
     logger.error('Test error');
-    expect(consoleSpy.log).toHaveBeenCalled();
+    expect(consoleSpy.error).toHaveBeenCalled();
 
     // Should not log info (below ERROR level)
     consoleSpy.log.mockClear();
@@ -107,16 +107,23 @@ describe('Logger Integration Tests', () => {
 
   test('should log messages with proper formatting', () => {
     logger.clearLogs();
+    consoleSpy.error.mockClear();
+    consoleSpy.warn.mockClear();
     consoleSpy.log.mockClear();
+    consoleSpy.debug.mockClear();
 
     logger.error('Error message', { key: 'value' });
     logger.warn('Warning message', 'extra', 'args');
     logger.info('Info message');
     logger.debug('Debug message');
 
-    // Should have made console calls
-    expect(consoleSpy.log).toHaveBeenCalled();
-    expect(consoleSpy.log.mock.calls.length).toBeGreaterThan(3);
+    const totalConsoleCalls =
+      consoleSpy.error.mock.calls.length +
+      consoleSpy.warn.mock.calls.length +
+      consoleSpy.log.mock.calls.length +
+      consoleSpy.debug.mock.calls.length;
+
+    expect(totalConsoleCalls).toBeGreaterThan(3);
   });
 
   test('should store logs in memory with limits', () => {
@@ -246,31 +253,27 @@ describe('Logger Integration Tests', () => {
     expect(logger.currentLevel).toBe(logger.levels.INFO);
   });
 
-  test('should format messages correctly', () => {
-    const simple = logger.formatMessage('Simple message');
+  test('should serialize message values safely', () => {
+    const simple = logger.safeString('Simple message');
     expect(simple).toBe('Simple message');
 
-    const withArgs = logger.formatMessage('Message with', 'string', 42);
-    expect(withArgs).toContain('Message with string 42');
+    const withObject = logger.safeString({ key: 'value' });
+    expect(withObject).toBe('{"key":"value"}');
 
-    const withObject = logger.formatMessage('Object:', { key: 'value' });
-    expect(withObject).toContain('Object:');
-    expect(withObject).toContain('{"key":"value"}');
+    const circular = {};
+    circular.self = circular;
+    expect(logger.safeString(circular)).toBe('[object Object]');
   });
 
-  test('should handle console output with proper styling', () => {
-    consoleSpy.log.mockClear();
+  test('should output to matching console method with prefix', () => {
+    consoleSpy.error.mockClear();
     
-    // Use proper ISO timestamp format
-    const timestamp = new Date().toISOString();
-    logger.outputToConsole('ERROR', timestamp, 'Test error', []);
+    logger.outputToConsole('ERROR', 'Critical failure');
     
-    expect(consoleSpy.log).toHaveBeenCalled();
-    const firstCall = consoleSpy.log.mock.calls[0];
-    expect(firstCall[0]).toContain('[TestModule]');
-    expect(firstCall[0]).toContain('[ERROR]');
-    expect(firstCall[0]).toContain('Test error');
-    expect(firstCall[1]).toContain('color'); // Should contain CSS styling
+    expect(consoleSpy.error).toHaveBeenCalled();
+    const [prefix, message] = consoleSpy.error.mock.calls[0];
+    expect(prefix).toContain('[TestModule]');
+    expect(message).toBe('Critical failure');
   });
 
   test('should handle system information logging', () => {

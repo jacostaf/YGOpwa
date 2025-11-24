@@ -41,6 +41,14 @@
 
     <!-- Lucide Icons CDN -->
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script type="importmap" id="supabase-importmap">
+    {
+      "imports": {
+        "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.0?bundle"
+      }
+    }
+    </script>
 </head>
 <body>
     <!-- Skip to Content Link (for keyboard navigation) -->
@@ -99,7 +107,8 @@
                     <h1 id="page-title">Dashboard</h1>
                 </div>
                 <div class="page-header-actions" id="page-header-actions">
-                    <!-- Page-specific actions will be added here -->
+                    <!-- Auth UI Container -->
+                    <div id="auth-container"></div>
                 </div>
             </header>
 
@@ -482,12 +491,46 @@
         <!-- Toasts will be populated dynamically -->
     </div>
 
+    <!-- Runtime configuration (optional, ignored if missing) -->
+    <script type="module">
+        (async () => {
+            try {
+                const runtimeModule = await import('./runtime-env.js');
+                const runtimeEnv = runtimeModule?.default || runtimeModule?.env || runtimeModule;
+                if (runtimeEnv && typeof runtimeEnv === 'object') {
+                    window.__ENV__ = { ...(window.__ENV__ || {}), ...runtimeEnv };
+                }
+            } catch (error) {
+                if (error?.code !== 'ERR_MODULE_NOT_FOUND') {
+                    console.info('[RuntimeEnv] runtime-env.js could not be loaded:', error);
+                } else {
+                    console.info('[RuntimeEnv] runtime-env.js not found. Using default environment configuration.');
+                }
+            }
+        })();
+    </script>
+
+    <!-- Local dev: proactively unregister any previously installed service workers on localhost to avoid stale assets -->
+    <script>
+        if (['localhost', '127.0.0.1'].includes(window.location.hostname) && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then((regs) => {
+                regs.forEach((reg) => reg.unregister());
+            });
+            if (window.caches && caches.keys) {
+                caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+            }
+        }
+    </script>
+
     <!-- Scripts -->
     <script type="module" src="src/js/app.js"></script>
 
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration (disabled locally to prevent stale cache issues) -->
     <script>
-        if ('serviceWorker' in navigator) {
+        const swDisabled = typeof window !== 'undefined' && window.__ENV__?.VITE_DISABLE_SW;
+        const isLocalhost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+        if ('serviceWorker' in navigator && !swDisabled && !isLocalhost) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
                     .then(registration => {
@@ -497,6 +540,8 @@
                         console.log('[SW] Service Worker registration failed:', error);
                     });
             });
+        } else {
+            console.info('[SW] Registration skipped (local dev or VITE_DISABLE_SW=true).');
         }
     </script>
 
@@ -512,6 +557,7 @@
         import CollectionPage from './src/pages/CollectionPage.js';
         import VoiceTrainingPage from './src/pages/VoiceTrainingPage.js';
         import AchievementsPage from './src/pages/AchievementsPage.js';
+        import LeaderboardPage from './src/pages/LeaderboardPage.js';
         import SettingsPage from './src/pages/SettingsPage.js';
         import ThemeSettingsPage from './src/pages/ThemeSettingsPage.js';
 
@@ -526,17 +572,18 @@
             const pageContainer = document.getElementById('page-container');
             const pageTitle = document.getElementById('page-title');
 
-            router.initialize(pageContainer, pageTitle);
-
-            // Register all routes
+            // Register all routes before initialization so deep links resolve
             router.register('dashboard', DashboardPage);
             router.register('pack-opening', PackOpeningPage);
             router.register('price-checker', PriceCheckerPage);
             router.register('collection', CollectionPage);
             router.register('training', VoiceTrainingPage);
             router.register('achievements', AchievementsPage);
+            router.register('leaderboards', LeaderboardPage);
             router.register('settings', SettingsPage);
             router.register('theme', ThemeSettingsPage);
+
+            router.initialize(pageContainer, pageTitle);
 
             console.log('Router initialized with', router.getRoutes().length, 'routes');
 

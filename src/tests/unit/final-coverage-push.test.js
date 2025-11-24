@@ -4,6 +4,70 @@ import { Storage } from '../../js/utils/Storage.js';
 import { SessionManager } from '../../js/session/SessionManager.js';
 import YGORipperApp from '../../js/app.js';
 
+const mountBasicUI = () => {
+    document.body.innerHTML = `
+        <div id="app" class="hidden">
+            <div id="loading-screen"></div>
+            <div id="session-info"></div>
+            <div id="voice-status"></div>
+            <div id="error-container"></div>
+            <div id="session-cards"></div>
+            <div id="price-results" class="hidden">
+                <div id="price-content"></div>
+            </div>
+            <div id="modal-container"></div>
+            <div id="toast-container"></div>
+            <nav>
+                <button class="tab-btn" data-tab="price-checker">Price Checker</button>
+                <button class="tab-btn" data-tab="pack-ripper">Pack Ripper</button>
+            </nav>
+            <section>
+                <div class="tab-panel" id="price-checker-panel"></div>
+                <div class="tab-panel" id="pack-ripper-panel"></div>
+            </section>
+            <form id="price-form">
+                <input id="card-number" name="cardNumber" />
+                <input id="card-name" name="cardName" />
+                <button id="check-price-btn" type="submit">Check</button>
+                <button id="clear-form-btn" type="button">Clear</button>
+            </form>
+            <div class="session-controls">
+                <input id="set-search" />
+                <select id="set-select">
+                    <option value="">Select</option>
+                </select>
+                <button id="refresh-sets-btn">Refresh</button>
+                <button id="load-all-sets-btn">Load All</button>
+                <button id="start-session-btn">Start</button>
+                <button id="swap-set-btn" class="hidden">Swap</button>
+                <button id="stop-session-btn" class="hidden">Stop</button>
+                <button id="refresh-pricing-btn" disabled>Refresh Pricing</button>
+                <button id="export-session-btn" disabled>Export</button>
+                <button id="import-session-btn">Import</button>
+                <button id="clear-session-btn" disabled>Clear</button>
+            </div>
+            <div id="current-set"></div>
+            <div id="cards-count"></div>
+            <div id="tcg-low-total"></div>
+            <div id="tcg-market-total"></div>
+            <div id="session-status" class="status-badge"></div>
+            <div id="sets-count"></div>
+            <div id="total-sets-count"></div>
+            <button id="settings-btn">Settings</button>
+            <button id="help-btn">Help</button>
+            <div id="app-status">Ready</div>
+        </div>
+    `;
+};
+
+const bootstrapSession = (manager) => {
+    const session = manager.createEmptySession('Test Pack');
+    session.setId = 'test-pack';
+    manager.currentSession = session;
+    manager.cards = session.cards;
+    manager.sessionActive = true;
+};
+
 describe('Final Coverage Push Tests', () => {
     
     describe('UIManager - Uncovered Paths', () => {
@@ -11,28 +75,7 @@ describe('Final Coverage Push Tests', () => {
         let mockLogger;
 
         beforeEach(() => {
-            document.body.innerHTML = `
-                <div id="loading-screen" class="loading-screen"></div>
-                <div id="app" class="hidden"></div>
-                <div id="session-info"></div>
-                <div id="voice-status"></div>
-                <div id="error-container"></div>
-                <div id="session-cards"></div>
-                <div id="price-results"></div>
-                <div id="modal-container"></div>
-                <div id="toast-container"></div>
-                <button class="start-session">Start</button>
-                <button class="stop-session">Stop</button>
-                <button id="voice-toggle">Voice</button>
-                <form id="price-form">
-                    <input name="cardName" />
-                    <button type="submit">Check</button>
-                </form>
-                <div class="card-item" data-card-id="123">
-                    <button class="remove-card">Remove</button>
-                </div>
-                <div class="settings-icon">⚙️</div>
-            `;
+            mountBasicUI();
 
             mockLogger = {
                 info: vi.fn(),
@@ -43,6 +86,7 @@ describe('Final Coverage Push Tests', () => {
 
             uiManager = new UIManager();
             uiManager.logger = mockLogger;
+            uiManager.getDOMElements();
         });
 
         afterEach(() => {
@@ -65,7 +109,12 @@ describe('Final Coverage Push Tests', () => {
             const sessionInfo = {
                 cardCount: 2,
                 totalValue: 30,
-                packName: 'Test Pack'
+                packName: 'Test Pack',
+                statistics: {
+                    tcgLowTotal: 15,
+                    tcgMarketTotal: 30
+                },
+                isActive: true
             };
 
             uiManager.updateSessionInfo(sessionInfo);
@@ -93,6 +142,7 @@ describe('Final Coverage Push Tests', () => {
         });
 
         it('should display price results correctly', () => {
+            vi.useFakeTimers();
             const results = {
                 success: true,
                 cardName: 'Blue-Eyes White Dragon',
@@ -100,6 +150,8 @@ describe('Final Coverage Push Tests', () => {
             };
 
             uiManager.displayPriceResults(results);
+            vi.runAllTimers();
+            vi.useRealTimers();
 
             const priceResults = document.getElementById('price-results');
             expect(priceResults.innerHTML).toContain('Blue-Eyes White Dragon');
@@ -171,12 +223,15 @@ describe('Final Coverage Push Tests', () => {
                 throw new Error('Circular structure');
             });
 
-            const result = await storage.set('key', { circular: true });
+            let result;
+            try {
+                result = await storage.set('key', { circular: true }, { throwOnError: false });
+            } finally {
+                JSON.stringify = originalStringify;
+            }
             
             expect(result).toBe(false);
             expect(mockLogger.error).toHaveBeenCalledWith('Failed to set key:', expect.any(Error));
-
-            JSON.stringify = originalStringify;
         });
 
         it('should migrate data between storage backends', async () => {
@@ -231,7 +286,7 @@ describe('Final Coverage Push Tests', () => {
         });
 
         it('should validate cards before adding', async () => {
-            sessionManager.isActive = true;
+            bootstrapSession(sessionManager);
 
             // Invalid card (missing required fields)
             const invalid = { name: 'Test' };
@@ -247,7 +302,8 @@ describe('Final Coverage Push Tests', () => {
                 price: 10 
             };
             const result2 = await sessionManager.addCard(valid);
-            expect(result2).toBe(true);
+            expect(result2.name || result2.card_name).toBe('Blue-Eyes');
+            expect(sessionManager.currentSession.cards).toHaveLength(1);
         });
 
         it('should calculate session statistics', () => {
@@ -275,6 +331,11 @@ describe('Final Coverage Push Tests', () => {
                 { name: 'Card 1', price: 10 },
                 { name: 'Card 2', price: 20 }
             ];
+            sessionManager.currentSession = sessionManager.createEmptySession('Test Pack');
+            sessionManager.currentSession.id = 'test-123';
+            sessionManager.currentSession.cards = sessionManager.cards.map(card => ({ ...card }));
+            sessionManager.cards = sessionManager.currentSession.cards;
+            sessionManager.sessionActive = true;
 
             // JSON format
             const json = sessionManager.exportSession('json');
@@ -282,9 +343,9 @@ describe('Final Coverage Push Tests', () => {
 
             // CSV format  
             const csv = sessionManager.exportSession('csv');
-            expect(csv).toContain('name,price');
-            expect(csv).toContain('Card 1,10');
-            expect(csv).toContain('Card 2,20');
+            expect(csv.content.split('\n')[0]).toContain('Card Name');
+            expect(csv.content).toContain('Card 1');
+            expect(csv.content).toContain('Card 2');
         });
     });
 
@@ -316,7 +377,7 @@ describe('Final Coverage Push Tests', () => {
             expect(defaults).toHaveProperty('voiceTimeout', 5000);
             expect(defaults).toHaveProperty('autoConfirm', false);
             expect(defaults).toHaveProperty('autoConfirmThreshold', 0.8);
-            expect(defaults).toHaveProperty('soundEnabled', true);
+            expect(defaults).toHaveProperty('voiceLanguage', 'en-US');
         });
     });
 });

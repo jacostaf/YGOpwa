@@ -32,13 +32,20 @@ export default class PackOpeningPage {
     this.filteredSets = [];
     this.currentSession = null;
     this.isSessionActive = false;
+    this.isStartingSession = false;
     this.isVoiceListening = false;
     this.consolidatedView = false;
     this.cardSize = 120;
     this.selectedSetId = null;
+    this.isStartingSession = false;
 
     // Event listeners
-    this.boundHandlers = {};
+    this.boundHandlers = {
+      handleVoiceResult: this.handleVoiceResult.bind(this),
+      handleVoiceStatus: this.handleVoiceStatus.bind(this),
+      handleVoiceError: this.handleVoiceError.bind(this),
+      handleSessionUpdate: this.handleSessionUpdate.bind(this)
+    };
   }
 
   /**
@@ -79,12 +86,17 @@ export default class PackOpeningPage {
         return;
       }
 
-      // Get card sets from session manager
-      await this.sessionManager.loadCardSets();
-      this.cardSets = this.sessionManager.cardSets || [];
+      // Reuse cached sets when available to avoid repeat heavy work during navigation
+      if (!Array.isArray(this.sessionManager.cardSets) || this.sessionManager.cardSets.length === 0) {
+        await this.sessionManager.loadCardSets();
+      }
+
+      const rawSets = Array.isArray(this.sessionManager.cardSets) ? this.sessionManager.cardSets : [];
+      this.cardSets = this.sortCardSets(rawSets);
       this.filteredSets = [...this.cardSets];
 
       this.clearSelectedSet({ updateInput: true });
+      this.populateHiddenSelect();
 
       // Update UI
       this.renderSetSuggestions();
@@ -95,7 +107,8 @@ export default class PackOpeningPage {
       console.log(`Loaded ${this.cardSets.length} card sets`);
     } catch (error) {
       console.error('Error loading card sets:', error);
-      this.showError('Failed to load card sets. Please refresh and try again.');
+      const fallbackMessage = 'Failed to load card sets. Please refresh and try again.';
+      this.showError(error?.message || fallbackMessage);
     }
   }
 
@@ -134,6 +147,7 @@ export default class PackOpeningPage {
                 </button>
               </div>
               <div id="set-suggestions" class="set-suggestions" role="listbox" aria-label="Card set suggestions"></div>
+              <select id="set-select" class="visually-hidden" aria-hidden="true" tabindex="-1"></select>
             </div>
 
             <div class="set-meta">
@@ -142,14 +156,20 @@ export default class PackOpeningPage {
               </span>
               <div class="set-actions">
                 <button id="refresh-sets-btn" class="icon-button" type="button" title="Refresh sets">
-                  <i data-lucide="RefreshCw"></i>
+                  <i data-lucide="refresh-cw"></i>
                 </button>
-                <button id="start-session-btn" class="btn btn-primary btn-sm" type="button" disabled>
+                <button
+                  id="start-session-btn"
+                  class="btn btn-primary btn-sm"
+                  type="button"
+                  data-router-controlled="pack-opening"
+                  disabled
+                >
                   <i data-lucide="Play"></i>
                   <span>Start</span>
                 </button>
                 <button id="swap-set-btn" class="btn btn-secondary btn-sm hidden" type="button">
-                  <i data-lucide="RefreshCcw"></i>
+                  <i data-lucide="refresh-ccw"></i>
                   <span>Swap</span>
                 </button>
               </div>
@@ -182,7 +202,7 @@ export default class PackOpeningPage {
                 <span>Stop</span>
               </button>
               <button id="test-voice-btn" class="btn btn-secondary btn-sm" type="button">
-                <i data-lucide="TestTube"></i>
+                <i data-lucide="test-tube"></i>
                 <span>Test</span>
               </button>
             </div>
@@ -191,7 +211,7 @@ export default class PackOpeningPage {
           <section class="control-card session-panel">
             <header class="control-card__header">
               <div class="control-card__title">
-                <i data-lucide="FolderOpen" class="control-card__icon"></i>
+                <i data-lucide="folder-open" class="control-card__icon"></i>
                 <div>
                   <h2 class="control-card__heading">Current Session</h2>
                   <p class="control-card__subheading">Track progress at a glance</p>
@@ -239,7 +259,7 @@ export default class PackOpeningPage {
                 <span>Clear</span>
               </button>
               <button id="refresh-pricing-btn" class="btn btn-secondary btn-sm" type="button" disabled>
-                <i data-lucide="RefreshCw"></i>
+                <i data-lucide="refresh-cw"></i>
                 <span>Pricing</span>
               </button>
             </div>
@@ -261,7 +281,7 @@ export default class PackOpeningPage {
         <div class="cards-surface bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div id="session-cards" class="card-grid-container">
             <div class="empty-state">
-              <i data-lucide="PackageOpen"></i>
+              <i data-lucide="package-open"></i>
               <p>Start a session and use voice recognition to add cards</p>
             </div>
           </div>
@@ -278,7 +298,7 @@ export default class PackOpeningPage {
     const suggestionsEl = this.container?.querySelector('#set-suggestions');
     if (!suggestionsEl) return;
 
-    const suggestions = this.filteredSets.slice(0, 8);
+    const suggestions = this.filteredSets;
 
     if (!suggestions.length) {
       suggestionsEl.innerHTML = '<div class="set-suggestion empty">No sets found</div>';
@@ -294,6 +314,44 @@ export default class PackOpeningPage {
     `).join('');
 
     suggestionsEl.dataset.items = String(suggestions.length);
+  }
+
+  populateHiddenSelect() {
+    const hiddenSelect = this.container?.querySelector('#set-select');
+    if (!hiddenSelect) return;
+
+    hiddenSelect.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Select a card set...';
+    hiddenSelect.appendChild(defaultOption);
+
+    this.cardSets.forEach(set => {
+      const option = document.createElement('option');
+      option.value = set.id;
+      option.textContent = `${set.code || set.id} - ${set.name}`;
+      hiddenSelect.appendChild(option);
+    });
+
+    if (this.selectedSetId) {
+      hiddenSelect.value = this.selectedSetId;
+    }
+  }
+
+  sortCardSets(sets = []) {
+    return [...sets].sort((a, b) => {
+      const codeA = (a.code || a.set_code || '').toUpperCase();
+      const codeB = (b.code || b.set_code || '').toUpperCase();
+      if (codeA && codeB) {
+        return codeA.localeCompare(codeB);
+      }
+      if (codeA) return -1;
+      if (codeB) return 1;
+      const nameA = (a.name || '').toUpperCase();
+      const nameB = (b.name || '').toUpperCase();
+      return nameA.localeCompare(nameB);
+    });
   }
 
   showSuggestions() {
@@ -317,6 +375,7 @@ export default class PackOpeningPage {
   setSelectedSet(setId, { updateInput = true, hideSuggestions = true } = {}) {
     const targetSet = this.cardSets.find(set => set.id === setId);
     const setSearch = this.container?.querySelector('#set-search');
+    const hiddenSelect = this.container?.querySelector('#set-select');
 
     if (!targetSet || !setSearch) {
       this.clearSelectedSet();
@@ -337,6 +396,10 @@ export default class PackOpeningPage {
       this.hideSuggestions();
     }
 
+    if (hiddenSelect) {
+      hiddenSelect.value = targetSet.id;
+    }
+
     const clearSetSearch = this.container?.querySelector('#clear-set-search');
     if (clearSetSearch) {
       clearSetSearch.classList.toggle('is-visible', Boolean(setSearch.value.trim()));
@@ -347,6 +410,7 @@ export default class PackOpeningPage {
 
   clearSelectedSet({ updateInput = false } = {}) {
     const setSearch = this.container?.querySelector('#set-search');
+    const hiddenSelect = this.container?.querySelector('#set-select');
 
     this.selectedSetId = null;
 
@@ -356,6 +420,10 @@ export default class PackOpeningPage {
       }
       delete setSearch.dataset.selectedId;
       delete setSearch.dataset.selectedDisplay;
+    }
+
+    if (hiddenSelect) {
+      hiddenSelect.value = '';
     }
 
     const clearSetSearch = this.container?.querySelector('#clear-set-search');
@@ -423,11 +491,15 @@ export default class PackOpeningPage {
   }
 
   /**
-   * Start a new session
-   * @private
-   */
+  * Start a new session
+  * @private
+  */
   async startSession() {
     try {
+      if (this.isStartingSession) {
+        return;
+      }
+
       const selectedSetId = this.selectedSetId;
 
       if (!selectedSetId) {
@@ -447,8 +519,31 @@ export default class PackOpeningPage {
         return;
       }
 
-      // Start session
-      await this.sessionManager.startSession(selectedSet);
+      this.isStartingSession = true;
+      this.updateButtons();
+
+      const sessionSetId = selectedSet.id || selectedSet.code || selectedSet.set_code;
+      const sessionSetName = selectedSet.set_name || selectedSet.name || sessionSetId;
+
+      console.info('[PackOpeningPage] Starting session', {
+        setId: sessionSetId,
+        setName: sessionSetName,
+        setCode: selectedSet.code || selectedSet.set_code,
+      });
+
+      if (this.sessionManager?.apiUrl) {
+        const expectedUrl = `${this.sessionManager.apiUrl}/card-sets/${encodeURIComponent(sessionSetName)}/cards`;
+        console.info('[PackOpeningPage] loadSetCards() will request:', expectedUrl);
+      }
+
+      // Start session with a hard timeout to avoid UI lockups
+      const START_TIMEOUT_MS = 15000;
+      const startPromise = this.sessionManager.startSession(sessionSetId);
+      await Promise.race([
+        startPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Session start timed out')), START_TIMEOUT_MS))
+      ]);
+
       this.isSessionActive = true;
       this.currentSession = this.sessionManager.currentSession;
 
@@ -457,10 +552,19 @@ export default class PackOpeningPage {
       this.updateButtons();
       this.setSelectedSet(selectedSet.id, { updateInput: true, hideSuggestions: true });
 
-      console.log('Session started:', selectedSet.name);
+      console.info('[PackOpeningPage] Session ready with live data', {
+        sessionId: this.currentSession?.id,
+        setId: sessionSetId,
+        cardsLoaded: this.sessionManager?.setCards?.get?.(sessionSetId)?.length,
+      });
     } catch (error) {
       console.error('Error starting session:', error);
       this.showError('Failed to start session. Please try again.');
+      this.isSessionActive = false;
+      this.currentSession = null;
+    } finally {
+      this.isStartingSession = false;
+      this.updateButtons();
     }
   }
 
@@ -686,6 +790,41 @@ export default class PackOpeningPage {
   }
 
   /**
+   * Handle voice error
+   * @param {Object} error - Error object
+   * @private
+   */
+  handleVoiceError(error) {
+    console.error('Voice recognition error:', error);
+    this.updateVoiceUI();
+
+    // specific error handling can go here
+    if (error.error === 'not-allowed') {
+      this.showError('Microphone access denied. Please check permissions.');
+    }
+  }
+
+  /**
+   * Handle voice status change
+   * @param {string} status - New status
+   * @private
+   */
+  handleVoiceStatus(status) {
+    console.log('Voice status changed:', status);
+    this.isVoiceListening = status === 'listening';
+    this.updateVoiceUI();
+  }
+
+  /**
+   * Handle session update
+   * @private
+   */
+  handleSessionUpdate() {
+    this.updateSessionUI();
+    this.renderCards();
+  }
+
+  /**
    * Update session UI
    * @private
    */
@@ -781,7 +920,7 @@ export default class PackOpeningPage {
     const swapSetBtn = this.container?.querySelector('#swap-set-btn');
 
     if (startSessionBtn) {
-      startSessionBtn.disabled = !this.selectedSetId || this.isSessionActive;
+      startSessionBtn.disabled = !this.selectedSetId || this.isSessionActive || this.isStartingSession;
     }
 
     if (swapSetBtn) {
@@ -855,7 +994,7 @@ export default class PackOpeningPage {
     // Create new card grid
     this.cardGrid = new CardGrid({
       cards,
-      onRemoveCard: (card, index) => this.removeCard(index),
+      onRemoveCard: (card, index) => this.removeCard(card?.id ?? index),
       consolidated: this.consolidatedView,
       cardSize: this.cardSize,
       showRemoveButton: true
@@ -872,11 +1011,11 @@ export default class PackOpeningPage {
    * @param {number} index - Card index
    * @private
    */
-  async removeCard(index) {
+  async removeCard(idOrIndex) {
     try {
       if (!this.sessionManager) return;
 
-      await this.sessionManager.removeCard(index);
+      await this.sessionManager.removeCard(idOrIndex);
 
       // Update UI
       this.updateSessionUI();
@@ -1062,22 +1201,19 @@ export default class PackOpeningPage {
 
     // Voice engine events
     if (this.voiceEngine) {
-      this.boundHandlers.voiceResult = (result) => this.handleVoiceResult(result);
-      this.boundHandlers.voiceStatus = () => this.updateVoiceUI();
-
-      this.voiceEngine.onResult(this.boundHandlers.voiceResult);
-      this.voiceEngine.onStatusChange(this.boundHandlers.voiceStatus);
+      // Use the pre-bound handlers
+      this.voiceEngine.onResult(this.boundHandlers.handleVoiceResult);
+      this.voiceEngine.onStatusChange(this.boundHandlers.handleVoiceStatus);
+      this.voiceEngine.onError(this.boundHandlers.handleVoiceError);
     }
 
     // Session manager events (if available)
     if (this.sessionManager && this.sessionManager.addEventListener) {
-      this.boundHandlers.sessionUpdate = () => {
-        this.updateSessionUI();
-        this.renderCards();
-      };
-      this.sessionManager.addEventListener('sessionUpdate', this.boundHandlers.sessionUpdate);
-      this.sessionManager.addEventListener('cardAdded', this.boundHandlers.sessionUpdate);
-      this.sessionManager.addEventListener('cardRemoved', this.boundHandlers.sessionUpdate);
+      // Use the pre-bound handler
+      // Fix: Use consistent event name 'session-updated' matching removal logic
+      this.sessionManager.addEventListener('session-updated', this.boundHandlers.handleSessionUpdate);
+      this.sessionManager.addEventListener('cardAdded', this.boundHandlers.handleSessionUpdate);
+      this.sessionManager.addEventListener('cardRemoved', this.boundHandlers.handleSessionUpdate);
     }
   }
 
@@ -1090,6 +1226,32 @@ export default class PackOpeningPage {
       document.removeEventListener('click', this.boundHandlers.documentClick);
     }
 
+    // Remove voice engine listeners
+    if (this.voiceEngine) {
+      if (this.boundHandlers.handleVoiceResult) {
+        this.voiceEngine.removeListener('result', this.boundHandlers.handleVoiceResult);
+      }
+      if (this.boundHandlers.handleVoiceStatus) {
+        this.voiceEngine.removeListener('statusChange', this.boundHandlers.handleVoiceStatus);
+      }
+      if (this.boundHandlers.handleVoiceError) {
+        this.voiceEngine.removeListener('error', this.boundHandlers.handleVoiceError);
+      }
+    }
+
+    // Remove session manager listeners
+    if (this.sessionManager && this.sessionManager.removeEventListener) {
+      // Explicitly remove session listener from global SessionManager
+      if (window.sessionManager) {
+        window.sessionManager.removeListener('session-updated', this.boundHandlers.handleSessionUpdate);
+      }
+      // Fix: Use consistent event name 'session-updated'
+      this.sessionManager.removeEventListener('session-updated', this.boundHandlers.handleSessionUpdate);
+      this.sessionManager.removeEventListener('cardAdded', this.boundHandlers.handleSessionUpdate);
+      this.sessionManager.removeEventListener('cardRemoved', this.boundHandlers.handleSessionUpdate);
+    }
+
+    // Clear all bound handlers
     this.boundHandlers = {};
   }
 

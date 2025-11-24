@@ -67,7 +67,8 @@ vi.mock('../../js/session/SessionManager.js', () => ({
     addEventListener: vi.fn(),
     getImportedCardsInfo: vi.fn().mockReturnValue({ hasImportedCards: false }),
     onCardUpdated: vi.fn(),
-    onSetSwitched: vi.fn()
+    onSetSwitched: vi.fn(),
+    getCardSets: vi.fn().mockReturnValue([])
   }))
 }));
 
@@ -75,66 +76,6 @@ vi.mock('../../js/price/PriceChecker.js', () => ({
   PriceChecker: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(true),
     checkPrice: vi.fn().mockResolvedValue({ success: true, price: 10.99 })
-  }))
-}));
-
-vi.mock('../../js/ui/UIManager.js', () => ({
-  UIManager: vi.fn().mockImplementation(() => ({
-    initialize: vi.fn().mockResolvedValue(true),
-    showToast: vi.fn(),
-    setLoading: vi.fn(),
-    displayPriceResults: vi.fn(),
-    updateSessionInfo: vi.fn(),
-    updateVoiceStatus: vi.fn(),
-    showSettings: vi.fn(),
-    closeModal: vi.fn(),
-    showModal: vi.fn(),
-    clearSessionDisplay: vi.fn(),
-    updateConnectionStatus: vi.fn(),
-    updateCardDisplay: vi.fn(),
-    updateCardSets: vi.fn(),
-    onTabChange: vi.fn(),
-    onPriceCheck: vi.fn(),
-    onSessionStart: vi.fn(),
-    onSessionStop: vi.fn(),
-    onSessionClear: vi.fn(),
-    onSessionExport: vi.fn(),
-    onSessionImport: vi.fn(),
-    onVoiceStart: vi.fn(),
-    onVoiceStop: vi.fn(),
-    onVoiceTest: vi.fn(),
-    onQuantityAdjust: vi.fn(),
-    onCardRemove: vi.fn(),
-    onPricingRefresh: vi.fn(),
-    onBulkPricingRefresh: vi.fn(),
-    onSettingsSave: vi.fn(),
-    onSettingsShow: vi.fn(),
-    onSetSwitched: vi.fn(),
-    elements: {
-      modalOverlay: {
-        innerHTML: '',
-        appendChild: vi.fn(),
-        classList: {
-          remove: vi.fn(),
-          add: vi.fn()
-        }
-      }
-    }
-  }))
-}));
-
-// Mock Logger to return our global mock instance
-vi.mock('../../js/utils/Logger.js', () => ({
-  Logger: vi.fn().mockImplementation(() => mockLogger)
-}));
-
-vi.mock('../../js/utils/Storage.js', () => ({
-  Storage: vi.fn().mockImplementation(() => ({
-    initialize: vi.fn().mockResolvedValue(true),
-    get: vi.fn().mockResolvedValue({}),
-    set: vi.fn().mockResolvedValue(true),
-    remove: vi.fn().mockResolvedValue(true),
-    clear: vi.fn().mockResolvedValue(true)
   }))
 }));
 
@@ -263,6 +204,7 @@ describe('YGORipperApp', () => {
       showSettings: vi.fn(),
       closeModal: vi.fn(),
       showModal: vi.fn(),
+      showCardSelectionModal: vi.fn(),
       clearSessionDisplay: vi.fn(),
       updateConnectionStatus: vi.fn(),
       updateCardDisplay: vi.fn(),
@@ -322,7 +264,9 @@ describe('YGORipperApp', () => {
       addEventListener: vi.fn(),
       getImportedCardsInfo: vi.fn().mockReturnValue({ hasImportedCards: false }),
       onCardUpdated: vi.fn(),
-      onSetSwitched: vi.fn()
+      onSetSwitched: vi.fn(),
+      getCardSets: vi.fn().mockReturnValue([]),
+      setVoiceEngine: vi.fn()
     };
     
     app.priceChecker = {
@@ -342,6 +286,7 @@ describe('YGORipperApp', () => {
       startListening: vi.fn().mockResolvedValue(true),
       stopListening: vi.fn(),
       testRecognition: vi.fn().mockResolvedValue('test result'),
+      updateContext: vi.fn(),
       updateConfig: vi.fn(),
       onResult: vi.fn(),
       onStatusChange: vi.fn(),

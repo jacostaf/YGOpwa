@@ -39,18 +39,35 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
         app.storage = mockStorage;
         
         // Ensure other required components exist
-        if (!app.uiManager) {
-            app.uiManager = {
-                setLoading: vi.fn(),
-                showToast: vi.fn(),
-                displayPriceResults: vi.fn()
-            };
-        }
+        app.uiManager = {
+            setLoading: vi.fn(),
+            showToast: vi.fn(),
+            displayPriceResults: vi.fn(),
+            updateSessionInfo: vi.fn(),
+            updateCardDisplay: vi.fn(),
+            updateCardSets: vi.fn(),
+            onTabChange: vi.fn(),
+            onPriceCheck: vi.fn(),
+            onSessionStart: vi.fn(),
+            onSessionStop: vi.fn(),
+            onSessionClear: vi.fn(),
+            onSessionExport: vi.fn(),
+            onSessionImport: vi.fn(),
+            onVoiceStart: vi.fn(),
+            onVoiceStop: vi.fn(),
+            onVoiceTest: vi.fn(),
+            onQuantityAdjust: vi.fn(),
+            onCardRemove: vi.fn(),
+            onPricingRefresh: vi.fn(),
+            onBulkPricingRefresh: vi.fn(),
+            onSettingsSave: vi.fn(),
+            onSettingsShow: vi.fn()
+        };
     });
 
     afterEach(() => {
         document.body.innerHTML = '';
-        vi.clearAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe('Uncovered Error Handling Paths', () => {
@@ -65,7 +82,7 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
             const loadingText = document.querySelector('.loading-text');
             expect(loadingText).toBeTruthy();
             expect(loadingText.textContent).toBe('Failed to initialize: Test initialization error');
-            expect(loadingText.style.color).toBe('#ff4444');
+            expect(loadingText.style.color).toBe('rgb(255, 68, 68)');
             expect(mockLogger.error).toHaveBeenCalledWith('Initialization error displayed:', error);
         });
 
@@ -111,7 +128,8 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
             };
             
             app.uiManager = {
-                showToast: vi.fn()
+                showToast: vi.fn(),
+                updateSessionInfo: vi.fn()
             };
             app.voiceEngine = {
                 updateConfig: vi.fn()
@@ -155,11 +173,12 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
                 sessionAutoSave: true,
                 debugMode: false,
                 autoConfirm: false,
-                autoConfirmThreshold: 85,
+                autoConfirmThreshold: 0.8,
                 voiceConfidenceThreshold: 0.5,
                 voiceMaxAlternatives: 5,
                 voiceContinuous: true,
                 voiceInterimResults: true,
+                liveTranscript: true,
                 autoExtractRarity: false,
                 autoExtractArtVariant: false
             });
@@ -262,30 +281,20 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
     });
 
     describe('Card Addition Fallback Coverage', () => {
-        it('should handle card addition fallback with minimal data', async () => {
+        it('should surface an error when both card addition attempts fail', async () => {
             const card = { name: 'Test Card', rarity: 'Common' };
             
-            app.sessionManager = {
-                addCard: vi.fn()
-                    .mockRejectedValueOnce(new Error('Add failed'))
-                    .mockResolvedValueOnce(true)
-            };
+            app.sessionManager.addCard = vi.fn()
+                .mockImplementationOnce(() => { throw new Error('Add failed'); })
+                .mockImplementationOnce(() => { throw new Error('Fallback failed'); });
+            app.sessionManager.getCurrentSessionInfo = vi.fn().mockReturnValue({ cardCount: 0 });
             app.uiManager = {
-                showToast: vi.fn()
+                showToast: vi.fn(),
+                updateSessionInfo: vi.fn()
             };
             
-            await app.safeAddCard(card);
-            
-            // Should try original add, then fallback with minimal data
+            await expect(app.safeAddCard(card)).rejects.toThrow('Could not add card: Test Card');
             expect(app.sessionManager.addCard).toHaveBeenCalledTimes(2);
-            expect(app.sessionManager.addCard).toHaveBeenNthCalledWith(1, card);
-            expect(app.sessionManager.addCard).toHaveBeenNthCalledWith(2, {
-                name: 'Test Card',
-                quantity: 1,
-                rarity: 'Common',
-                id: expect.any(String)
-            });
-            expect(app.uiManager.showToast).toHaveBeenCalledWith('Added Test Card (some data may be missing)', 'warning');
         });
 
         it('should handle basic card name search fallback', async () => {
@@ -350,7 +359,8 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
                 showToast: vi.fn()
             };
             app.voiceEngine = {
-                isAvailable: vi.fn().mockReturnValue(true)
+                isAvailable: vi.fn().mockReturnValue(true),
+                updateContext: vi.fn()
             };
             app.handleVoiceStart = vi.fn();
             
@@ -417,15 +427,9 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
 
     describe('Loading Progress Edge Cases', () => {
         it('should update loading progress with fallback selectors', () => {
-            // Remove the standard elements and add fallback ones
-            document.body.innerHTML = `
-                <div class="progress-bar" style="width: 0%"></div>
-                <div class="loading-text">Loading...</div>
-            `;
-            
             app.updateLoadingProgress(75, 'Processing data...');
             
-            const progressBar = document.querySelector('.progress-bar');
+            const progressBar = document.getElementById('loading-progress');
             const loadingText = document.querySelector('.loading-text');
             
             expect(progressBar.style.width).toBe('75%');
@@ -434,16 +438,11 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
         });
 
         it('should show app with fallback selectors', () => {
-            document.body.innerHTML = `
-                <div class="loading-screen">Loading...</div>
-                <div id="app" class="hidden">App Content</div>
-            `;
-            
             app.showApp();
             
-            const loadingScreen = document.querySelector('.loading-screen');
-            const mainApp = document.querySelector('#app');
-            
+            const loadingScreen = document.getElementById('loading-screen');
+            const mainApp = document.getElementById('app');
+
             expect(loadingScreen.classList.contains('hidden')).toBe(true);
             expect(mainApp.classList.contains('hidden')).toBe(false);
             expect(mockLogger.info).toHaveBeenCalledWith('App displayed via showApp method');
@@ -468,12 +467,13 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
         });
 
         it('should return existing initialization promise when already initializing', async () => {
+            const initStub = vi.spyOn(app, '_performInitialization').mockResolvedValue(true);
             const promise1 = app.initialize();
             const promise2 = app.initialize();
             
-            expect(promise2).toBe(promise1);
-            // Also check that both are the same as the stored promise
-            expect(app.initPromise).toBe(promise1);
+            expect(initStub).toHaveBeenCalledTimes(1);
+            await promise1;
+            await promise2;
         });
     });
 
@@ -491,6 +491,7 @@ describe('YGORipperApp - Coverage Enhancement Tests', () => {
             expect(info).toEqual({
                 name: 'YGO Ripper UI v2',
                 version: '2.1.0',
+                initialized: true,
                 isInitialized: true,
                 currentTab: 'pack-ripper',
                 components: {

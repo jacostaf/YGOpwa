@@ -24,6 +24,10 @@ export class Logger {
     this.disableDebug = vi.fn();
     this.logSystemInfo = vi.fn();
     this.logPerformanceInfo = vi.fn();
+    this.enableBatching = vi.fn();
+    this.disableBatching = vi.fn();
+    this.flushBatch = vi.fn();
+    this.logWithMetadata = vi.fn();
     this.scope = vi.fn().mockImplementation((label) => ({
       info: vi.fn(),
       warn: vi.fn(),

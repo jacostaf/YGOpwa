@@ -13,10 +13,6 @@ const mockLogger = {
   error: vi.fn()
 };
 
-vi.mock('../../js/utils/Logger.js', () => ({
-  Logger: vi.fn().mockImplementation(() => mockLogger)
-}));
-
 vi.mock('../../js/utils/config.js', () => ({
   config: {
     backendUrl: 'http://localhost:5000',
@@ -552,7 +548,8 @@ describe('SessionManager', () => {
 
       const invalidCard = null;
 
-      await expect(sessionManager.addCard(invalidCard)).rejects.toThrow();
+      await expect(sessionManager.addCard(invalidCard)).resolves.toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalledWith('Invalid card data:', invalidCard);
     });
   });
 

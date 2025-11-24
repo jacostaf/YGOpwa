@@ -384,7 +384,7 @@ describe('ImageManager - Enhanced Coverage Tests', () => {
 
         it('should generate proper proxy URLs', () => {
             const ygoprodeckUrl = 'https://images.ygoprodeck.com/images/cards/12345.jpg';
-            const expectedProxy = `http://127.0.0.1:8081/cards/image?url=${encodeURIComponent(ygoprodeckUrl)}`;
+            const expectedProxy = `http://127.0.0.1:8081/api/v1/cards/image?url=${encodeURIComponent(ygoprodeckUrl)}`;
             
             // Test URL encoding
             const encoded = encodeURIComponent(ygoprodeckUrl);

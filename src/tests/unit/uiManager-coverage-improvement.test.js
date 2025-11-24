@@ -127,7 +127,7 @@ describe('UIManager - Coverage Improvement Tests', () => {
             uiManager.displaySessionCards(cards);
             
             const container = document.getElementById('session-cards');
-            expect(container.children.length).toBe(2);
+            expect(container.querySelectorAll('.session-card').length).toBe(2);
         });
 
         it('should update voice status display', () => {

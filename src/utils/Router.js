@@ -41,6 +41,7 @@ export default class Router {
       'collection': 'Collection',
       'training': 'Voice Training',
       'achievements': 'Achievements',
+      'leaderboards': 'Leaderboards',
       'settings': 'Settings',
       'theme': 'Theme Settings'
     };
