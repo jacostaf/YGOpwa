@@ -33,6 +33,7 @@ export class VoiceEngine {
         this.isListening = false;
         this.isPaused = false;
         this.shouldKeepListening = false; // Track if user wants continuous listening
+        this.restartTimeoutId = null; // Track pending restart to prevent race conditions
 
         // Enhanced fantasy name processing components
         this.phoneticMapper = new PhoneticMapper(this.logger);
@@ -307,9 +308,15 @@ export class VoiceEngine {
 
                 // Auto-restart if user wants continuous listening and not manually stopped
                 if (this.shouldKeepListening && !this.isPaused && this.isInitialized) {
+                    // Cancel any existing restart timeout to prevent race conditions
+                    if (this.restartTimeoutId) {
+                        clearTimeout(this.restartTimeoutId);
+                        this.restartTimeoutId = null;
+                    }
                     // Give more time for result processing and training UI to appear
-                    setTimeout(() => {
-                        if (this.shouldKeepListening && !this.isPaused) {
+                    this.restartTimeoutId = setTimeout(() => {
+                        this.restartTimeoutId = null;
+                        if (this.shouldKeepListening && !this.isPaused && !this.isListening) {
                             this.startListening().catch((error) => {
                                 this.logger.warn('Failed to restart recognition:', error);
                             });
@@ -378,6 +385,12 @@ export class VoiceEngine {
             return this.handleError(error, 'start listening');
         }
 
+        // Cancel any pending restart timeout to prevent race conditions
+        if (this.restartTimeoutId) {
+            clearTimeout(this.restartTimeoutId);
+            this.restartTimeoutId = null;
+        }
+
         if (this.isListening) {
             this.logger.warn('Already listening');
             return true;
@@ -441,6 +454,12 @@ export class VoiceEngine {
      * Stop listening for voice input
      */
     stopListening() {
+        // Cancel any pending restart timeout
+        if (this.restartTimeoutId) {
+            clearTimeout(this.restartTimeoutId);
+            this.restartTimeoutId = null;
+        }
+
         if (!this.isListening) {
             this.logger.warn('Not currently listening');
             return;

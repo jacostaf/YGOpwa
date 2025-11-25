@@ -29,6 +29,9 @@ export default class Router {
     // Event listeners
     this.listeners = [];
 
+    // Navigation guard to prevent re-entrant calls
+    this.isNavigating = false;
+
     // Animation helper
     this.animationHelper = AnimationHelper;
 
@@ -48,7 +51,6 @@ export default class Router {
 
     // Bind methods
     this.handleHashChange = this.handleHashChange.bind(this);
-    this.handlePopState = this.handlePopState.bind(this);
   }
 
   /**
@@ -64,9 +66,9 @@ export default class Router {
     this.pageContainer = container;
     this.pageTitle = titleElement;
 
-    // Listen for hash changes
+    // Listen for hash changes only (popstate is not needed for hash-based routing
+    // and can cause duplicate events or infinite loops in some browsers)
     window.addEventListener('hashchange', this.handleHashChange, false);
-    window.addEventListener('popstate', this.handlePopState, false);
 
     console.log('Router initialized');
 
@@ -100,8 +102,20 @@ export default class Router {
    * @param {boolean} replace - Replace history instead of push (default: false)
    */
   navigate(route, replace = false) {
+    // Prevent re-entrant navigation
+    if (this.isNavigating) {
+      console.log('Navigation already in progress, skipping:', route);
+      return;
+    }
+
     // Normalize route (remove leading slash if present)
     const normalizedRoute = route.replace(/^\//, '');
+
+    // Early exit if already on this route (before any hash manipulation)
+    if (normalizedRoute === this.currentRoute) {
+      console.log('Already on route:', normalizedRoute);
+      return;
+    }
 
     // Check if route exists
     if (!this.routes.has(normalizedRoute)) {
@@ -131,15 +145,6 @@ export default class Router {
   }
 
   /**
-   * Handle popstate events (browser back/forward)
-   * @private
-   */
-  handlePopState(event) {
-    console.log('Popstate event:', window.location.hash);
-    this.loadRoute();
-  }
-
-  /**
    * Load the initial route on page load
    * @private
    */
@@ -160,6 +165,11 @@ export default class Router {
    * @private
    */
   async loadRoute() {
+    // Prevent re-entrant calls during active navigation
+    if (this.isNavigating) {
+      return;
+    }
+
     // Get route from hash
     let route = this.getRouteFromHash();
 
@@ -172,43 +182,46 @@ export default class Router {
       window.location.replace(`#/${route}`);
     }
 
-    // Don't reload if already on this route
+    // Don't reload if already on this route (check BEFORE setting isNavigating)
     if (route === this.currentRoute) {
       console.log(`Already on route: ${route}`);
       return;
     }
 
+    // Now we're committed to navigating - set the guard
+    this.isNavigating = true;
     console.log(`Loading route: ${route}`);
 
-    // Update page title IMMEDIATELY (no latency)
-    this.updatePageTitle(route);
-
-    // Store old page element for smooth transition
-    const oldPageElement = this.pageContainer.firstElementChild;
-
-    // Fade out old page quickly if it exists
-    if (oldPageElement) {
-      oldPageElement.style.transition = 'opacity 200ms ease-out';
-      oldPageElement.style.opacity = '0';
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-
-    // Unmount current page if exists
-    if (this.currentPage && typeof this.currentPage.unmount === 'function') {
-      try {
-        await this.currentPage.unmount();
-      } catch (error) {
-        console.error('Error unmounting page:', error);
-      }
-    }
-
-    // Clear container
-    this.pageContainer.innerHTML = '';
-
-    // Get page component
-    const PageComponent = this.routes.get(route);
-
     try {
+
+      // Update page title IMMEDIATELY (no latency)
+      this.updatePageTitle(route);
+
+      // Store old page element for smooth transition
+      const oldPageElement = this.pageContainer.firstElementChild;
+
+      // Fade out old page quickly if it exists
+      if (oldPageElement) {
+        oldPageElement.style.transition = 'opacity 200ms ease-out';
+        oldPageElement.style.opacity = '0';
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Unmount current page if exists
+      if (this.currentPage && typeof this.currentPage.unmount === 'function') {
+        try {
+          await this.currentPage.unmount();
+        } catch (error) {
+          console.error('Error unmounting page:', error);
+        }
+      }
+
+      // Clear container
+      this.pageContainer.innerHTML = '';
+
+      // Get page component
+      const PageComponent = this.routes.get(route);
+
       // Create page instance
       const pageInstance = typeof PageComponent === 'function'
         ? new PageComponent(this)
@@ -267,6 +280,9 @@ export default class Router {
     } catch (error) {
       console.error('Error loading route:', error);
       this.showError('Failed to load page', error);
+    } finally {
+      // Always reset navigation flag
+      this.isNavigating = false;
     }
   }
 
@@ -417,7 +433,6 @@ export default class Router {
   destroy() {
     // Remove event listeners
     window.removeEventListener('hashchange', this.handleHashChange);
-    window.removeEventListener('popstate', this.handlePopState);
 
     // Unmount current page
     if (this.currentPage && typeof this.currentPage.unmount === 'function') {

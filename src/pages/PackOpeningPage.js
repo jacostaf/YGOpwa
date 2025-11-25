@@ -982,6 +982,12 @@ export default class PackOpeningPage {
     const cardsContainer = this.container?.querySelector('#session-cards');
     if (!cardsContainer) return;
 
+    // Sync view state from the checkbox to avoid resets after async updates
+    const consolidatedToggle = this.container?.querySelector('#consolidated-view-toggle');
+    if (consolidatedToggle) {
+      this.consolidatedView = consolidatedToggle.checked;
+    }
+
     // Destroy existing card grid
     if (this.cardGrid) {
       this.cardGrid.destroy();
@@ -991,7 +997,7 @@ export default class PackOpeningPage {
     // Get cards from current session
     const cards = this.currentSession?.cards || [];
 
-    // Create new card grid
+    // Create new card grid (consolidated controls grouping + grid layout)
     this.cardGrid = new CardGrid({
       cards,
       onRemoveCard: (card, index) => this.removeCard(card?.id ?? index),

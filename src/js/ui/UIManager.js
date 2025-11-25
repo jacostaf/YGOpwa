@@ -392,6 +392,15 @@ export class UIManager {
     }
 
     /**
+     * Detect if the new pack-opening card grid layout is active.
+     * When present, legacy session card rendering should not run.
+     */
+    isCardGridLayout() {
+        const container = this.elements?.sessionCards;
+        return Boolean(container && container.classList.contains('card-grid-container'));
+    }
+
+    /**
      * Initialize UI components
      */
     initializeComponents() {
@@ -1263,7 +1272,7 @@ export class UIManager {
      * @param {Object} card - The updated card data
      */
     updateCardDisplay(card) {
-        if (!this.elements.sessionCards) return;
+        if (!this.elements.sessionCards || this.isCardGridLayout()) return;
 
         // Find the existing card element
         const cardElement = this.elements.sessionCards.querySelector(`.session-card[data-card-id="${card.id}"]`);
@@ -1289,6 +1298,11 @@ export class UIManager {
             document.body.appendChild(container);
         }
         this.elements.sessionCards = container;
+
+        // If the new CardGrid layout is in use (compact pack opening), do not touch the DOM here.
+        if (this.isCardGridLayout()) {
+            return;
+        }
 
         // Remove existing cards
         container.innerHTML = '';
@@ -1540,6 +1554,11 @@ export class UIManager {
      */
     handleViewToggle(isConsolidated) {
         this.ensureDomReferences(['cardSizeSection', 'sessionCards']);
+        if (this.isCardGridLayout()) {
+            // The compact pack-opening page controls view/layout via CardGrid.
+            this.isConsolidatedView = isConsolidated;
+            return;
+        }
         this.isConsolidatedView = isConsolidated;
         this.logger.info('View toggled to consolidated:', isConsolidated);
 
@@ -1581,7 +1600,7 @@ export class UIManager {
      * Update session view mode classes
      */
     updateSessionViewMode() {
-        if (!this.elements.sessionCards) return;
+        if (!this.elements.sessionCards || this.isCardGridLayout()) return;
 
         if (this.isConsolidatedView) {
             this.elements.sessionCards.classList.add('consolidated');

@@ -1,15 +1,16 @@
 /**
  * CardGrid.js
  *
- * Reusable card grid component for displaying Yu-Gi-Oh cards in a responsive grid
+ * Reusable card grid component for displaying Yu-Gi-Oh cards
  * Features:
- * - Responsive grid layout (2-8 columns)
+ * - Two view modes: 'list' (row-style) and 'grid' (tile-style)
+ * - Responsive grid layout (2-8 columns in grid mode)
  * - Card image display with hover effects
  * - Price information (TCG Low, TCG Market)
  * - Rarity badges
  * - Remove card functionality
  * - Empty state when no cards
- * - Consolidated/expanded views
+ * - Consolidated/expanded views (groups cards by name)
  * - Custom card size support
  */
 
@@ -22,18 +23,21 @@ export default class CardGrid {
    * @param {boolean} options.consolidated - Show consolidated view (default: false)
    * @param {number} options.cardSize - Card size in pixels (default: 120)
    * @param {boolean} options.showRemoveButton - Show remove button (default: true)
+   * @param {string} options.viewMode - View mode: 'grid' or 'list' (default: 'grid')
    */
   constructor(options = {}) {
     this.cards = options.cards || [];
     this.onRemoveCard = options.onRemoveCard || null;
-    this.consolidated = options.consolidated || false;
+    // Treat only explicit true as consolidated; avoids truthy strings accidentally enabling grid view
+    this.consolidated = options.consolidated === true;
     this.cardSize = options.cardSize || 120;
     this.showRemoveButton = options.showRemoveButton !== false;
+    this.viewMode = options.viewMode || 'grid'; // 'grid' or 'list'
     this.element = null;
   }
 
   /**
-   * Render the card grid HTML
+   * Render the card display HTML
    * @returns {string} HTML string
    */
   render() {
@@ -41,12 +45,102 @@ export default class CardGrid {
       return this.renderEmptyState();
     }
 
-    // If consolidated view, group cards by name
-    const displayCards = this.consolidated ? this.consolidateCards() : this.cards;
+    // Consolidated=true shows grouped cards in grid; false shows individual cards in list/row layout
+    const isConsolidated = Boolean(this.consolidated);
+    const displayCards = isConsolidated ? this.consolidateCards() : this.cards;
 
+    return isConsolidated
+      ? this.renderGridView(displayCards)
+      : this.renderListView(displayCards);
+  }
+
+  /**
+   * Render grid view (tile-style cards)
+   * @param {Array} displayCards - Cards to display
+   * @returns {string} HTML string
+   */
+  renderGridView(displayCards) {
     return `
       <div class="card-grid" style="--card-width: ${this.cardSize}px">
-        ${displayCards.map((card, index) => this.renderCard(card, index)).join('')}
+        ${displayCards.map((card, index) => this.renderGridCard(card, index)).join('')}
+      </div>
+    `;
+  }
+
+  /**
+   * Render list view (row-style cards)
+   * @param {Array} displayCards - Cards to display
+   * @returns {string} HTML string
+   */
+  renderListView(displayCards) {
+    return `
+      <div class="card-list">
+        ${displayCards.map((card, index) => this.renderListCard(card, index)).join('')}
+      </div>
+    `;
+  }
+
+  /**
+   * Render a single card in list/row format
+   * @param {Object} card - Card object
+   * @param {number} index - Card index
+   * @returns {string} Card HTML
+   */
+  renderListCard(card, index) {
+    const cardName = this.escapeHtml(card.card_name || card.name || 'Unknown Card');
+    const cardNumber = this.escapeHtml(card.cardNumber || card.card_number || card.ext_number || '');
+    const cardRarity = this.escapeHtml(card.rarity || card.displayRarity || card.card_rarity || '');
+    const setCode = this.escapeHtml(card.set || card.set_code || card.setInfo?.setCode || '');
+    const tcgLow = this.formatPrice(
+      card.tcgLow ||
+      card.tcg_low ||
+      card.tcg_price ||
+      card.tcg_low_price ||
+      card.low_price
+    );
+    const tcgMarket = this.formatPrice(
+      card.tcgMarket ||
+      card.tcg_market ||
+      card.tcg_market_price ||
+      card.market_price ||
+      card.tcgMarketPrice ||
+      card.marketPrice
+    );
+    const estPrice = this.formatPrice(card.price);
+    const quantity = card.quantity > 1 ? `x${card.quantity}` : '';
+    const rarityClass = this.getRarityClass(cardRarity);
+    const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
+
+    return `
+      <div class="session-card" data-card-index="${index}">
+        <div class="card-image-container">
+          <img class="card-image"
+               src="${cardImage}"
+               alt="${cardName}"
+               loading="lazy"
+               onerror="this.onerror=null;this.src='${this.getDefaultCardImage()}';">
+        </div>
+
+        <div class="card-info">
+          <div class="card-name">${cardName}${quantity ? ` <span class="card-quantity-badge">${quantity}</span>` : ''}</div>
+          <div class="card-details">
+            ${setCode ? `<span class="card-number">${setCode}${cardNumber ? `-${cardNumber}` : ''}</span>` : `${cardNumber ? `<span class="card-number">${cardNumber}</span>` : ''}`}
+            ${cardRarity ? `<span class="card-rarity-badge ${rarityClass}">${cardRarity}</span>` : ''}
+          </div>
+        </div>
+
+        <div class="card-price">
+          ${tcgLow ? `<div class="price-row"><span class="price-label">Low:</span> <span class="price-value">${tcgLow}</span></div>` : ''}
+          ${tcgMarket ? `<div class="price-row"><span class="price-label">Market:</span> <span class="price-value">${tcgMarket}</span></div>` : estPrice ? `<div class="price-row"><span class="price-label">Est:</span> <span class="price-value">${estPrice}</span></div>` : ''}
+        </div>
+
+        ${this.showRemoveButton ? `
+          <div class="card-actions">
+            <button class="card-remove-btn" data-remove-index="${index}" title="Remove card">
+              <i data-lucide="trash-2" class="icon-sm"></i>
+            </button>
+          </div>
+        ` : ''}
       </div>
     `;
   }
@@ -84,12 +178,12 @@ export default class CardGrid {
   }
 
   /**
-   * Render a single card
+   * Render a single card in grid/tile format
    * @param {Object} card - Card object
    * @param {number} index - Card index
    * @returns {string} Card HTML
    */
-  renderCard(card, index) {
+  renderGridCard(card, index) {
     const cardName = this.escapeHtml(card.name || 'Unknown Card');
     const cardSet = this.escapeHtml(card.set || '');
     const cardNumber = this.escapeHtml(card.cardNumber || '');
@@ -264,8 +358,8 @@ export default class CardGrid {
   attachEventListeners() {
     if (!this.element || !this.showRemoveButton) return;
 
-    // Remove card buttons
-    const removeButtons = this.element.querySelectorAll('.card-remove-btn');
+    // Remove card buttons - support both grid (.ygo-card-remove-btn) and list (.card-remove-btn) views
+    const removeButtons = this.element.querySelectorAll('.card-remove-btn, .ygo-card-remove-btn');
     removeButtons.forEach(button => {
       button.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -306,13 +400,16 @@ export default class CardGrid {
    */
   updateConfig(options = {}) {
     if (options.consolidated !== undefined) {
-      this.consolidated = options.consolidated;
+      this.consolidated = options.consolidated === true;
     }
     if (options.cardSize !== undefined) {
       this.cardSize = options.cardSize;
     }
     if (options.showRemoveButton !== undefined) {
       this.showRemoveButton = options.showRemoveButton;
+    }
+    if (options.viewMode !== undefined) {
+      this.viewMode = options.viewMode;
     }
 
     // Re-render if element exists

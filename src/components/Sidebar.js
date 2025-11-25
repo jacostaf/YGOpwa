@@ -146,6 +146,11 @@ export default class Sidebar {
   }
 
   setActive(navId) {
+    // Skip if already active - prevents unnecessary DOM updates and potential loops
+    if (this.activeItem === navId) {
+      return;
+    }
+
     // Remove active class from all items
     this.container.querySelectorAll('.sidebar-nav-item').forEach(item => {
       item.classList.remove('active');
