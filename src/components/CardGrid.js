@@ -124,7 +124,7 @@ export default class CardGrid {
     const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
 
     const cardEl = document.createElement('div');
-    cardEl.className = 'session-card';
+    cardEl.className = `session-card card-list-item card-stagger-${(index % 8) + 1}`;
     cardEl.dataset.cardIndex = index;
 
     // Image Container
@@ -269,7 +269,7 @@ export default class CardGrid {
     const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
 
     const cardEl = document.createElement('div');
-    cardEl.className = 'ygo-card';
+    cardEl.className = `ygo-card card-grid-item card-stagger-${(index % 8) + 1}`;
     cardEl.dataset.cardIndex = index;
     cardEl.style.setProperty('--card-size', `${this.cardSize}px`);
 

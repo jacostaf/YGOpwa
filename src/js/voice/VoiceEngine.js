@@ -33,6 +33,7 @@ export class VoiceEngine {
         this.isListening = false;
         this.isPaused = false;
         this.shouldKeepListening = false; // Track if user wants continuous listening
+        this.isRestarting = false; // Track if engine is auto-restarting
         this.restartTimeoutId = null; // Track pending restart to prevent race conditions
 
         // Enhanced fantasy name processing components
@@ -304,25 +305,42 @@ export class VoiceEngine {
 
             recognition.onend = () => {
                 this.logger.debug('Web Speech recognition ended');
-                this.isListening = false;
 
                 // Auto-restart if user wants continuous listening and not manually stopped
                 if (this.shouldKeepListening && !this.isPaused && this.isInitialized) {
-                    // Cancel any existing restart timeout to prevent race conditions
+                    // Mark as restarting but don't clear isListening flag yet to prevent UI flicker
+                    this.isRestarting = true;
+
+                    // Cancel any existing restart timeout
                     if (this.restartTimeoutId) {
                         clearTimeout(this.restartTimeoutId);
                         this.restartTimeoutId = null;
                     }
-                    // Give more time for result processing and training UI to appear
+
+                    // Quick restart with safety check
                     this.restartTimeoutId = setTimeout(() => {
                         this.restartTimeoutId = null;
-                        if (this.shouldKeepListening && !this.isPaused && !this.isListening) {
+
+                        // Double check state before restarting
+                        if (this.shouldKeepListening && !this.isPaused) {
+                            this.logger.debug('Auto-restarting voice recognition...');
                             this.startListening().catch((error) => {
                                 this.logger.warn('Failed to restart recognition:', error);
+                                // Only if restart fails do we update state to stopped
+                                this.isListening = false;
+                                this.isRestarting = false;
+                                this.emitStatusChange('error');
                             });
+                        } else {
+                            // User stopped during delay
+                            this.isListening = false;
+                            this.isRestarting = false;
+                            this.emitStatusChange('ready');
                         }
-                    }, 2000); // Increased from 100ms to 2000ms
+                    }, 50); // Minimal delay
                 } else {
+                    this.isListening = false;
+                    this.isRestarting = false;
                     this.emitStatusChange('ready');
                 }
             };
@@ -391,7 +409,7 @@ export class VoiceEngine {
             this.restartTimeoutId = null;
         }
 
-        if (this.isListening) {
+        if (this.isListening && !this.isRestarting) {
             this.logger.warn('Already listening');
             return true;
         }
@@ -400,11 +418,21 @@ export class VoiceEngine {
             this.logger.info('Starting voice recognition...');
             this.isPaused = false;
             this.shouldKeepListening = true; // Enable continuous listening
+            this.isRestarting = false;
             this.recognitionAttempts = 0;
 
             const engine = this.engines.get(this.currentEngine);
             if (!engine) {
                 throw new Error('No recognition engine available');
+            }
+
+            // If restarting, ensure previous instance is fully stopped
+            if (this.isRestarting) {
+                try {
+                    engine.instance.abort();
+                } catch (e) {
+                    // Ignore abort errors
+                }
             }
 
             // Start recognition with timeout

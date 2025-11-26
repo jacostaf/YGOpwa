@@ -34,7 +34,6 @@ export class SessionManager {
         this.currentSession = null;
         this.sessionActive = false;
         this.sessionHistory = [];
-        this.cards = [];
         this._returnBooleanOnAdd = false;
 
         // Card sets data
@@ -82,6 +81,10 @@ export class SessionManager {
         this.logger.info('SessionManager initialized');
     }
 
+    get cards() {
+        return this.currentSession?.cards || [];
+    }
+
     get isActive() {
         return this.sessionActive;
     }
@@ -90,7 +93,6 @@ export class SessionManager {
         this.sessionActive = Boolean(value);
         if (this.sessionActive && !this.currentSession) {
             this.currentSession = this.createEmptySession();
-            this.cards = this.currentSession.cards;
             this._returnBooleanOnAdd = true;
         }
     }
@@ -805,7 +807,7 @@ export class SessionManager {
             const stoppedSession = this.currentSession;
             this.currentSession = null;
             this.currentSet = null;
-            this.cards = [];
+
 
             this.logger.info('Session stopped successfully');
             return stoppedSession;
@@ -931,7 +933,6 @@ export class SessionManager {
 
             // Add to session immediately
             this.currentSession.cards.push(enhancedCard);
-            this.cards = this.currentSession.cards;
 
             // Update statistics
             this.updateSessionStatistics();
@@ -3409,6 +3410,8 @@ export class SessionManager {
                 this.logger.error('Error in session update callback:', error);
             }
         });
+        // Also emit generic event for addEventListener users
+        this.emit('session-updated', session);
     }
 
     emitCardAdded(card) {

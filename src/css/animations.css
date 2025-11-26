@@ -20,6 +20,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -29,6 +30,7 @@
   from {
     opacity: 1;
   }
+
   to {
     opacity: 0;
   }
@@ -39,6 +41,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -50,6 +53,7 @@
     opacity: 0;
     transform: translateY(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -61,6 +65,7 @@
     opacity: 0;
     transform: translateX(100%);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -72,6 +77,7 @@
     opacity: 1;
     transform: translateX(0);
   }
+
   to {
     opacity: 0;
     transform: translateX(100%);
@@ -83,6 +89,7 @@
     opacity: 0;
     transform: translateX(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -95,6 +102,7 @@
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -106,6 +114,7 @@
     opacity: 1;
     transform: scale(1);
   }
+
   to {
     opacity: 0;
     transform: scale(0.9);
@@ -113,9 +122,12 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.05);
   }
@@ -127,6 +139,7 @@
     transform: perspective(1000px) rotateY(-180deg);
     opacity: 0;
   }
+
   to {
     transform: perspective(1000px) rotateY(0deg);
     opacity: 1;
@@ -138,6 +151,7 @@
     transform: perspective(1000px) rotateY(0deg);
     opacity: 1;
   }
+
   to {
     transform: perspective(1000px) rotateY(180deg);
     opacity: 0;
@@ -149,6 +163,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -158,6 +173,7 @@
   0% {
     background-position: -1000px 0;
   }
+
   100% {
     background-position: 1000px 0;
   }
@@ -167,16 +183,21 @@
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(300%);
   }
 }
 
 @keyframes dotPulse {
-  0%, 80%, 100% {
+
+  0%,
+  80%,
+  100% {
     opacity: 0.3;
     transform: scale(0.8);
   }
+
   40% {
     opacity: 1;
     transform: scale(1);
@@ -185,18 +206,24 @@
 
 /* Glow and Highlight */
 @keyframes glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 5px currentColor;
   }
+
   50% {
     box-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
   }
 }
 
 @keyframes highlightFlash {
-  0%, 100% {
+
+  0%,
+  100% {
     background-color: transparent;
   }
+
   50% {
     background-color: var(--accent-color);
   }
@@ -208,12 +235,15 @@
     opacity: 0;
     transform: scale(0.3);
   }
+
   50% {
     transform: scale(1.05);
   }
+
   70% {
     transform: scale(0.9);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
@@ -222,13 +252,24 @@
 
 /* Shake (for errors) */
 @keyframes shake {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateX(0);
   }
-  10%, 30%, 50%, 70%, 90% {
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
     transform: translateX(-5px);
   }
-  20%, 40%, 60%, 80% {
+
+  20%,
+  40%,
+  60%,
+  80% {
     transform: translateX(5px);
   }
 }
@@ -239,6 +280,7 @@
     transform: scale(0);
     opacity: 1;
   }
+
   to {
     transform: scale(4);
     opacity: 0;
@@ -340,18 +382,46 @@
 }
 
 /* Staggered card animations */
-.card-stagger-1 { animation-delay: 0ms; }
-.card-stagger-2 { animation-delay: 50ms; }
-.card-stagger-3 { animation-delay: 100ms; }
-.card-stagger-4 { animation-delay: 150ms; }
-.card-stagger-5 { animation-delay: 200ms; }
-.card-stagger-6 { animation-delay: 250ms; }
-.card-stagger-7 { animation-delay: 300ms; }
-.card-stagger-8 { animation-delay: 350ms; }
+.card-stagger-1 {
+  animation-delay: 0ms;
+}
+
+.card-stagger-2 {
+  animation-delay: 50ms;
+}
+
+.card-stagger-3 {
+  animation-delay: 100ms;
+}
+
+.card-stagger-4 {
+  animation-delay: 150ms;
+}
+
+.card-stagger-5 {
+  animation-delay: 200ms;
+}
+
+.card-stagger-6 {
+  animation-delay: 250ms;
+}
+
+.card-stagger-7 {
+  animation-delay: 300ms;
+}
+
+.card-stagger-8 {
+  animation-delay: 350ms;
+}
 
 /* Card grid item entrance */
 .card-grid-item {
   animation: scaleIn 300ms ease-out;
+}
+
+/* Card list item entrance */
+.card-list-item {
+  animation: slideInRight 300ms ease-out;
 }
 
 /* ==========================================================================
@@ -374,12 +444,10 @@
 
 /* Skeleton Screens */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.05) 0%,
-    rgba(255, 255, 255, 0.15) 50%,
-    rgba(255, 255, 255, 0.05) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.15) 50%,
+      rgba(255, 255, 255, 0.05) 100%);
   background-size: 1000px 100%;
   animation: shimmer 1500ms infinite linear;
   border-radius: 8px;
@@ -438,9 +506,17 @@
   animation: dotPulse 1400ms infinite ease-in-out;
 }
 
-.dot-loader span:nth-child(1) { animation-delay: 0ms; }
-.dot-loader span:nth-child(2) { animation-delay: 160ms; }
-.dot-loader span:nth-child(3) { animation-delay: 320ms; }
+.dot-loader span:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.dot-loader span:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.dot-loader span:nth-child(3) {
+  animation-delay: 320ms;
+}
 
 /* Progress Bar */
 .progress-bar {
@@ -571,10 +647,21 @@ button:focus-visible,
   animation: fadeIn 400ms ease-out, slideUp 400ms ease-out;
 }
 
-.stat-card:nth-child(1) { animation-delay: 0ms; }
-.stat-card:nth-child(2) { animation-delay: 100ms; }
-.stat-card:nth-child(3) { animation-delay: 200ms; }
-.stat-card:nth-child(4) { animation-delay: 300ms; }
+.stat-card:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.stat-card:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.stat-card:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+.stat-card:nth-child(4) {
+  animation-delay: 300ms;
+}
 
 .stat-value-updating {
   animation: pulse 300ms ease-in-out;
@@ -702,6 +789,7 @@ select:focus {
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -770,12 +858,10 @@ select:focus {
    ========================================================================== */
 
 [data-theme="light"] .skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.05) 0%,
-    rgba(0, 0, 0, 0.15) 50%,
-    rgba(0, 0, 0, 0.05) 100%
-  );
+  background: linear-gradient(90deg,
+      rgba(0, 0, 0, 0.05) 0%,
+      rgba(0, 0, 0, 0.15) 50%,
+      rgba(0, 0, 0, 0.05) 100%);
   background-size: 1000px 100%;
 }
 

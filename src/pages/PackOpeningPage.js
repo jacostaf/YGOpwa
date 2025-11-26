@@ -160,13 +160,13 @@ export default class PackOpeningPage {
                 </button>
                 <button
                   id="start-session-btn"
-                  class="btn btn-primary btn-sm"
+                  class="btn btn-primary btn-sm btn-pulse-ready"
                   type="button"
                   data-router-controlled="pack-opening"
                   disabled
                 >
-                  <i data-lucide="Play"></i>
-                  <span>Start</span>
+                  <i data-lucide="package-open"></i>
+                  <span>Rip Pack</span>
                 </button>
                 <button id="swap-set-btn" class="btn btn-secondary btn-sm hidden" type="button">
                   <i data-lucide="refresh-ccw"></i>
