@@ -12,6 +12,7 @@
 
 /* Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -30,34 +31,49 @@
   /* Typography */
   --font-family-primary: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  
-  --font-size-xs: 0.75rem;          /* 12px */
-  --font-size-sm: 0.875rem;         /* 14px */
-  --font-size-base: 1rem;           /* 16px */
-  --font-size-lg: 1.125rem;         /* 18px */
-  --font-size-xl: 1.25rem;          /* 20px */
-  --font-size-2xl: 1.5rem;          /* 24px */
-  --font-size-3xl: 1.875rem;        /* 30px */
-  --font-size-4xl: 2.25rem;         /* 36px */
-  
+
+  --font-size-xs: 0.75rem;
+  /* 12px */
+  --font-size-sm: 0.875rem;
+  /* 14px */
+  --font-size-base: 1rem;
+  /* 16px */
+  --font-size-lg: 1.125rem;
+  /* 18px */
+  --font-size-xl: 1.25rem;
+  /* 20px */
+  --font-size-2xl: 1.5rem;
+  /* 24px */
+  --font-size-3xl: 1.875rem;
+  /* 30px */
+  --font-size-4xl: 2.25rem;
+  /* 36px */
+
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  
+
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.75;
-  
+
   /* Spacing */
-  --spacing-xs: 0.25rem;            /* 4px */
-  --spacing-sm: 0.5rem;             /* 8px */
-  --spacing-md: 1rem;               /* 16px */
-  --spacing-lg: 1.5rem;             /* 24px */
-  --spacing-xl: 2rem;               /* 32px */
-  --spacing-2xl: 3rem;              /* 48px */
-  --spacing-3xl: 4rem;              /* 64px */
-  
+  --spacing-xs: 0.25rem;
+  /* 4px */
+  --spacing-sm: 0.5rem;
+  /* 8px */
+  --spacing-md: 1rem;
+  /* 16px */
+  --spacing-lg: 1.5rem;
+  /* 24px */
+  --spacing-xl: 2rem;
+  /* 32px */
+  --spacing-2xl: 3rem;
+  /* 48px */
+  --spacing-3xl: 4rem;
+  /* 64px */
+
   /* Layout */
   --container-max-width: 1200px;
   --header-height: 4rem;
@@ -66,34 +82,47 @@
   --border-radius-sm: 4px;
   --border-radius-lg: 12px;
   --border-radius-xl: 16px;
-  
+
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   --shadow-glow: 0 0 20px rgba(255, 215, 0, 0.3);
-  
+
   /* Transitions */
   --transition-fast: 150ms ease-in-out;
   --transition-normal: 250ms ease-in-out;
   --transition-slow: 350ms ease-in-out;
-  
+
   /* Z-index Layering System - Centralized Management */
   --z-base: 0;
-  --z-docked: 10;              /* Docked elements like sticky headers */
-  --z-dropdown: 1000;          /* Dropdown menus, select options */
-  --z-sticky: 1020;            /* Sticky positioned elements */
-  --z-fixed: 1030;             /* Fixed positioned elements */
-  --z-floating: 1040;          /* Floating action buttons, voice controls */
-  --z-voice-transcript: 1050;  /* Live voice transcript display */
-  --z-training-ui: 1060;       /* Voice training buttons and UI */
-  --z-modal-backdrop: 1070;    /* Modal backdrop overlays */
-  --z-modal: 1080;             /* Modal dialogs */
-  --z-training-modal: 1090;    /* Training specific modals (higher priority) */
-  --z-popover: 1100;           /* Popovers and dropdowns from modals */
-  --z-tooltip: 1110;           /* Tooltips (highest interactive element) */
-  --z-toast: 1120;             /* Toast notifications (always visible) */
+  --z-docked: 10;
+  /* Docked elements like sticky headers */
+  --z-dropdown: 1000;
+  /* Dropdown menus, select options */
+  --z-sticky: 1020;
+  /* Sticky positioned elements */
+  --z-fixed: 1030;
+  /* Fixed positioned elements */
+  --z-floating: 1040;
+  /* Floating action buttons, voice controls */
+  --z-voice-transcript: 1050;
+  /* Live voice transcript display */
+  --z-training-ui: 1060;
+  /* Voice training buttons and UI */
+  --z-modal-backdrop: 1070;
+  /* Modal backdrop overlays */
+  --z-modal: 1080;
+  /* Modal dialogs */
+  --z-training-modal: 1090;
+  /* Training specific modals (higher priority) */
+  --z-popover: 1100;
+  /* Popovers and dropdowns from modals */
+  --z-tooltip: 1110;
+  /* Tooltips (highest interactive element) */
+  --z-toast: 1120;
+  /* Toast notifications (always visible) */
 
   /* Safe Area Support for Mobile Devices */
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
@@ -117,7 +146,8 @@ html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   min-height: 100%;
-  background-color: var(--bg-primary); /* Prevent white flash on overscroll */
+  background-color: var(--bg-primary);
+  /* Prevent white flash on overscroll */
 }
 
 body {
@@ -245,8 +275,13 @@ body {
 }
 
 @keyframes spin {
-  0% { transform: rotate3d(0, 0, 1, 0deg); }
-  100% { transform: rotate3d(0, 0, 1, 360deg); }
+  0% {
+    transform: rotate3d(0, 0, 1, 0deg);
+  }
+
+  100% {
+    transform: rotate3d(0, 0, 1, 360deg);
+  }
 }
 
 .loading-text {
@@ -293,7 +328,8 @@ body {
 }
 
 .header-content {
-  width: 100%;  /* Span full width for ultrawides */
+  width: 100%;
+  /* Span full width for ultrawides */
   margin: 0 auto;
   padding: 0 var(--spacing-md);
   padding-left: calc(var(--spacing-md) + var(--safe-area-inset-left));
@@ -402,7 +438,8 @@ body {
 /* Main Content */
 .main-content {
   flex: 1;
-  padding: var(--spacing-xl) 2rem;  /* 32px - matches mockup */
+  padding: var(--spacing-xl) 2rem;
+  /* 32px - matches mockup */
   width: 100%;
 }
 
@@ -420,6 +457,7 @@ body {
     opacity: 0;
     transform: translate3d(0, 10px, 0);
   }
+
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
@@ -438,17 +476,20 @@ body {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--border-radius-lg);
-  padding: 1.5rem;  /* 24px - matches mockup */
+  padding: 1.5rem;
+  /* 24px - matches mockup */
   box-shadow: none;
+  backdrop-filter: blur(var(--blur-md));
+  -webkit-backdrop-filter: blur(var(--blur-md));
   transition: all var(--transition-normal);
 }
 
 .card:hover,
 .section-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-4px);
   background: var(--card-bg-hover);
-  border-color: var(--border-secondary);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-lg), 0 0 20px rgba(115, 115, 115, 0.1);
 }
 
 .section-card h2,
@@ -689,12 +730,12 @@ body {
   transition: all var(--transition-fast);
 }
 
-.checkbox-label input[type="checkbox"]:checked + .checkmark {
+.checkbox-label input[type="checkbox"]:checked+.checkmark {
   background-color: var(--accent-primary);
   border-color: var(--accent-primary);
 }
 
-.checkbox-label input[type="checkbox"]:checked + .checkmark::after {
+.checkbox-label input[type="checkbox"]:checked+.checkmark::after {
   content: '✓';
   position: absolute;
   top: 50%;
@@ -776,10 +817,13 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.7;
     transform: scale(1.2);
@@ -906,7 +950,8 @@ body {
 /* Tablet (769px - 1024px) - Comfortable spacing for tablets */
 @media (max-width: 1024px) and (min-width: 769px) {
   .main-content {
-    padding: var(--spacing-xl) var(--spacing-lg);  /* 32px 24px */
+    padding: var(--spacing-xl) var(--spacing-lg);
+    /* 32px 24px */
   }
 }
 
@@ -915,60 +960,61 @@ body {
   .header-content {
     padding: 0 var(--spacing-sm);
   }
-  
+
   .app-title {
     font-size: var(--font-size-xl);
   }
-  
+
   .title-icon {
     font-size: var(--font-size-2xl);
   }
 
   .main-content {
-    padding: var(--spacing-lg) var(--spacing-md);  /* 24px 16px - comfortable for large mobile */
+    padding: var(--spacing-lg) var(--spacing-md);
+    /* 24px 16px - comfortable for large mobile */
   }
-  
+
   .form-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .form-actions {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .btn {
     width: 100%;
     justify-content: center;
   }
-  
+
   .voice-actions {
     flex-direction: column;
   }
-  
+
   .session-stats {
     grid-template-columns: 1fr;
   }
-  
+
   .tab-navigation {
     padding: 0 var(--spacing-sm);
   }
-  
+
   .tab-btn {
     padding: var(--spacing-sm) var(--spacing-md);
     font-size: var(--font-size-sm);
   }
-  
+
   .status-bar {
     padding: var(--spacing-xs) var(--spacing-sm);
     flex-direction: column;
     gap: var(--spacing-xs);
   }
-  
+
   .header-actions {
     gap: var(--spacing-xs);
   }
-  
+
   .section-header {
     flex-direction: column;
     align-items: stretch;
@@ -978,14 +1024,16 @@ body {
 /* Small Mobile (≤480px) - Maximum content visibility */
 @media (max-width: 480px) {
   .main-content {
-    padding: var(--spacing-md) 0.75rem;  /* 16px 12px - minimum comfortable spacing */
+    padding: var(--spacing-md) 0.75rem;
+    /* 16px 12px - minimum comfortable spacing */
   }
 
   .card,
   .section-card {
-    padding: var(--spacing-md);  /* 16px - compact for small screens */
+    padding: var(--spacing-md);
+    /* 16px - compact for small screens */
   }
-  
+
   .app-title .title-icon {
     display: none;
   }
@@ -1004,6 +1052,7 @@ body {
 
 /* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -1101,6 +1150,7 @@ body {
   0% {
     transform: translate(-50%, -50%) rotate(0deg);
   }
+
   100% {
     transform: translate(-50%, -50%) rotate(360deg);
   }
@@ -1108,6 +1158,7 @@ body {
 
 /* Print Styles */
 @media print {
+
   .loading-screen,
   .tab-navigation,
   .status-bar,
@@ -1115,12 +1166,12 @@ body {
   .voice-controls {
     display: none !important;
   }
-  
+
   .app {
     background: white !important;
     color: black !important;
   }
-  
+
   .card,
   .section-card {
     border: 1px solid #ccc !important;

@@ -1295,6 +1295,40 @@ export default class PackOpeningPage {
       // Render the page
       this.container.innerHTML = this.render();
 
+      // Cleanup: Remove any rogue #session-cards containers that might exist outside our container
+      const allSessionCards = document.querySelectorAll('#session-cards');
+      allSessionCards.forEach(el => {
+        if (el !== this.container.querySelector('#session-cards') && !this.container.contains(el)) {
+          console.warn('Removing rogue #session-cards container:', el);
+          el.remove();
+        }
+      });
+
+      // Setup observer to kill any future duplicates
+      this.duplicateKiller = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType === 1) { // Element
+              if (node.id === 'session-cards' && node !== this.container.querySelector('#session-cards')) {
+                console.warn('Duplicate #session-cards detected and removed!', node);
+                node.remove();
+              }
+              // Also check descendants
+              if (node.querySelectorAll) {
+                const duplicates = node.querySelectorAll('#session-cards');
+                duplicates.forEach(dup => {
+                  if (dup !== this.container.querySelector('#session-cards')) {
+                    console.warn('Duplicate #session-cards descendant detected and removed!', dup);
+                    dup.remove();
+                  }
+                });
+              }
+            }
+          });
+        });
+      });
+      this.duplicateKiller.observe(document.body, { childList: true, subtree: true });
+
       // Initialize services and load data
       await this.initialize();
 
@@ -1343,6 +1377,12 @@ export default class PackOpeningPage {
     // Stop voice listening if active
     if (this.isVoiceListening) {
       this.stopVoiceListening();
+    }
+
+    // Disconnect duplicate killer
+    if (this.duplicateKiller) {
+      this.duplicateKiller.disconnect();
+      this.duplicateKiller = null;
     }
 
     // Remove event listeners

@@ -12,6 +12,7 @@
  * - Empty state when no cards
  * - Consolidated/expanded views (groups cards by name)
  * - Custom card size support
+ * - Optimized DOM manipulation (no innerHTML)
  */
 
 export default class CardGrid {
@@ -37,8 +38,8 @@ export default class CardGrid {
   }
 
   /**
-   * Render the card display HTML
-   * @returns {string} HTML string
+   * Create the card display DOM structure
+   * @returns {HTMLElement} The container element
    */
   render() {
     if (!this.cards || this.cards.length === 0) {
@@ -57,40 +58,51 @@ export default class CardGrid {
   /**
    * Render grid view (tile-style cards)
    * @param {Array} displayCards - Cards to display
-   * @returns {string} HTML string
+   * @returns {HTMLElement} Container element
    */
   renderGridView(displayCards) {
-    return `
-      <div class="card-grid" style="--card-width: ${this.cardSize}px">
-        ${displayCards.map((card, index) => this.renderGridCard(card, index)).join('')}
-      </div>
-    `;
+    const container = document.createElement('div');
+    container.className = 'card-grid';
+    container.style.setProperty('--card-width', `${this.cardSize}px`);
+
+    const fragment = document.createDocumentFragment();
+    displayCards.forEach((card, index) => {
+      fragment.appendChild(this.createGridCardElement(card, index));
+    });
+    container.appendChild(fragment);
+
+    return container;
   }
 
   /**
    * Render list view (row-style cards)
    * @param {Array} displayCards - Cards to display
-   * @returns {string} HTML string
+   * @returns {HTMLElement} Container element
    */
   renderListView(displayCards) {
-    return `
-      <div class="card-list">
-        ${displayCards.map((card, index) => this.renderListCard(card, index)).join('')}
-      </div>
-    `;
+    const container = document.createElement('div');
+    container.className = 'card-list';
+
+    const fragment = document.createDocumentFragment();
+    displayCards.forEach((card, index) => {
+      fragment.appendChild(this.createListCardElement(card, index));
+    });
+    container.appendChild(fragment);
+
+    return container;
   }
 
   /**
-   * Render a single card in list/row format
+   * Create a single card element in list/row format
    * @param {Object} card - Card object
    * @param {number} index - Card index
-   * @returns {string} Card HTML
+   * @returns {HTMLElement} Card element
    */
-  renderListCard(card, index) {
-    const cardName = this.escapeHtml(card.card_name || card.name || 'Unknown Card');
-    const cardNumber = this.escapeHtml(card.cardNumber || card.card_number || card.ext_number || '');
-    const cardRarity = this.escapeHtml(card.rarity || card.displayRarity || card.card_rarity || '');
-    const setCode = this.escapeHtml(card.set || card.set_code || card.setInfo?.setCode || '');
+  createListCardElement(card, index) {
+    const cardName = card.card_name || card.name || 'Unknown Card';
+    const cardNumber = card.cardNumber || card.card_number || card.ext_number || '';
+    const cardRarity = card.rarity || card.displayRarity || card.card_rarity || '';
+    const setCode = card.set || card.set_code || card.setInfo?.setCode || '';
     const tcgLow = this.formatPrice(
       card.tcgLow ||
       card.tcg_low ||
@@ -111,38 +123,100 @@ export default class CardGrid {
     const rarityClass = this.getRarityClass(cardRarity);
     const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
 
-    return `
-      <div class="session-card" data-card-index="${index}">
-        <div class="card-image-container">
-          <img class="card-image"
-               src="${cardImage}"
-               alt="${cardName}"
-               loading="lazy"
-               onerror="this.onerror=null;this.src='${this.getDefaultCardImage()}';">
-        </div>
+    const cardEl = document.createElement('div');
+    cardEl.className = 'session-card';
+    cardEl.dataset.cardIndex = index;
 
-        <div class="card-info">
-          <div class="card-name">${cardName}${quantity ? ` <span class="card-quantity-badge">${quantity}</span>` : ''}</div>
-          <div class="card-details">
-            ${setCode ? `<span class="card-number">${setCode}${cardNumber ? `-${cardNumber}` : ''}</span>` : `${cardNumber ? `<span class="card-number">${cardNumber}</span>` : ''}`}
-            ${cardRarity ? `<span class="card-rarity-badge ${rarityClass}">${cardRarity}</span>` : ''}
-          </div>
-        </div>
+    // Image Container
+    const imageContainer = document.createElement('div');
+    imageContainer.className = 'card-image-container';
+    const img = document.createElement('img');
+    img.className = 'card-image';
+    img.src = cardImage;
+    img.alt = cardName;
+    img.loading = 'lazy';
+    img.onerror = () => { img.onerror = null; img.src = this.getDefaultCardImage(); };
+    imageContainer.appendChild(img);
+    cardEl.appendChild(imageContainer);
 
-        <div class="card-price">
-          ${tcgLow ? `<div class="price-row"><span class="price-label">Low:</span> <span class="price-value">${tcgLow}</span></div>` : ''}
-          ${tcgMarket ? `<div class="price-row"><span class="price-label">Market:</span> <span class="price-value">${tcgMarket}</span></div>` : estPrice ? `<div class="price-row"><span class="price-label">Est:</span> <span class="price-value">${estPrice}</span></div>` : ''}
-        </div>
+    // Card Info
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'card-info';
 
-        ${this.showRemoveButton ? `
-          <div class="card-actions">
-            <button class="card-remove-btn" data-remove-index="${index}" title="Remove card">
-              <i data-lucide="trash-2" class="icon-sm"></i>
-            </button>
-          </div>
-        ` : ''}
-      </div>
-    `;
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'card-name';
+    nameDiv.textContent = cardName;
+    if (quantity) {
+      const qtySpan = document.createElement('span');
+      qtySpan.className = 'card-quantity-badge';
+      qtySpan.textContent = quantity;
+      nameDiv.appendChild(document.createTextNode(' '));
+      nameDiv.appendChild(qtySpan);
+    }
+    infoDiv.appendChild(nameDiv);
+
+    const detailsDiv = document.createElement('div');
+    detailsDiv.className = 'card-details';
+
+    if (setCode || cardNumber) {
+      const numSpan = document.createElement('span');
+      numSpan.className = 'card-number';
+      numSpan.textContent = setCode ? (cardNumber ? `${setCode}-${cardNumber}` : setCode) : cardNumber;
+      detailsDiv.appendChild(numSpan);
+    }
+
+    if (cardRarity) {
+      const raritySpan = document.createElement('span');
+      raritySpan.className = `card-rarity-badge ${rarityClass}`;
+      raritySpan.textContent = cardRarity;
+      detailsDiv.appendChild(raritySpan);
+    }
+    infoDiv.appendChild(detailsDiv);
+    cardEl.appendChild(infoDiv);
+
+    // Price Info
+    const priceDiv = document.createElement('div');
+    priceDiv.className = 'card-price';
+
+    if (tcgLow) {
+      const row = document.createElement('div');
+      row.className = 'price-row';
+      row.innerHTML = `<span class="price-label">Low:</span> <span class="price-value">${tcgLow}</span>`;
+      priceDiv.appendChild(row);
+    }
+
+    if (tcgMarket) {
+      const row = document.createElement('div');
+      row.className = 'price-row';
+      row.innerHTML = `<span class="price-label">Market:</span> <span class="price-value">${tcgMarket}</span>`;
+      priceDiv.appendChild(row);
+    } else if (estPrice) {
+      const row = document.createElement('div');
+      row.className = 'price-row';
+      row.innerHTML = `<span class="price-label">Est:</span> <span class="price-value">${estPrice}</span>`;
+      priceDiv.appendChild(row);
+    }
+    cardEl.appendChild(priceDiv);
+
+    // Actions
+    if (this.showRemoveButton) {
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'card-actions';
+      const btn = document.createElement('button');
+      btn.className = 'card-remove-btn';
+      btn.dataset.removeIndex = index;
+      btn.title = 'Remove card';
+      btn.setAttribute('aria-label', `Remove ${cardName}`);
+      btn.innerHTML = '<i data-lucide="trash-2" class="icon-sm"></i>';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleRemoveCard(index);
+      });
+      actionsDiv.appendChild(btn);
+      cardEl.appendChild(actionsDiv);
+    }
+
+    return cardEl;
   }
 
   /**
@@ -178,87 +252,125 @@ export default class CardGrid {
   }
 
   /**
-   * Render a single card in grid/tile format
+   * Create a single card element in grid/tile format
    * @param {Object} card - Card object
    * @param {number} index - Card index
-   * @returns {string} Card HTML
+   * @returns {HTMLElement} Card element
    */
-  renderGridCard(card, index) {
-    const cardName = this.escapeHtml(card.name || 'Unknown Card');
-    const cardSet = this.escapeHtml(card.set || '');
-    const cardNumber = this.escapeHtml(card.cardNumber || '');
-    const cardRarity = this.escapeHtml(card.rarity || '');
+  createGridCardElement(card, index) {
+    const cardName = card.name || 'Unknown Card';
+    const cardSet = card.set || '';
+    const cardNumber = card.cardNumber || '';
+    const cardRarity = card.rarity || '';
     const tcgLow = this.formatPrice(card.tcgLow || card.tcg_price);
     const tcgMarket = this.formatPrice(card.tcgMarket || card.tcg_market_price);
     const quantity = card.quantity > 1 ? `x${card.quantity}` : '';
     const rarityClass = this.getRarityClass(cardRarity);
     const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
 
-    return `
-      <div class="ygo-card" data-card-index="${index}" style="--card-size: ${this.cardSize}px;">
-        ${this.showRemoveButton ? `
-          <button class="ygo-card-remove-btn" data-remove-index="${index}" title="Remove card">
-            <i data-lucide="X" class="icon-sm"></i>
-          </button>
-        ` : ''}
+    const cardEl = document.createElement('div');
+    cardEl.className = 'ygo-card';
+    cardEl.dataset.cardIndex = index;
+    cardEl.style.setProperty('--card-size', `${this.cardSize}px`);
 
-        ${quantity ? `
-          <span class="ygo-card-quantity">${quantity}</span>
-        ` : ''}
+    if (this.showRemoveButton) {
+      const btn = document.createElement('button');
+      btn.className = 'ygo-card-remove-btn';
+      btn.dataset.removeIndex = index;
+      btn.title = 'Remove card';
+      btn.setAttribute('aria-label', `Remove ${cardName}`);
+      btn.innerHTML = '<i data-lucide="X" class="icon-sm"></i>';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleRemoveCard(index);
+      });
+      cardEl.appendChild(btn);
+    }
 
-        <div class="ygo-card-image-container">
-          <img src="${cardImage}"
-               alt="${cardName}"
-               class="ygo-card-image"
-               loading="lazy"
-               onerror="this.onerror=null;this.src='${this.getDefaultCardImage()}';">
-        </div>
+    if (quantity) {
+      const qtySpan = document.createElement('span');
+      qtySpan.className = 'ygo-card-quantity';
+      qtySpan.textContent = quantity;
+      cardEl.appendChild(qtySpan);
+    }
 
-        <div class="ygo-card-content">
-          <div class="ygo-card-header">
-            <div class="ygo-card-name" title="${cardName}">${cardName}</div>
-            ${cardNumber ? `<div class="ygo-card-number">${cardSet ? `${cardSet}-` : ''}${cardNumber}</div>` : ''}
-          </div>
+    const imgContainer = document.createElement('div');
+    imgContainer.className = 'ygo-card-image-container';
+    const img = document.createElement('img');
+    img.src = cardImage;
+    img.alt = cardName;
+    img.className = 'ygo-card-image';
+    img.loading = 'lazy';
+    img.onerror = () => { img.onerror = null; img.src = this.getDefaultCardImage(); };
+    imgContainer.appendChild(img);
+    cardEl.appendChild(imgContainer);
 
-          ${cardRarity ? `
-            <div class="ygo-card-rarity">
-              <span class="ygo-rarity-badge ${rarityClass}">${cardRarity}</span>
-            </div>
-          ` : ''}
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'ygo-card-content';
 
-          <div class="ygo-card-prices">
-            ${tcgLow ? `
-              <div class="ygo-price-row">
-                <span class="ygo-price-label">Low:</span>
-                <span class="ygo-price-value value-low">${tcgLow}</span>
-              </div>
-            ` : ''}
-            ${tcgMarket ? `
-              <div class="ygo-price-row">
-                <span class="ygo-price-label">Mkt:</span>
-                <span class="ygo-price-value value-market">${tcgMarket}</span>
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      </div>
-    `;
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'ygo-card-header';
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'ygo-card-name';
+    nameDiv.title = cardName;
+    nameDiv.textContent = cardName;
+    headerDiv.appendChild(nameDiv);
+
+    if (cardNumber) {
+      const numDiv = document.createElement('div');
+      numDiv.className = 'ygo-card-number';
+      numDiv.textContent = `${cardSet ? `${cardSet}-` : ''}${cardNumber}`;
+      headerDiv.appendChild(numDiv);
+    }
+    contentDiv.appendChild(headerDiv);
+
+    if (cardRarity) {
+      const rarityDiv = document.createElement('div');
+      rarityDiv.className = 'ygo-card-rarity';
+      const raritySpan = document.createElement('span');
+      raritySpan.className = `ygo-rarity-badge ${rarityClass}`;
+      raritySpan.textContent = cardRarity;
+      rarityDiv.appendChild(raritySpan);
+      contentDiv.appendChild(rarityDiv);
+    }
+
+    const pricesDiv = document.createElement('div');
+    pricesDiv.className = 'ygo-card-prices';
+
+    if (tcgLow) {
+      const row = document.createElement('div');
+      row.className = 'ygo-price-row';
+      row.innerHTML = `<span class="ygo-price-label">Low:</span> <span class="ygo-price-value value-low">${tcgLow}</span>`;
+      pricesDiv.appendChild(row);
+    }
+
+    if (tcgMarket) {
+      const row = document.createElement('div');
+      row.className = 'ygo-price-row';
+      row.innerHTML = `<span class="ygo-price-label">Mkt:</span> <span class="ygo-price-value value-market">${tcgMarket}</span>`;
+      pricesDiv.appendChild(row);
+    }
+    contentDiv.appendChild(pricesDiv);
+    cardEl.appendChild(contentDiv);
+
+    return cardEl;
   }
 
   /**
    * Render empty state
-   * @returns {string} Empty state HTML
+   * @returns {HTMLElement} Empty state element
    */
   renderEmptyState() {
-    return `
-      <div class="empty-state text-center py-16">
+    const container = document.createElement('div');
+    container.className = 'empty-state text-center py-16';
+    container.innerHTML = `
         <div class="empty-icon mb-4">
           <i data-lucide="Package" class="w-16 h-16 text-neutral-600 mx-auto"></i>
         </div>
         <h3 class="text-lg font-medium text-neutral-400 mb-2">No cards in session</h3>
         <p class="text-sm text-neutral-500">Start a pack ripper session and use voice recognition to add cards.</p>
-      </div>
     `;
+    return container;
   }
 
   /**
@@ -321,52 +433,18 @@ export default class CardGrid {
   }
 
   /**
-   * Escape HTML to prevent XSS
-   * @param {string} text - Text to escape
-   * @returns {string} Escaped text
-   */
-  escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  /**
    * Create and return the card grid element
    * @returns {HTMLElement} The card grid element
    */
   create() {
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = this.render();
-    this.element = wrapper.firstElementChild || wrapper;
-
-    // Attach event listeners for remove buttons
-    this.attachEventListeners();
+    this.element = this.render();
 
     // Initialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      window.lucide.createIcons({ root: this.element });
     }
 
     return this.element;
-  }
-
-  /**
-   * Attach event listeners
-   * @private
-   */
-  attachEventListeners() {
-    if (!this.element || !this.showRemoveButton) return;
-
-    // Remove card buttons - support both grid (.ygo-card-remove-btn) and list (.card-remove-btn) views
-    const removeButtons = this.element.querySelectorAll('.card-remove-btn, .ygo-card-remove-btn');
-    removeButtons.forEach(button => {
-      button.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const index = parseInt(button.dataset.removeIndex, 10);
-        this.handleRemoveCard(index);
-      });
-    });
   }
 
   /**

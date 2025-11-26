@@ -108,27 +108,35 @@ export class UIManager {
     getDOMElements() {
         const getById = (id) => document.getElementById(id) || undefined;
 
+        // Helper to only query if missing or disconnected
+        const query = (current, id) => {
+            if (current && current.isConnected) return current;
+            return getById(id);
+        };
+
         // Main app elements
-        this.elements.app = getById('app');
-        this.elements.loadingScreen = getById('loading-screen');
-        this.elements.sessionInfo = getById('session-info');
+        this.elements.app = query(this.elements.app, 'app');
+        this.elements.loadingScreen = query(this.elements.loadingScreen, 'loading-screen');
+        this.elements.sessionInfo = query(this.elements.sessionInfo, 'session-info');
 
         // Navigation
+        // querySelectorAll returns a static NodeList, so we should refresh it to catch updates
         this.elements.tabBtns = document.querySelectorAll('.tab-btn');
         this.elements.tabPanels = document.querySelectorAll('.tab-panel');
 
         // Price checker elements
-        this.elements.priceForm = getById('price-form');
-        this.elements.cardNumber = getById('card-number');
-        this.elements.cardName = getById('card-name');
-        this.elements.cardRarity = getById('card-rarity');
-        this.elements.artVariant = getById('art-variant');
-        this.elements.condition = getById('condition');
-        this.elements.forceRefresh = getById('force-refresh');
-        this.elements.checkPriceBtn = getById('check-price-btn');
-        this.elements.clearFormBtn = getById('clear-form-btn');
-        this.elements.priceResults = getById('price-results');
-        this.elements.priceContent = getById('price-content');
+        this.elements.priceForm = query(this.elements.priceForm, 'price-form');
+        this.elements.cardNumber = query(this.elements.cardNumber, 'card-number');
+        this.elements.cardName = query(this.elements.cardName, 'card-name');
+        this.elements.cardRarity = query(this.elements.cardRarity, 'card-rarity');
+        this.elements.artVariant = query(this.elements.artVariant, 'art-variant');
+        this.elements.condition = query(this.elements.condition, 'condition');
+        this.elements.forceRefresh = query(this.elements.forceRefresh, 'force-refresh');
+        this.elements.checkPriceBtn = query(this.elements.checkPriceBtn, 'check-price-btn');
+        this.elements.clearFormBtn = query(this.elements.clearFormBtn, 'clear-form-btn');
+        this.elements.priceResults = query(this.elements.priceResults, 'price-results');
+
+        this.elements.priceContent = query(this.elements.priceContent, 'price-content');
         if (!this.elements.priceContent && this.elements.priceResults) {
             const priceContent = this.elements.priceResults.querySelector('.price-content') || document.createElement('div');
             if (!priceContent.id) {
@@ -142,61 +150,62 @@ export class UIManager {
         }
 
         // Pack ripper elements
-        this.elements.setSearch = getById('set-search');
-        this.elements.setSelect = getById('set-select');
-        this.elements.refreshSetsBtn = getById('refresh-sets-btn');
-        this.elements.loadAllSetsBtn = getById('load-all-sets-btn');
-        this.elements.startSessionBtn = getById('start-session-btn');
-        this.elements.currentSet = getById('current-set');
-        this.elements.cardsCount = getById('cards-count');
-        this.elements.tcgLowTotal = getById('tcg-low-total');
-        this.elements.tcgMarketTotal = getById('tcg-market-total');
-        this.elements.sessionStatus = getById('session-status');
-        this.elements.setsCount = getById('sets-count');
-        this.elements.totalSetsCount = getById('total-sets-count');
+        this.elements.setSearch = query(this.elements.setSearch, 'set-search');
+        this.elements.setSelect = query(this.elements.setSelect, 'set-select');
+        this.elements.refreshSetsBtn = query(this.elements.refreshSetsBtn, 'refresh-sets-btn');
+        this.elements.loadAllSetsBtn = query(this.elements.loadAllSetsBtn, 'load-all-sets-btn');
+        this.elements.startSessionBtn = query(this.elements.startSessionBtn, 'start-session-btn');
+        this.elements.currentSet = query(this.elements.currentSet, 'current-set');
+        this.elements.cardsCount = query(this.elements.cardsCount, 'cards-count');
+        this.elements.tcgLowTotal = query(this.elements.tcgLowTotal, 'tcg-low-total');
+        this.elements.tcgMarketTotal = query(this.elements.tcgMarketTotal, 'tcg-market-total');
+        this.elements.sessionStatus = query(this.elements.sessionStatus, 'session-status');
+        this.elements.setsCount = query(this.elements.setsCount, 'sets-count');
+        this.elements.totalSetsCount = query(this.elements.totalSetsCount, 'total-sets-count');
 
         // Voice recognition elements
-        this.elements.voiceStatus = getById('voice-status');
-        this.elements.voiceIndicator = getById('voice-indicator');
-        this.elements.voiceStatusText = getById('voice-status-text');
-        this.elements.startVoiceBtn = getById('start-voice-btn');
-        this.elements.stopVoiceBtn = getById('stop-voice-btn');
-        this.elements.testVoiceBtn = getById('test-voice-btn');
+        this.elements.voiceStatus = query(this.elements.voiceStatus, 'voice-status');
+        this.elements.voiceIndicator = query(this.elements.voiceIndicator, 'voice-indicator');
+        this.elements.voiceStatusText = query(this.elements.voiceStatusText, 'voice-status-text');
+        this.elements.startVoiceBtn = query(this.elements.startVoiceBtn, 'start-voice-btn');
+        this.elements.stopVoiceBtn = query(this.elements.stopVoiceBtn, 'stop-voice-btn');
+        this.elements.testVoiceBtn = query(this.elements.testVoiceBtn, 'test-voice-btn');
 
         // Floating voice submenu elements
-        this.elements.floatingVoiceSubmenu = getById('floating-voice-submenu');
-        this.elements.floatingStopVoiceBtn = getById('floating-stop-voice-btn');
-        this.elements.floatingSettingsBtn = getById('floating-settings-btn');
+        this.elements.floatingVoiceSubmenu = query(this.elements.floatingVoiceSubmenu, 'floating-voice-submenu');
+        this.elements.floatingStopVoiceBtn = query(this.elements.floatingStopVoiceBtn, 'floating-stop-voice-btn');
+        this.elements.floatingSettingsBtn = query(this.elements.floatingSettingsBtn, 'floating-settings-btn');
 
         // Session tracker elements
-        this.elements.sessionCards = getById('session-cards');
-        this.elements.emptySession = getById('empty-session');
-        this.elements.refreshPricingBtn = getById('refresh-pricing-btn');
-        this.elements.exportSessionBtn = getById('export-session-btn');
-        this.elements.importSessionBtn = getById('import-session-btn');
-        this.elements.clearSessionBtn = getById('clear-session-btn');
+        this.elements.sessionCards = query(this.elements.sessionCards, 'session-cards');
+        this.elements.emptySession = query(this.elements.emptySession, 'empty-session');
+        this.elements.refreshPricingBtn = query(this.elements.refreshPricingBtn, 'refresh-pricing-btn');
+        this.elements.exportSessionBtn = query(this.elements.exportSessionBtn, 'export-session-btn');
+        this.elements.importSessionBtn = query(this.elements.importSessionBtn, 'import-session-btn');
+        this.elements.clearSessionBtn = query(this.elements.clearSessionBtn, 'clear-session-btn');
 
         // Session management
-        this.elements.startSessionBtn = getById('start-session-btn');
-        this.elements.swapSetBtn = getById('swap-set-btn');
-        this.elements.stopSessionBtn = getById('stop-session-btn');
+        // Note: startSessionBtn is duplicated in original code, keeping it consistent
+        this.elements.startSessionBtn = query(this.elements.startSessionBtn, 'start-session-btn');
+        this.elements.swapSetBtn = query(this.elements.swapSetBtn, 'swap-set-btn');
+        this.elements.stopSessionBtn = query(this.elements.stopSessionBtn, 'stop-session-btn');
 
         // View control elements
-        this.elements.consolidatedViewToggle = getById('consolidated-view-toggle');
-        this.elements.cardSizeSlider = getById('card-size-slider');
-        this.elements.cardSizeValue = getById('card-size-value');
-        this.elements.cardSizeSection = getById('card-size-section');
+        this.elements.consolidatedViewToggle = query(this.elements.consolidatedViewToggle, 'consolidated-view-toggle');
+        this.elements.cardSizeSlider = query(this.elements.cardSizeSlider, 'card-size-slider');
+        this.elements.cardSizeValue = query(this.elements.cardSizeValue, 'card-size-value');
+        this.elements.cardSizeSection = query(this.elements.cardSizeSection, 'card-size-section');
 
         // Status and utility elements
-        this.elements.appStatus = getById('app-status');
-        this.elements.connectionStatus = getById('connection-status');
-        this.elements.appVersion = getById('app-version');
-        this.elements.modalOverlay = getById('modal-overlay');
-        this.elements.toastContainer = getById('toast-container');
+        this.elements.appStatus = query(this.elements.appStatus, 'app-status');
+        this.elements.connectionStatus = query(this.elements.connectionStatus, 'connection-status');
+        this.elements.appVersion = query(this.elements.appVersion, 'app-version');
+        this.elements.modalOverlay = query(this.elements.modalOverlay, 'modal-overlay');
+        this.elements.toastContainer = query(this.elements.toastContainer, 'toast-container');
 
         // Settings and help
-        this.elements.settingsBtn = getById('settings-btn');
-        this.elements.helpBtn = getById('help-btn');
+        this.elements.settingsBtn = query(this.elements.settingsBtn, 'settings-btn');
+        this.elements.helpBtn = query(this.elements.helpBtn, 'help-btn');
 
         this.logger.debug('DOM elements referenced successfully');
 
@@ -1291,11 +1300,14 @@ export class UIManager {
      * Display session cards with quantity adjustment buttons
      */
     displaySessionCards(cards) {
+        // If PackOpeningPage is active, it handles its own rendering
+        if (this.currentTab === 'pack-opening') {
+            return;
+        }
+
         let container = this.elements.sessionCards || document.getElementById('session-cards');
         if (!container) {
-            container = document.createElement('div');
-            container.id = 'session-cards';
-            document.body.appendChild(container);
+            return;
         }
         this.elements.sessionCards = container;
 
