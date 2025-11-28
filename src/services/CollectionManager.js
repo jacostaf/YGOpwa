@@ -4,6 +4,9 @@
  * Provides aggregation, filtering, sorting, and statistics
  */
 
+import { supabase } from '../lib/supabaseClient.js';
+import { authService } from './authService.js';
+
 export class CollectionManager {
   constructor(sessionManager) {
     this.sessionManager = sessionManager;
@@ -11,8 +14,199 @@ export class CollectionManager {
       allCards: null,
       stats: null,
       lastUpdate: null,
-      ttl: 5000 // 5 second cache
+      ttl: 5000, // 5 second cache
+      userCollections: null,
+      collectionsLastUpdate: null
     };
+  }
+
+  /**
+   * Get user collections from Supabase
+   * @returns {Promise<Array>} User collections
+   */
+  async getUserCollections() {
+    const user = authService.getUser();
+    if (!user || !supabase) return [];
+
+    // Check cache
+    if (this.cache.userCollections &&
+      this.cache.collectionsLastUpdate &&
+      (Date.now() - this.cache.collectionsLastUpdate < this.cache.ttl)) {
+      return this.cache.userCollections;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_collections')
+        .select(`
+          *,
+          cards:collection_cards(*)
+        `)
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      this.cache.userCollections = data;
+      this.cache.collectionsLastUpdate = Date.now();
+      return data;
+    } catch (error) {
+      console.error('Error fetching user collections:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Create a new collection
+   * @param {string} name 
+   * @param {string} description 
+   */
+  async createCollection(name, description = '') {
+    const user = authService.getUser();
+    if (!user || !supabase) throw new Error('User not authenticated');
+
+    const { data, error } = await supabase
+      .from('user_collections')
+      .insert({
+        user_id: user.id,
+        name,
+        description
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    this.invalidateCache();
+    return data;
+  }
+
+  /**
+   * Delete a collection
+   * @param {string} id 
+   */
+  async deleteCollection(id) {
+    const user = authService.getUser();
+    if (!user || !supabase) throw new Error('User not authenticated');
+
+    const { error } = await supabase
+      .from('user_collections')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    this.invalidateCache();
+  }
+
+  /**
+   * Add a card to a collection
+   * @param {string} collectionId 
+   * @param {Object} card 
+   */
+  async addCardToCollection(collectionId, card) {
+    const user = authService.getUser();
+    if (!user || !supabase) throw new Error('User not authenticated');
+
+    const { data, error } = await supabase
+      .from('collection_cards')
+      .insert({
+        collection_id: collectionId,
+        card_id: card.id || card.cardId, // Handle different ID formats
+        name: card.name || card.cardName,
+        set_code: card.setCode || card.set_code,
+        rarity: card.rarity,
+        quantity: card.quantity || 1
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    this.invalidateCache();
+    return data;
+  }
+
+  /**
+   * Remove a card from a collection
+   * @param {string} cardId (The ID in collection_cards table)
+   */
+  async removeCardFromCollection(cardId) {
+    const user = authService.getUser();
+    if (!user || !supabase) throw new Error('User not authenticated');
+
+    const { error } = await supabase
+      .from('collection_cards')
+      .delete()
+      .eq('id', cardId);
+
+    if (error) throw error;
+    this.invalidateCache();
+  }
+
+  /**
+   * Get all cards from all user collections (flattened)
+   * @returns {Promise<Array>} All user cards
+   */
+  async getAllUserCards() {
+    const user = authService.getUser();
+    if (!user || !supabase) return [];
+
+    try {
+      // Fetch all collections for user
+      const { data: collections, error: colError } = await supabase
+        .from('user_collections')
+        .select('id, name')
+        .eq('user_id', user.id);
+
+      if (colError) throw colError;
+      if (!collections || collections.length === 0) return [];
+
+      const collectionIds = collections.map(c => c.id);
+
+      // Fetch cards for these collections
+      const { data: cards, error: cardError } = await supabase
+        .from('collection_cards')
+        .select('*')
+        .in('collection_id', collectionIds);
+
+      if (cardError) throw cardError;
+
+      // Map to standardized format matching CollectionPage expectations
+      return cards.map(card => {
+        const collection = collections.find(c => c.id === card.collection_id);
+        return {
+          id: card.id,
+          quantity: card.quantity || 1,
+          createdAt: card.added_at || new Date().toISOString(),
+          card: {
+            name: card.name,
+            number: card.set_code, // Fallback
+          },
+          set: {
+            code: card.set_code,
+            name: card.set_code // Fallback
+          },
+          rarity: {
+            name: card.rarity,
+            key: card.rarity
+          },
+          pricing: {
+            currentPrice: 0,
+            totalValue: 0
+          },
+          collectionName: collection?.name
+        };
+      });
+
+    } catch (error) {
+      console.error('Error fetching all user cards:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Invalidate collection cache
+   */
+  invalidateCache() {
+    this.cache.userCollections = null;
+    this.cache.collectionsLastUpdate = null;
   }
 
   /**
@@ -60,7 +254,7 @@ export class CollectionManager {
     try {
       // Check cache
       if (this.cache.allCards && this.cache.lastUpdate &&
-          (Date.now() - this.cache.lastUpdate < this.cache.ttl)) {
+        (Date.now() - this.cache.lastUpdate < this.cache.ttl)) {
         return this.cache.allCards;
       }
 

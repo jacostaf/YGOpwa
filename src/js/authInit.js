@@ -86,6 +86,13 @@ function renderSignInButton(container) {
         mode: 'signin',
         onSuccess: (result) => {
           console.log('Sign in successful:', result.user?.email);
+          // Manually update UI to ensure immediate feedback
+          if (result.user) {
+            const authContainer = document.getElementById('auth-container');
+            if (authContainer) {
+              renderUserProfile(result.user, authContainer);
+            }
+          }
         },
         onClose: () => {
           console.log('Auth modal closed');

@@ -4,6 +4,8 @@
  * Includes filtering, sorting, statistics, and multiple view modes
  */
 
+console.log('CollectionPageV2 module loaded (TIMESTAMP: ' + Date.now() + ')');
+
 import { CollectionManager } from '../services/CollectionManager.js';
 import { authService } from '../services/authService.js';
 import CardGrid from '../components/CardGrid.js';

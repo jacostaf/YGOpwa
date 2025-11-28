@@ -333,8 +333,8 @@ export class SessionManager {
      * Fetch card sets from API (matching ygo_ripper.py endpoints exactly)
      */
     async fetchCardSets(searchTerm = '') {
+        let url;
         try {
-            let url;
 
             if (searchTerm) {
                 // Use search endpoint with search term (matching ygo_ripper.py)

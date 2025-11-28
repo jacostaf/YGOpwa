@@ -1,388 +1,266 @@
 /**
  * Authentication Service
- * Handles all authentication operations with Supabase
- *
- * Features:
- * - Email/Password authentication
- * - Magic link authentication
- * - OAuth providers (configurable)
- * - Session management
- * - User profile operations
+ * Handles all interactions with Supabase Auth
  */
 
-import { supabase, isSupabaseAvailable } from '../lib/supabaseClient.js';
+import { supabase } from '../lib/supabaseClient.js';
 
-/**
- * Auth service error class
- */
-export class AuthError extends Error {
-  constructor(message, code = 'AUTH_ERROR', originalError = null) {
-    super(message);
-    this.name = 'AuthError';
-    this.code = code;
-    this.originalError = originalError;
+class AuthService {
+  constructor() {
+    this.user = null;
+    this.session = null;
+    this.profile = null;
+    this._authStateListeners = [];
+
+    this.initialize();
   }
-}
 
-/**
- * Check if Supabase auth is available
- * @returns {boolean}
- */
-function checkAuthAvailable() {
-  if (!isSupabaseAvailable()) {
-    throw new AuthError(
-      'Supabase is not configured. Please configure environment variables.',
-      'SUPABASE_NOT_CONFIGURED'
-    );
+  /**
+   * Initialize auth state
+   */
+  async initialize() {
+    if (!supabase) return;
+
+    // Get initial session
+    const { data: { session } } = await supabase.auth.getSession();
+    this.session = session;
+    this.user = session?.user || null;
+
+    if (this.user) {
+      await this.fetchProfile();
+    }
+
+    // Listen for auth changes
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`Auth state changed: ${event}`, session?.user?.id);
+
+      const previousUser = this.user;
+      this.session = session;
+      this.user = session?.user || null;
+
+      if (event === 'SIGNED_IN' || (this.user && !previousUser)) {
+        await this.fetchProfile();
+      } else if (event === 'SIGNED_OUT') {
+        this.profile = null;
+      }
+
+      this.notifyListeners(event, session);
+    });
   }
-  return true;
-}
 
-/**
- * Sign up with email and password
- * @param {string} email - User email
- * @param {string} password - User password
- * @param {object} metadata - Optional user metadata
- * @returns {Promise<{user, session, error}>}
- */
-export async function signUp(email, password, metadata = {}) {
-  checkAuthAvailable();
+  /**
+   * Sign up a new user
+   * @param {string} email 
+   * @param {string} password 
+   * @param {string} username 
+   */
+  async signUp(email, password, username) {
+    if (!supabase) throw new Error('Supabase not configured');
 
-  try {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: metadata,
-        emailRedirectTo: window.location.origin,
-      },
+        data: {
+          username,
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+        }
+      }
     });
 
-    if (error) {
-      throw new AuthError(error.message, 'SIGNUP_FAILED', error);
-    }
-
-    return { user: data.user, session: data.session, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to sign up', 'SIGNUP_ERROR', error);
+    if (error) throw error;
+    return data;
   }
-}
 
-/**
- * Sign in with email and password
- * @param {string} email - User email
- * @param {string} password - User password
- * @returns {Promise<{user, session, error}>}
- */
-export async function signIn(email, password) {
-  checkAuthAvailable();
+  /**
+   * Sign in an existing user
+   * @param {string} email 
+   * @param {string} password 
+   */
+  async signIn(email, password) {
+    if (!supabase) throw new Error('Supabase not configured');
 
-  try {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      password,
+      password
     });
 
-    if (error) {
-      throw new AuthError(error.message, 'SIGNIN_FAILED', error);
-    }
-
-    return { user: data.user, session: data.session, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to sign in', 'SIGNIN_ERROR', error);
+    if (error) throw error;
+    return data;
   }
-}
 
-/**
- * Sign in with magic link (passwordless)
- * @param {string} email - User email
- * @returns {Promise<{error}>}
- */
-export async function signInWithMagicLink(email) {
-  checkAuthAvailable();
+  /**
+   * Sign in with magic link
+   * @param {string} email 
+   */
+  async signInWithMagicLink(email) {
+    if (!supabase) throw new Error('Supabase not configured');
 
-  try {
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+      email
     });
 
-    if (error) {
-      throw new AuthError(error.message, 'MAGIC_LINK_FAILED', error);
+    return { error };
+  }
+
+  /**
+   * Sign out the current user
+ */
+  async signOut() {
+    if (!supabase) return;
+
+    try {
+      // 1. Manually clear local storage to ensure optimistic auth doesn't pick it up again
+      if (typeof window !== 'undefined' && window.localStorage) {
+        Object.keys(window.localStorage).forEach(key => {
+          if (key.startsWith('sb-')) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      }
+
+      // 2. Call Supabase signOut (best effort)
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.warn('Error during sign out:', error);
+      // Even if Supabase errors, we've cleared local storage, so the user is effectively signed out locally.
+    }
+  }
+
+  /**
+   * Get the current session
+   */
+  async getSession() {
+    if (!supabase) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  }
+
+  /**
+   * Get the current user
+   */
+  getUser() {
+    return this.user;
+  }
+
+  /**
+   * Get current user (async wrapper for compatibility)
+   */
+  async getCurrentUser() {
+    if (!supabase) return { user: null, error: 'Supabase not configured' };
+
+    try {
+      // 1. FAST PATH: Check localStorage manually for a session
+      // This bypasses supabase.auth.getSession() which can hang if it tries to refresh a stale token synchronously.
+      // We trust the local token initially to unblock the UI.
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const projectRef = 'kguazmofmstmethzoeyn'; // Hardcoded for now, or extract from URL
+        const key = `sb-${projectRef}-auth-token`;
+        const storedSession = window.localStorage.getItem(key);
+
+        if (storedSession) {
+          try {
+            const session = JSON.parse(storedSession);
+            if (session?.user) {
+              console.log('Optimistic auth: Found local session, returning user immediately.');
+              // We return the user immediately. Supabase will validate in background.
+              return { user: session.user, error: null };
+            }
+          } catch (e) {
+            console.warn('Failed to parse local session:', e);
+          }
+        }
+      }
+
+      // 2. SLOW PATH: If no local token found, use standard check
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.warn('Error getting session:', error);
+        return { user: null, error };
+      }
+
+      return { user: session?.user || null, error: null };
+    } catch (error) {
+      console.error('Unexpected error in getCurrentUser:', error);
+      return { user: null, error };
+    }
+  }
+
+  /**
+   * Fetch user profile from database
+   */
+  async fetchProfile() {
+    if (!this.user || !supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', this.user.id)
+        .single();
+
+      if (error) {
+        console.warn('Error fetching profile:', error);
+        // Fallback to metadata if profile fetch fails
+        this.profile = {
+          id: this.user.id,
+          username: this.user.user_metadata?.username,
+          avatar_url: this.user.user_metadata?.avatar_url
+        };
+      } else {
+        this.profile = data;
+      }
+
+      return this.profile;
+    } catch (err) {
+      console.error('Failed to fetch profile:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Subscribe to auth state changes
+   * @param {Function} callback 
+   * @returns {Function} Unsubscribe function
+   */
+  onAuthStateChange(callback) {
+    this._authStateListeners.push(callback);
+
+    // Immediate callback with current state
+    if (this.session) {
+      callback('INITIAL_SESSION', this.session);
     }
 
-    return { error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to send magic link', 'MAGIC_LINK_ERROR', error);
+    return () => {
+      this._authStateListeners = this._authStateListeners.filter(cb => cb !== callback);
+    };
   }
-}
 
-/**
- * Sign in with OAuth provider
- * @param {string} provider - OAuth provider (google, github, discord, etc.)
- * @returns {Promise<{error}>}
- */
-export async function signInWithOAuth(provider) {
-  checkAuthAvailable();
-
-  try {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: window.location.origin,
-      },
+  /**
+   * Notify all listeners of state change
+   * @private
+   */
+  notifyListeners(event, session) {
+    this._authStateListeners.forEach(callback => {
+      try {
+        callback(event, session);
+      } catch (err) {
+        console.error('Error in auth listener:', err);
+      }
     });
-
-    if (error) {
-      throw new AuthError(error.message, 'OAUTH_FAILED', error);
-    }
-
-    return { error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError(`Failed to sign in with ${provider}`, 'OAUTH_ERROR', error);
   }
 }
 
-/**
- * Sign out current user
- * @returns {Promise<{error}>}
- */
-export async function signOut() {
-  checkAuthAvailable();
+// Export singleton instance
+export const authService = new AuthService();
+export default authService;
 
-  try {
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      throw new AuthError(error.message, 'SIGNOUT_FAILED', error);
-    }
-
-    return { error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to sign out', 'SIGNOUT_ERROR', error);
-  }
-}
-
-/**
- * Get current user
- * @returns {Promise<{user, error}>}
- */
-export async function getCurrentUser() {
-  checkAuthAvailable();
-
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser();
-
-    if (error) {
-      throw new AuthError(error.message, 'GET_USER_FAILED', error);
-    }
-
-    return { user, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to get current user', 'GET_USER_ERROR', error);
-  }
-}
-
-/**
- * Get current session
- * @returns {Promise<{session, error}>}
- */
-export async function getSession() {
-  checkAuthAvailable();
-
-  try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-
-    if (error) {
-      throw new AuthError(error.message, 'GET_SESSION_FAILED', error);
-    }
-
-    return { session, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to get session', 'GET_SESSION_ERROR', error);
-  }
-}
-
-/**
- * Update user profile/metadata
- * @param {object} updates - User metadata updates
- * @returns {Promise<{user, error}>}
- */
-export async function updateUser(updates) {
-  checkAuthAvailable();
-
-  try {
-    const { data, error } = await supabase.auth.updateUser({
-      data: updates,
-    });
-
-    if (error) {
-      throw new AuthError(error.message, 'UPDATE_USER_FAILED', error);
-    }
-
-    return { user: data.user, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to update user', 'UPDATE_USER_ERROR', error);
-  }
-}
-
-/**
- * Reset password (send reset email)
- * @param {string} email - User email
- * @returns {Promise<{error}>}
- */
-export async function resetPassword(email) {
-  checkAuthAvailable();
-
-  try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-
-    if (error) {
-      throw new AuthError(error.message, 'RESET_PASSWORD_FAILED', error);
-    }
-
-    return { error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to send password reset email', 'RESET_PASSWORD_ERROR', error);
-  }
-}
-
-/**
- * Update password (when logged in)
- * @param {string} newPassword - New password
- * @returns {Promise<{user, error}>}
- */
-export async function updatePassword(newPassword) {
-  checkAuthAvailable();
-
-  try {
-    const { data, error } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-
-    if (error) {
-      throw new AuthError(error.message, 'UPDATE_PASSWORD_FAILED', error);
-    }
-
-    return { user: data.user, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to update password', 'UPDATE_PASSWORD_ERROR', error);
-  }
-}
-
-/**
- * Subscribe to auth state changes
- * @param {function} callback - Callback function (event, session) => {}
- * @returns {object} Subscription object with unsubscribe method
- */
-export function onAuthStateChange(callback) {
-  checkAuthAvailable();
-
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
-
-  return subscription;
-}
-
-/**
- * Check if user is authenticated
- * @returns {Promise<boolean>}
- */
-export async function isAuthenticated() {
-  try {
-    const { session } = await getSession();
-    return session !== null;
-  } catch (error) {
-    console.error('Failed to check authentication status:', error);
-    return false;
-  }
-}
-
-/**
- * Get user profile from profiles table
- * @param {string} userId - User ID
- * @returns {Promise<{profile, error}>}
- */
-export async function getUserProfile(userId) {
-  checkAuthAvailable();
-
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-      throw new AuthError(error.message, 'GET_PROFILE_FAILED', error);
-    }
-
-    return { profile: data, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to get user profile', 'GET_PROFILE_ERROR', error);
-  }
-}
-
-/**
- * Create or update user profile in profiles table
- * @param {string} userId - User ID
- * @param {object} profileData - Profile data
- * @returns {Promise<{profile, error}>}
- */
-export async function upsertUserProfile(userId, profileData) {
-  checkAuthAvailable();
-
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .upsert({
-        user_id: userId,
-        ...profileData,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new AuthError(error.message, 'UPSERT_PROFILE_FAILED', error);
-    }
-
-    return { profile: data, error: null };
-  } catch (error) {
-    if (error instanceof AuthError) throw error;
-    throw new AuthError('Failed to update user profile', 'UPSERT_PROFILE_ERROR', error);
-  }
-}
-
-// Export all functions as default
-export default {
-  signUp,
-  signIn,
-  signInWithMagicLink,
-  signInWithOAuth,
-  signOut,
-  getCurrentUser,
-  getSession,
-  updateUser,
-  resetPassword,
-  updatePassword,
-  onAuthStateChange,
-  isAuthenticated,
-  getUserProfile,
-  upsertUserProfile,
-  AuthError,
-};
+// Export bound methods for convenience
+export const signUp = authService.signUp.bind(authService);
+export const signIn = authService.signIn.bind(authService);
+export const signOut = authService.signOut.bind(authService);
+export const getSession = authService.getSession.bind(authService);
+export const getUser = authService.getUser.bind(authService);
+export const getCurrentUser = authService.getCurrentUser.bind(authService);
+export const onAuthStateChange = authService.onAuthStateChange.bind(authService);

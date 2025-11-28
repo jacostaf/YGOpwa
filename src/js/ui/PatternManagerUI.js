@@ -11,13 +11,13 @@ export class PatternManagerUI {
     constructor(app, logger = null) {
         this.app = app;
         this.logger = logger || new Logger('PatternManagerUI');
-        
+
         // State
         this.patterns = [];
         this.filteredPatterns = [];
         this.searchQuery = '';
         this.editingPattern = null;
-        
+
         // DOM elements
         this.patternsList = null;
         this.patternsCount = null;
@@ -26,7 +26,7 @@ export class PatternManagerUI {
         this.refreshButton = null;
         this.resetAllButton = null;
         this.emptyState = null;
-        
+
         this.logger.info('PatternManagerUI initialized');
     }
 
@@ -43,19 +43,20 @@ export class PatternManagerUI {
             this.refreshButton = document.getElementById('refresh-patterns-btn');
             this.resetAllButton = document.getElementById('reset-all-patterns-btn');
             this.emptyState = document.getElementById('empty-patterns');
-            
+
             if (!this.patternsList || !this.searchInput) {
-                throw new Error('Required DOM elements not found');
+                this.logger.warn('Required DOM elements not found - PatternManagerUI will not be active');
+                return;
             }
-            
+
             // Setup event listeners
             this.setupEventListeners();
-            
+
             // Load patterns
             await this.loadPatterns();
-            
+
             this.logger.info('PatternManagerUI initialized successfully');
-            
+
         } catch (error) {
             this.logger.error('Failed to initialize PatternManagerUI:', error);
             throw error;
@@ -72,17 +73,17 @@ export class PatternManagerUI {
             this.searchQuery = e.target.value.toLowerCase().trim();
             this.filterAndDisplayPatterns();
         });
-        
+
         // Refresh button
         this.refreshButton.addEventListener('click', () => {
             this.loadPatterns();
         });
-        
+
         // Reset all button
         this.resetAllButton.addEventListener('click', () => {
             this.showResetAllConfirmation();
         });
-        
+
         // Pattern list event delegation
         this.patternsList.addEventListener('click', (e) => {
             if (e.target.closest('.edit-pattern-btn')) {
@@ -106,9 +107,9 @@ export class PatternManagerUI {
                 this.updateDisplay();
                 return;
             }
-            
+
             const learningEngine = this.app.voiceEngine.learningEngine;
-            
+
             // Convert Map to array with additional metadata
             this.patterns = Array.from(learningEngine.userPatterns.entries()).map(([key, pattern]) => ({
                 id: key,
@@ -122,15 +123,15 @@ export class PatternManagerUI {
                 lastSeen: pattern.lastSeen || pattern.timestamp,
                 context: pattern.context || {}
             }));
-            
+
             // Sort by most recent first
             this.patterns.sort((a, b) => (b.lastSeen || b.timestamp) - (a.lastSeen || a.timestamp));
-            
+
             this.filterAndDisplayPatterns();
             this.updateStats();
-            
+
             this.logger.info(`Loaded ${this.patterns.length} training patterns`);
-            
+
         } catch (error) {
             this.logger.error('Failed to load patterns:', error);
             this.patterns = [];
@@ -146,12 +147,12 @@ export class PatternManagerUI {
         if (!this.searchQuery) {
             this.filteredPatterns = [...this.patterns];
         } else {
-            this.filteredPatterns = this.patterns.filter(pattern => 
+            this.filteredPatterns = this.patterns.filter(pattern =>
                 pattern.voiceInput.toLowerCase().includes(this.searchQuery) ||
                 pattern.targetCard.toLowerCase().includes(this.searchQuery)
             );
         }
-        
+
         this.updateDisplay();
     }
 
@@ -184,11 +185,11 @@ export class PatternManagerUI {
      */
     showPatternsList() {
         this.emptyState.style.display = 'none';
-        
+
         // Clear existing pattern items
         const existingItems = this.patternsList.querySelectorAll('.pattern-item');
         existingItems.forEach(item => item.remove());
-        
+
         // Create pattern items
         this.filteredPatterns.forEach(pattern => {
             const patternElement = this.createPatternElement(pattern);
@@ -204,11 +205,11 @@ export class PatternManagerUI {
         const patternDiv = document.createElement('div');
         patternDiv.className = 'pattern-item';
         patternDiv.dataset.patternId = pattern.id;
-        
+
         const lastSeenDate = new Date(pattern.lastSeen || pattern.timestamp).toLocaleDateString();
         const confidencePercent = Math.round(pattern.confidence * 100);
         const successPercent = Math.round(pattern.successRate * 100);
-        
+
         patternDiv.innerHTML = `
             <div class="pattern-content">
                 <div class="pattern-main">
@@ -256,7 +257,7 @@ export class PatternManagerUI {
                 </div>
             </div>
         `;
-        
+
         return patternDiv;
     }
 
@@ -268,7 +269,7 @@ export class PatternManagerUI {
         if (this.patternsCount) {
             this.patternsCount.textContent = this.patterns.length;
         }
-        
+
         if (this.patternsSuccessRate && this.patterns.length > 0) {
             const avgSuccessRate = this.patterns.reduce((sum, p) => sum + (p.successRate || 1.0), 0) / this.patterns.length;
             this.patternsSuccessRate.textContent = `${Math.round(avgSuccessRate * 100)}%`;
@@ -286,7 +287,7 @@ export class PatternManagerUI {
             this.logger.warn('Pattern not found:', patternId);
             return;
         }
-        
+
         this.showEditPatternDialog(pattern);
     }
 
@@ -297,10 +298,10 @@ export class PatternManagerUI {
     showEditPatternDialog(pattern) {
         const modal = document.createElement('div');
         modal.className = 'modal-overlay pattern-edit-modal';
-        
+
         const modalContent = document.createElement('div');
         modalContent.className = 'modal pattern-edit-modal-content';
-        
+
         modalContent.innerHTML = `
             <div class="modal-header">
                 <h3>Edit Training Pattern</h3>
@@ -329,25 +330,25 @@ export class PatternManagerUI {
                 </form>
             </div>
         `;
-        
+
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
-        
+
         // Event listeners
         const closeBtn = modalContent.querySelector('.modal-close');
         const cancelBtn = modalContent.querySelector('.cancel-edit');
         const form = modalContent.querySelector('#edit-pattern-form');
-        
+
         const closeModal = () => {
             modal.remove();
         };
-        
+
         closeBtn.addEventListener('click', closeModal);
         cancelBtn.addEventListener('click', closeModal);
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
         });
-        
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             await this.savePatternEdit(pattern, {
@@ -356,7 +357,7 @@ export class PatternManagerUI {
             });
             closeModal();
         });
-        
+
         // Focus the first input
         setTimeout(() => {
             modalContent.querySelector('#edit-voice-input').focus();
@@ -372,12 +373,12 @@ export class PatternManagerUI {
             if (!this.app.voiceEngine?.learningEngine) {
                 throw new Error('Learning engine not available');
             }
-            
+
             const learningEngine = this.app.voiceEngine.learningEngine;
-            
+
             // Remove the old pattern
             learningEngine.userPatterns.delete(originalPattern.key);
-            
+
             // Create new pattern with updated data
             const updatedPattern = {
                 ...originalPattern,
@@ -386,22 +387,22 @@ export class PatternManagerUI {
                 timestamp: Date.now(), // Update timestamp
                 lastSeen: Date.now()
             };
-            
+
             // Create new key for the updated pattern
             const newKey = learningEngine.createPatternKey(newData.voiceInput, newData.targetCard);
-            
+
             // Add the updated pattern
             learningEngine.userPatterns.set(newKey, updatedPattern);
-            
+
             // Save patterns to storage
             await learningEngine.savePatterns();
-            
+
             // Reload and refresh display
             await this.loadPatterns();
-            
+
             this.app.showToast(`Pattern updated: "${newData.voiceInput}" → "${newData.targetCard}"`, 'success');
             this.logger.info('Pattern updated successfully:', newData);
-            
+
         } catch (error) {
             this.logger.error('Failed to save pattern edit:', error);
             this.app.showToast('Failed to update pattern', 'error');
@@ -417,30 +418,30 @@ export class PatternManagerUI {
             this.logger.warn('Pattern not found:', patternId);
             return;
         }
-        
+
         // Show confirmation dialog
         const confirmed = await this.showDeleteConfirmation(pattern);
         if (!confirmed) return;
-        
+
         try {
             if (!this.app.voiceEngine?.learningEngine) {
                 throw new Error('Learning engine not available');
             }
-            
+
             const learningEngine = this.app.voiceEngine.learningEngine;
-            
+
             // Delete the pattern
             learningEngine.userPatterns.delete(pattern.key);
-            
+
             // Save patterns to storage
             await learningEngine.savePatterns();
-            
+
             // Reload and refresh display
             await this.loadPatterns();
-            
+
             this.app.showToast(`Pattern deleted: "${pattern.voiceInput}" → "${pattern.targetCard}"`, 'success');
             this.logger.info('Pattern deleted successfully:', pattern.voiceInput);
-            
+
         } catch (error) {
             this.logger.error('Failed to delete pattern:', error);
             this.app.showToast('Failed to delete pattern', 'error');
@@ -455,10 +456,10 @@ export class PatternManagerUI {
         return new Promise((resolve) => {
             const modal = document.createElement('div');
             modal.className = 'modal-overlay delete-confirm-modal';
-            
+
             const modalContent = document.createElement('div');
             modalContent.className = 'modal delete-confirm-modal-content';
-            
+
             modalContent.innerHTML = `
                 <div class="modal-header">
                     <h3>Delete Training Pattern</h3>
@@ -481,20 +482,20 @@ export class PatternManagerUI {
                     </div>
                 </div>
             `;
-            
+
             modal.appendChild(modalContent);
             document.body.appendChild(modal);
-            
+
             // Event listeners
             const closeBtn = modalContent.querySelector('.modal-close');
             const cancelBtn = modalContent.querySelector('.cancel-delete');
             const confirmBtn = modalContent.querySelector('.confirm-delete');
-            
+
             const closeModal = (result = false) => {
                 modal.remove();
                 resolve(result);
             };
-            
+
             closeBtn.addEventListener('click', () => closeModal(false));
             cancelBtn.addEventListener('click', () => closeModal(false));
             confirmBtn.addEventListener('click', () => closeModal(true));
@@ -512,13 +513,13 @@ export class PatternManagerUI {
             this.app.showToast('No patterns to reset', 'info');
             return;
         }
-        
+
         const modal = document.createElement('div');
         modal.className = 'modal-overlay reset-all-confirm-modal';
-        
+
         const modalContent = document.createElement('div');
         modalContent.className = 'modal reset-all-confirm-modal-content';
-        
+
         modalContent.innerHTML = `
             <div class="modal-header">
                 <h3>Reset All Training Patterns</h3>
@@ -537,19 +538,19 @@ export class PatternManagerUI {
                 </div>
             </div>
         `;
-        
+
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
-        
+
         // Event listeners
         const closeBtn = modalContent.querySelector('.modal-close');
         const cancelBtn = modalContent.querySelector('.cancel-reset');
         const confirmBtn = modalContent.querySelector('.confirm-reset');
-        
+
         const closeModal = () => {
             modal.remove();
         };
-        
+
         closeBtn.addEventListener('click', closeModal);
         cancelBtn.addEventListener('click', closeModal);
         confirmBtn.addEventListener('click', async () => {
@@ -569,19 +570,19 @@ export class PatternManagerUI {
             if (!this.app.voiceEngine?.learningEngine) {
                 throw new Error('Learning engine not available');
             }
-            
+
             const learningEngine = this.app.voiceEngine.learningEngine;
             const patternCount = learningEngine.userPatterns.size;
-            
+
             // Reset all patterns using the learning engine's reset method
             learningEngine.reset();
-            
+
             // Reload and refresh display
             await this.loadPatterns();
-            
+
             this.app.showToast(`Reset ${patternCount} training patterns`, 'success');
             this.logger.info(`Reset all ${patternCount} training patterns`);
-            
+
         } catch (error) {
             this.logger.error('Failed to reset patterns:', error);
             this.app.showToast('Failed to reset patterns', 'error');

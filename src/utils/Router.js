@@ -21,6 +21,7 @@ export default class Router {
     this.currentPage = null;
     this.defaultRoute = options.defaultRoute || 'dashboard';
     this.notFoundRoute = options.notFoundRoute || this.defaultRoute;
+    this.app = options.app || window.app; // Store app instance
 
     // DOM containers
     this.pageContainer = null;
@@ -224,7 +225,7 @@ export default class Router {
 
       // Create page instance
       const pageInstance = typeof PageComponent === 'function'
-        ? new PageComponent(this)
+        ? new PageComponent(this.app || this)
         : PageComponent;
 
       // Mount the new page (stays in correct layout position)
