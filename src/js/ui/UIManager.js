@@ -52,7 +52,7 @@ export class UIManager {
 
         // Configuration
         this.config = {
-            toastDuration: 5000,
+            toastDuration: 7000,
             animationDuration: 300,
             debounceDelay: 300,
             maxVisibleToasts: 3
@@ -292,6 +292,12 @@ export class UIManager {
                 } else {
                     this.showToast('Please select a card set first', 'warning');
                 }
+            });
+        }
+
+        if (this.elements.stopSessionBtn) {
+            this.elements.stopSessionBtn.addEventListener('click', () => {
+                this.emitSessionStop();
             });
         }
 
@@ -2215,14 +2221,88 @@ export class UIManager {
      */
     showModal(modal) {
         this.ensureDomReferences(['modalOverlay']);
+        console.log('[UIManager] showModal called. Overlay exists:', !!this.elements.modalOverlay);
+
         if (this.elements.modalOverlay) {
             this.elements.modalOverlay.innerHTML = '';
             this.elements.modalOverlay.appendChild(modal);
             this.elements.modalOverlay.classList.remove('hidden');
+            console.log('[UIManager] Modal appended and hidden class removed');
 
             // Focus management
             modal.querySelector('button')?.focus();
+        } else {
+            console.error('[UIManager] Modal overlay element not found!');
         }
+    }
+
+    /**
+     * Show card selection modal for voice ambiguity
+     */
+    showCardSelectionModal(cards, transcript, onSelect) {
+        const content = document.createElement('div');
+        content.className = 'card-selection-content';
+
+        const intro = document.createElement('p');
+        intro.className = 'selection-intro';
+        intro.textContent = `I found multiple matches for "${transcript}". Which one did you mean?`;
+        content.appendChild(intro);
+
+        const grid = document.createElement('div');
+        grid.className = 'selection-grid';
+
+        cards.forEach(card => {
+            const cardBtn = document.createElement('button');
+            cardBtn.className = 'selection-card-btn';
+
+            // Determine display values
+            const cardName = card.name || card.card_name || 'Unknown';
+            const rarity = card.rarity || card.card_rarity || 'Common';
+            const setCode = card.set_code || card.setInfo?.setCode || '';
+            const price = card.price || card.tcg_market_price || 0;
+            const imageUrl = card.image_url || card.image_url_small;
+
+            cardBtn.innerHTML = `
+                <div class="selection-card-image">
+                    ${imageUrl ? `<img src="${imageUrl}" alt="${cardName}" loading="lazy">` : '<div class="placeholder-icon">🃏</div>'}
+                </div>
+                <div class="selection-card-info">
+                    <div class="selection-name">${cardName}</div>
+                    <div class="selection-details">
+                        <span class="selection-rarity">${rarity}</span>
+                        ${setCode ? `<span class="selection-set">${setCode}</span>` : ''}
+                    </div>
+                    ${price > 0 ? `<div class="selection-price">$${Number(price).toFixed(2)}</div>` : ''}
+                </div>
+            `;
+
+            cardBtn.addEventListener('click', () => {
+                this.closeModal();
+                onSelect(card, transcript);
+            });
+
+            grid.appendChild(cardBtn);
+        });
+
+        content.appendChild(grid);
+
+        // "None of these" option
+        const noneBtn = document.createElement('button');
+        noneBtn.className = 'btn btn-secondary btn-block mt-4';
+        noneBtn.textContent = 'None of these (Train/Reject)';
+        noneBtn.addEventListener('click', () => {
+            this.closeModal();
+            onSelect(null, transcript);
+        });
+        content.appendChild(noneBtn);
+
+        const modal = this.createModal('Select Card', '');
+        modal.querySelector('.modal-content').appendChild(content);
+
+        // Add specific class for styling
+        modal.classList.add('card-selection-modal');
+
+        this.showModal(modal);
     }
 
     /**

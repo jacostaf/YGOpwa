@@ -17,13 +17,13 @@ export class PriceChecker {
     constructor(storage = null, logger = null, configOverrides = {}) {
         this.storage = storage;
         this.logger = logger || new Logger('PriceChecker');
-        
+
         // Initialize image manager for card images
         this.imageManager = new ImageManager();
-        
+
         // Backend API URL (matching SessionManager)
         this.apiUrl = configOverrides.API_URL || config.API_URL;
-        
+
         // Cache configuration
         this.cache = new Map();
         this.cacheConfig = {
@@ -31,7 +31,7 @@ export class PriceChecker {
             ttl: 3600000, // 1 hour in milliseconds
             forceRefreshAge: 86400000 // 24 hours
         };
-        
+
         // Configuration
         this.config = {
             timeout: 120000, // 120 seconds timeout for API calls
@@ -41,10 +41,10 @@ export class PriceChecker {
             defaultCondition: 'near-mint',
             ...configOverrides // Allow override of any config options
         };
-        
+
         // Price history
         this.priceHistory = new Map();
-        
+
         this.logger.info('PriceChecker initialized');
     }
 
@@ -54,16 +54,16 @@ export class PriceChecker {
     async initialize() {
         try {
             this.logger.info('Initializing price checker...');
-            
+
             // Load cache from storage
             await this.loadCache();
-            
+
             // Load price history
             await this.loadPriceHistory();
-            
+
             this.logger.info('Price checker initialized successfully');
             return true;
-            
+
         } catch (error) {
             this.logger.error('Failed to initialize price checker:', error);
             throw error;
@@ -76,13 +76,13 @@ export class PriceChecker {
     async checkPrice(cardData) {
         try {
             this.logger.info('Checking price for card:', cardData);
-            
+
             // Validate input
             this.validateCardData(cardData);
-            
+
             // Generate cache key
             const cacheKey = this.generateCacheKey(cardData);
-            
+
             // Check cache first (unless force refresh)
             if (!cardData.forceRefresh && this.config.enableCache) {
                 const cachedResult = this.getCachedPrice(cacheKey);
@@ -91,7 +91,7 @@ export class PriceChecker {
                     return cachedResult;
                 }
             }
-            
+
             // Try to get enhanced card information from backend API
             let enhancedCardInfo = null;
             try {
@@ -99,25 +99,25 @@ export class PriceChecker {
                 this.logger.info('Successfully fetched enhanced card info from backend API');
             } catch (error) {
                 this.logger.error('Failed to fetch enhanced card info from backend API:', error.message);
-                
+
                 // Throw error to indicate API failure - don't silently fall back
                 throw new Error(`Backend API unavailable: ${error.message}. Please ensure the backend server is running on ${this.apiUrl}`);
             }
-            
+
             // Process and aggregate results with enhanced card information
             const aggregatedResult = this.aggregateResults([], cardData, enhancedCardInfo);
-            
+
             // Cache the result
             if (this.config.enableCache) {
                 this.cachePrice(cacheKey, aggregatedResult);
             }
-            
+
             // Update price history
             this.updatePriceHistory(cardData, aggregatedResult);
-            
+
             this.logger.info('Price check completed successfully');
             return aggregatedResult;
-            
+
         } catch (error) {
             this.logger.error('Price check failed:', error);
             throw error;
@@ -134,12 +134,13 @@ export class PriceChecker {
                 card_name: cardData.cardName || '',
                 card_rarity: cardData.rarity,
                 art_variant: cardData.artVariant || '',
+                setCode: cardData.setCode || '', // Pass setCode for targeted search
                 force_refresh: cardData.forceRefresh || false
             };
-            
+
             this.logger.debug('Fetching enhanced card info from backend:', requestPayload);
             this.logger.debug('Backend API URL:', `${this.apiUrl}/cards/price`);
-            
+
             const response = await fetch(`${this.apiUrl}/cards/price`, {
                 method: 'POST',
                 headers: {
@@ -148,29 +149,29 @@ export class PriceChecker {
                 body: JSON.stringify(requestPayload),
                 signal: AbortSignal.timeout(this.config.timeout)
             });
-            
+
             this.logger.debug('Backend response status:', response.status);
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
                 this.logger.error(`Backend API error: ${response.status} ${response.statusText}`, errorText);
                 throw new Error(`Backend API error: ${response.status} ${response.statusText}`);
             }
-            
+
             const data = await response.json();
             this.logger.debug('Backend response data:', data);
-            
+
             if (!data.success) {
                 this.logger.error('Backend API returned failure:', data);
                 throw new Error(data.message || 'Backend API returned failure');
             }
-            
+
             this.logger.info('Successfully fetched enhanced card info from backend');
             return data.data; // Return the card data portion
-            
+
         } catch (error) {
             this.logger.error('Backend API call failed:', error);
-            
+
             // Don't automatically fall back to mock data - let the caller handle this
             throw new Error(`Backend API call failed: ${error.message}`);
         }
@@ -183,15 +184,15 @@ export class PriceChecker {
         if (!cardData) {
             throw new Error('Card data is required');
         }
-        
-        if (!cardData.cardNumber) {
-            throw new Error('Card number is required');
+
+        if (!cardData.cardNumber && !cardData.cardName) {
+            throw new Error('Either Card Number or Card Name is required');
         }
-        
+
         if (!cardData.rarity) {
             throw new Error('Card rarity is required');
         }
-        
+
         // Set defaults
         cardData.condition = cardData.condition || this.config.defaultCondition;
         cardData.artVariant = cardData.artVariant || '';
@@ -202,13 +203,13 @@ export class PriceChecker {
      */
     generateCacheKey(cardData) {
         const keyParts = [
-            cardData.cardNumber,
+            cardData.cardNumber || 'unknown',
             cardData.rarity,
             cardData.condition,
             cardData.artVariant || '',
             cardData.cardName || ''
         ];
-        
+
         return keyParts.join('|').toLowerCase();
     }
 
@@ -217,20 +218,20 @@ export class PriceChecker {
      */
     getCachedPrice(cacheKey) {
         const cached = this.cache.get(cacheKey);
-        
+
         if (!cached) {
             return null;
         }
-        
+
         const now = Date.now();
         const age = now - cached.timestamp;
-        
+
         // Check if cache is still valid
         if (age > this.cacheConfig.ttl) {
             this.cache.delete(cacheKey);
             return null;
         }
-        
+
         // Add cache info to result
         return {
             ...cached.data,
@@ -248,12 +249,12 @@ export class PriceChecker {
             const oldestKey = this.cache.keys().next().value;
             this.cache.delete(oldestKey);
         }
-        
+
         this.cache.set(cacheKey, {
             data: result,
             timestamp: Date.now()
         });
-        
+
         // Save to persistent storage periodically
         if (this.storage && this.cache.size % 10 === 0) {
             this.saveCache().catch(error => {
@@ -300,12 +301,12 @@ export class PriceChecker {
             image_url: this.getDefaultImageUrl(cardData.cardNumber),
             image_url_small: null
         };
-        
+
         // Calculate aggregate statistics
         const allPrices = [];
         if (cardInfo.tcg_price) allPrices.push(parseFloat(cardInfo.tcg_price));
         if (cardInfo.tcg_market_price) allPrices.push(parseFloat(cardInfo.tcg_market_price));
-        
+
         let aggregated = null;
         if (allPrices.length > 0) {
             const sortedPrices = allPrices.sort((a, b) => a - b);
@@ -318,7 +319,7 @@ export class PriceChecker {
                 confidence: this.calculateConfidence(allPrices)
             };
         }
-        
+
         // Create final result
         const result = {
             success: true,
@@ -334,7 +335,7 @@ export class PriceChecker {
                 queryTime: new Date().toLocaleString()
             }
         };
-        
+
         this.logger.debug('Aggregated price result:', result);
         return result;
     }
@@ -354,12 +355,12 @@ export class PriceChecker {
      */
     calculateConfidence(prices) {
         if (prices.length < 2) return 0.5;
-        
+
         const mean = prices.reduce((sum, price) => sum + price, 0) / prices.length;
         const variance = prices.reduce((sum, price) => sum + Math.pow(price - mean, 2), 0) / prices.length;
         const standardDeviation = Math.sqrt(variance);
         const coefficientOfVariation = standardDeviation / mean;
-        
+
         // Convert to confidence score (lower variation = higher confidence)
         return Math.max(0, Math.min(1, 1 - coefficientOfVariation));
     }
@@ -369,11 +370,11 @@ export class PriceChecker {
      */
     updatePriceHistory(cardData, result) {
         const key = this.generateCacheKey(cardData);
-        
+
         if (!this.priceHistory.has(key)) {
             this.priceHistory.set(key, []);
         }
-        
+
         const history = this.priceHistory.get(key);
         history.push({
             timestamp: new Date().toISOString(),
@@ -381,12 +382,12 @@ export class PriceChecker {
             confidence: result.aggregated?.confidence || 0,
             sources: result.metadata.sourcesUsed
         });
-        
+
         // Keep only last 30 entries
         if (history.length > 30) {
             history.splice(0, history.length - 30);
         }
-        
+
         // Save to storage periodically
         if (this.storage && history.length % 5 === 0) {
             this.savePriceHistory().catch(error => {
@@ -408,7 +409,7 @@ export class PriceChecker {
      */
     async loadCache() {
         if (!this.storage) return;
-        
+
         try {
             const cacheData = await this.storage.get('priceCache');
             if (cacheData && Array.isArray(cacheData)) {
@@ -425,7 +426,7 @@ export class PriceChecker {
      */
     async saveCache() {
         if (!this.storage) return;
-        
+
         try {
             const cacheData = Array.from(this.cache.entries());
             await this.storage.set('priceCache', cacheData);
@@ -440,7 +441,7 @@ export class PriceChecker {
      */
     async loadPriceHistory() {
         if (!this.storage) return;
-        
+
         try {
             const historyData = await this.storage.get('priceHistory');
             if (historyData && Array.isArray(historyData)) {
@@ -457,7 +458,7 @@ export class PriceChecker {
      */
     async savePriceHistory() {
         if (!this.storage) return;
-        
+
         try {
             const historyData = Array.from(this.priceHistory.entries());
             await this.storage.set('priceHistory', historyData);
@@ -490,7 +491,7 @@ export class PriceChecker {
         const now = Date.now();
         let validEntries = 0;
         let expiredEntries = 0;
-        
+
         for (const [_, cached] of this.cache) {
             const age = now - cached.timestamp;
             if (age <= this.cacheConfig.ttl) {
@@ -499,7 +500,7 @@ export class PriceChecker {
                 expiredEntries++;
             }
         }
-        
+
         return {
             totalEntries: this.cache.size,
             validEntries,
@@ -523,7 +524,7 @@ export class PriceChecker {
     checkRateLimit(sourceId, limit) {
         const now = Date.now();
         const windowStart = now - 60000; // 1 minute window
-        
+
         // For simplified implementation, just return true for tests
         return true;
     }

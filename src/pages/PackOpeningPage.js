@@ -14,6 +14,7 @@
 
 import CardGrid from '../components/CardGrid.js';
 import IconLoader from '../utils/IconLoader.js';
+import CollectionManager from '../services/CollectionManager.js';
 
 export default class PackOpeningPage {
   constructor(router) {
@@ -23,6 +24,7 @@ export default class PackOpeningPage {
     // Service references (will be set from global app)
     this.sessionManager = null;
     this.voiceEngine = null;
+    this.collectionManager = null;
 
     // Component instances
     this.cardGrid = null;
@@ -44,7 +46,8 @@ export default class PackOpeningPage {
       handleVoiceResult: this.handleVoiceResult.bind(this),
       handleVoiceStatus: this.handleVoiceStatus.bind(this),
       handleVoiceError: this.handleVoiceError.bind(this),
-      handleSessionUpdate: this.handleSessionUpdate.bind(this)
+      handleSessionUpdate: this.handleSessionUpdate.bind(this),
+      handleAddToCollection: this.handleAddToCollection.bind(this)
     };
   }
 
@@ -57,6 +60,7 @@ export default class PackOpeningPage {
       // Get global app instances
       this.sessionManager = window.app?.sessionManager || null;
       this.voiceEngine = window.app?.voiceEngine || null;
+      this.collectionManager = new CollectionManager(this.sessionManager);
 
       if (!this.sessionManager) {
         console.warn('SessionManager not available');
@@ -168,6 +172,10 @@ export default class PackOpeningPage {
                   <i data-lucide="package-open"></i>
                   <span>Rip Pack</span>
                 </button>
+                <button id="stop-session-btn" class="btn btn-danger btn-sm hidden" type="button">
+                  <i data-lucide="square"></i>
+                  <span>Stop</span>
+                </button>
                 <button id="swap-set-btn" class="btn btn-secondary btn-sm hidden" type="button">
                   <i data-lucide="refresh-ccw"></i>
                   <span>Swap</span>
@@ -261,6 +269,10 @@ export default class PackOpeningPage {
               <button id="refresh-pricing-btn" class="btn btn-secondary btn-sm" type="button" disabled>
                 <i data-lucide="refresh-cw"></i>
                 <span>Pricing</span>
+              </button>
+              <button id="add-to-collection-btn" class="btn btn-primary btn-sm" type="button" disabled>
+                <i data-lucide="plus-circle"></i>
+                <span>Add to Collection</span>
               </button>
             </div>
           </section>
@@ -917,10 +929,24 @@ export default class PackOpeningPage {
   updateButtons() {
     // Set selection buttons
     const startSessionBtn = this.container?.querySelector('#start-session-btn');
+    const stopSessionBtn = this.container?.querySelector('#stop-session-btn');
     const swapSetBtn = this.container?.querySelector('#swap-set-btn');
 
     if (startSessionBtn) {
       startSessionBtn.disabled = !this.selectedSetId || this.isSessionActive || this.isStartingSession;
+      if (this.isSessionActive) {
+        startSessionBtn.classList.add('hidden');
+      } else {
+        startSessionBtn.classList.remove('hidden');
+      }
+    }
+
+    if (stopSessionBtn) {
+      if (this.isSessionActive) {
+        stopSessionBtn.classList.remove('hidden');
+      } else {
+        stopSessionBtn.classList.add('hidden');
+      }
     }
 
     if (swapSetBtn) {
@@ -1128,6 +1154,13 @@ export default class PackOpeningPage {
       startSessionBtn.addEventListener('click', this.boundHandlers.startSession);
     }
 
+    // Stop session button
+    const stopSessionBtn = this.container?.querySelector('#stop-session-btn');
+    if (stopSessionBtn) {
+      this.boundHandlers.stopSession = () => this.stopSession();
+      stopSessionBtn.addEventListener('click', this.boundHandlers.stopSession);
+    }
+
     // Swap set button
     const swapSetBtn = this.container?.querySelector('#swap-set-btn');
     if (swapSetBtn) {
@@ -1208,7 +1241,8 @@ export default class PackOpeningPage {
     // Voice engine events
     if (this.voiceEngine) {
       // Use the pre-bound handlers
-      this.voiceEngine.onResult(this.boundHandlers.handleVoiceResult);
+      // Voice listener is handled globally by app.js
+      // this.voiceEngine.onResult(this.boundHandlers.handleVoiceResult);
       this.voiceEngine.onStatusChange(this.boundHandlers.handleVoiceStatus);
       this.voiceEngine.onError(this.boundHandlers.handleVoiceError);
     }
@@ -1401,4 +1435,234 @@ export default class PackOpeningPage {
 
     console.log('PackOpeningPage unmounted');
   }
+
+  /**
+   * Handle Add to Collection click
+   * @private
+   */
+  async handleAddToCollection() {
+    if (!this.currentSession || !this.currentSession.cards || this.currentSession.cards.length === 0) {
+      this.showError('No cards in session to add.');
+      return;
+    }
+
+    try {
+      // Show modal with collection options
+      await this.renderCollectionSelectionModal();
+    } catch (error) {
+      console.error('Error handling add to collection:', error);
+      this.showError('Failed to prepare collection options.');
+    }
+  }
+
+  /**
+   * Render Collection Selection Modal
+   * @private
+   */
+  async renderCollectionSelectionModal() {
+    // Remove existing modal if any
+    const existingModal = document.querySelector('.modal-overlay');
+    if (existingModal) existingModal.remove();
+
+    // Fetch user collections
+    const collections = await this.collectionManager.getUserCollections();
+
+    const modalHtml = `
+      <div class="modal-overlay is-visible">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 class="modal-title">Add to Collection</h3>
+            <button class="modal-close" id="modal-close-btn">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div id="collection-step-select">
+              <p class="mb-4 text-neutral-400">Select a collection to add ${this.currentSession.cards.length} cards to:</p>
+              
+              <div class="collection-selection-list">
+                ${collections.map(col => `
+                  <div class="collection-option" data-id="${col.id}">
+                    <div class="collection-info">
+                      <span class="collection-name">${this.escapeHtml(col.name)}</span>
+                      <span class="collection-count">${col.cards?.length || 0} cards</span>
+                    </div>
+                    <i data-lucide="chevron-right" class="text-neutral-500"></i>
+                  </div>
+                `).join('')}
+                
+                <button class="collection-option create-new" id="btn-create-new-collection">
+                  <div class="collection-info">
+                    <span class="collection-name text-accent-primary">Create New Collection</span>
+                    <span class="collection-count">Start fresh</span>
+                  </div>
+                  <i data-lucide="plus" class="text-accent-primary"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="collection-step-create" style="display: none;">
+              <h4 class="text-lg font-medium mb-4">New Collection</h4>
+              <div class="form-group mb-4">
+                <label class="block text-sm text-neutral-400 mb-1">Name</label>
+                <input type="text" id="new-collection-name" class="form-input w-full bg-neutral-800 border-neutral-700 rounded p-2 text-white" placeholder="e.g., My Holos">
+              </div>
+              <div class="form-group mb-6">
+                <label class="block text-sm text-neutral-400 mb-1">Description (Optional)</label>
+                <textarea id="new-collection-desc" class="form-input w-full bg-neutral-800 border-neutral-700 rounded p-2 text-white" rows="3"></textarea>
+              </div>
+              <div class="flex justify-end gap-2">
+                <button class="btn btn-secondary btn-sm" id="btn-cancel-create">Back</button>
+                <button class="btn btn-primary btn-sm" id="btn-confirm-create">Create & Add</button>
+              </div>
+            </div>
+
+            <div id="collection-step-review" style="display: none;">
+               <h4 class="text-lg font-medium mb-2">Review Cards</h4>
+               <p class="text-sm text-neutral-400 mb-4">Adding to: <span id="target-collection-name" class="text-white font-bold"></span></p>
+               
+               <div class="card-review-list mb-6">
+                 ${this.currentSession.cards.map(card => `
+                   <div class="review-item">
+                     <img src="${card.imageUrl || card.image_url_small || '/assets/card-back.jpg'}" class="review-item-image" alt="${card.name}">
+                     <div class="review-item-details">
+                       <span class="review-item-name">${this.escapeHtml(card.name)}</span>
+                       <div class="review-item-meta">
+                         <span class="text-xs bg-neutral-800 px-1 rounded">${card.rarity || 'Common'}</span>
+                         <span class="ml-2">x${card.quantity || 1}</span>
+                       </div>
+                     </div>
+                   </div>
+                 `).join('')}
+               </div>
+
+               <div class="flex justify-end gap-2">
+                 <button class="btn btn-secondary btn-sm" id="btn-cancel-review">Back</button>
+                 <button class="btn btn-primary btn-sm" id="btn-confirm-add">Confirm Add</button>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // Initialize icons in modal
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // Event Listeners for Modal
+    const modal = document.querySelector('.modal-overlay');
+    const closeBtn = document.getElementById('modal-close-btn');
+    const createBtn = document.getElementById('btn-create-new-collection');
+    const cancelCreateBtn = document.getElementById('btn-cancel-create');
+    const confirmCreateBtn = document.getElementById('btn-confirm-create');
+    const cancelReviewBtn = document.getElementById('btn-cancel-review');
+    const confirmAddBtn = document.getElementById('btn-confirm-add');
+
+    let selectedCollectionId = null;
+
+    // Close Modal
+    const closeModal = () => modal.remove();
+    closeBtn.onclick = closeModal;
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+
+    // Navigate to Create
+    createBtn.onclick = () => {
+      document.getElementById('collection-step-select').style.display = 'none';
+      document.getElementById('collection-step-create').style.display = 'block';
+    };
+
+    // Cancel Create
+    cancelCreateBtn.onclick = () => {
+      document.getElementById('collection-step-create').style.display = 'none';
+      document.getElementById('collection-step-select').style.display = 'block';
+    };
+
+    // Confirm Create
+    confirmCreateBtn.onclick = async () => {
+      const name = document.getElementById('new-collection-name').value;
+      const desc = document.getElementById('new-collection-desc').value;
+      if (!name) return alert('Please enter a name');
+
+      try {
+        const newCol = await this.collectionManager.createCollection(name, desc);
+        if (newCol) {
+          selectedCollectionId = newCol.id;
+          this.showReviewStep(newCol.name, selectedCollectionId);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Failed to create collection');
+      }
+    };
+
+    // Select Existing
+    document.querySelectorAll('.collection-option[data-id]').forEach(el => {
+      el.onclick = () => {
+        selectedCollectionId = el.dataset.id;
+        const name = el.querySelector('.collection-name').textContent;
+        this.showReviewStep(name, selectedCollectionId);
+      };
+    });
+
+    // Cancel Review
+    cancelReviewBtn.onclick = () => {
+      document.getElementById('collection-step-review').style.display = 'none';
+      document.getElementById('collection-step-select').style.display = 'block';
+    };
+
+    // Confirm Add
+    confirmAddBtn.onclick = async () => {
+      if (!selectedCollectionId) return;
+
+      const btn = confirmAddBtn;
+      const originalText = btn.textContent;
+      btn.textContent = 'Adding...';
+      btn.disabled = true;
+
+      try {
+        let addedCount = 0;
+        for (const card of this.currentSession.cards) {
+          await this.collectionManager.addCardToCollection(selectedCollectionId, card);
+          addedCount++;
+        }
+
+        closeModal();
+
+        if (confirm(`Successfully added ${addedCount} cards! Clear session?`)) {
+          await this.clearSession();
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Failed to add some cards');
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    };
+  }
+
+  showReviewStep(collectionName, collectionId) {
+    document.getElementById('collection-step-select').style.display = 'none';
+    document.getElementById('collection-step-create').style.display = 'none';
+    const reviewStep = document.getElementById('collection-step-review');
+    reviewStep.style.display = 'block';
+    document.getElementById('target-collection-name').textContent = collectionName;
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   * @param {string} str 
+   * @returns {string}
+   */
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 }
+

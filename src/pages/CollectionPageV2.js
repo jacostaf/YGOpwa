@@ -110,10 +110,22 @@ export class CollectionPage {
       handlePackSourceChange: this.handlePackSourceChange.bind(this),
       handlePackRefresh: this.handlePackRefresh.bind(this),
       handleTabChange: this.handleTabChange.bind(this),
-      handleCreateCollection: this.handleCreateCollection.bind(this)
+      handleCreateCollection: this.handleCreateCollection.bind(this),
+      handleCondensedToggle: this.handleCondensedToggle.bind(this)
     };
 
     this.optimisticRollbacks = [];
+
+    // Subscription moved to mount() where collectionManager is initialized
+  }
+
+  /**
+   * Handle price updates from CollectionManager
+   */
+  async handlePriceUpdate(data) {
+    console.log('[CollectionPage] Received price update:', data);
+    // Reload data silently to update prices
+    await this.loadData({ silent: true });
   }
 
   /**
@@ -131,11 +143,24 @@ export class CollectionPage {
     if (tabId === 'all-cards') {
       this.container.querySelector('#all-cards-view').style.display = 'block';
       this.container.querySelector('#my-collections-view').style.display = 'none';
+
+      // Clear collection filter
+      this.state.filters.collectionId = null;
+      this.applyFiltersAndSort();
+      this.updateDisplay();
     } else {
       this.container.querySelector('#all-cards-view').style.display = 'none';
       this.container.querySelector('#my-collections-view').style.display = 'block';
       await this.loadUserCollections();
     }
+  }
+
+  /**
+   * Handle condensed view toggle
+   */
+  handleCondensedToggle(e) {
+    this.state.consolidated = e.target.checked;
+    this.updateGridView();
   }
 
   /**
@@ -157,22 +182,107 @@ export class CollectionPage {
                 </div>
             `;
       } else {
-        listContainer.innerHTML = collections.map(col => `
+        listContainer.innerHTML = collections.map(col => {
+          // Get cards for this collection
+          // We need to match by collectionId. 
+          // Note: this.state.cards contains all user cards flattened
+          const collectionCards = this.state.cards.filter(c => c.collectionId === col.id);
+
+          // Sort by price (highest first) for preview
+          const sortedPreviewCards = [...collectionCards].sort((a, b) => {
+            const priceA = a.pricing?.currentPrice || 0;
+            const priceB = b.pricing?.currentPrice || 0;
+            return priceB - priceA;
+          });
+
+          // Get top 3 cards for preview
+          const previewCards = sortedPreviewCards.slice(0, 3);
+
+          // Calculate total value
+          const totalValue = collectionCards.reduce((sum, card) => sum + (card.pricing?.totalValue || 0), 0);
+
+          // Calculate card count (sum of quantities)
+          const cardCount = collectionCards.reduce((sum, card) => sum + (Number(card.quantity) || 1), 0);
+
+          console.log('[CollectionPage] Collection:', col.name, 'Cards:', collectionCards.length, 'Value:', totalValue);
+
+          const previewStackHtml = `
+                <div class="collection-preview-stack">
+                    ${previewCards.length > 0 ? previewCards.map((card, i) => {
+            // Resolve image URL
+            const imageUrl = card.image_url || card.image_small || card.card_images?.[0]?.image_url_small || 'https://images.ygoprodeck.com/images/cards_small/back.jpg';
+            console.log('[CollectionPage] Image URL for card:', card.card?.name, imageUrl);
+            return `<div class="preview-card" style="background-image: url('${imageUrl}')"></div>`;
+          }).join('') : `
+                        <div class="empty-preview">
+                            <i class="lucide-icon" data-lucide="image"></i>
+                        </div>
+                    `}
+                </div>
+            `;
+
+          return `
                 <div class="collection-card glass-card">
+                    ${previewStackHtml}
                     <div class="collection-card-header">
                         <h3>${col.name}</h3>
-                        <span class="card-count">${col.cards?.length || 0} cards</span>
+                        <span class="card-count">${cardCount} cards</span>
                     </div>
                     <p class="collection-desc">${col.description || 'No description'}</p>
+                    <div class="collection-stats-row">
+                        <span class="collection-value">${this.formatCurrency(totalValue)}</span>
+                    </div>
                     <div class="collection-actions">
                         <button class="btn-sm btn-secondary view-collection-btn" data-id="${col.id}">View</button>
                         <button class="btn-sm btn-danger delete-collection-btn" data-id="${col.id}">Delete</button>
                     </div>
                 </div>
-            `).join('');
+            `;
+        }).join('');
 
         // Re-initialize icons
         if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        // Add event delegation for buttons
+        listContainer.onclick = (e) => {
+          const viewBtn = e.target.closest('.view-collection-btn');
+          const deleteBtn = e.target.closest('.delete-collection-btn');
+
+          if (viewBtn) {
+            const id = viewBtn.dataset.id;
+            console.log('View collection:', id);
+
+            // Update filter state
+            this.state.filters.collectionId = id;
+
+            // Manually switch to All Cards tab UI without triggering click event
+            // This prevents handleTabChange from clearing our filter
+            const allCardsTab = this.container.querySelector('[data-tab="all-cards"]');
+            const myCollectionsTab = this.container.querySelector('[data-tab="my-collections"]');
+
+            if (allCardsTab && myCollectionsTab) {
+              allCardsTab.classList.add('active');
+              myCollectionsTab.classList.remove('active');
+            }
+
+            this.container.querySelector('#all-cards-view').style.display = 'block';
+            this.container.querySelector('#my-collections-view').style.display = 'none';
+
+            // Apply filters immediately
+            this.applyFiltersAndSort();
+            this.updateDisplay();
+
+            this.app.showToast(`Viewing collection`, 'info');
+          } else if (deleteBtn) {
+            // ... delete logic
+            const id = deleteBtn.dataset.id;
+            if (confirm('Are you sure you want to delete this collection?')) {
+              this.collectionManager.deleteCollection(id).then(() => {
+                this.loadUserCollections();
+              });
+            }
+          }
+        };
       }
     } catch (error) {
       console.error('Error loading collections:', error);
@@ -206,32 +316,7 @@ export class CollectionPage {
   render() {
     return `
       <div class="collection-page">
-        <!-- Page Header -->
-        <div class="page-header">
-          <div class="page-title-section">
-            <i class="lucide-icon" data-lucide="folder-open"></i>
-            <div>
-              <h1>Collection</h1>
-              <p class="page-subtitle">View and manage your complete card collection</p>
-            </div>
-          </div>
-          <div class="page-actions">
-            <button class="btn-secondary" id="refreshCollectionBtn">
-              <i class="lucide-icon" data-lucide="refresh-cw"></i>
-              Refresh
-            </button>
-            <button class="btn-primary" id="addCardBtn">
-              <i class="lucide-icon" data-lucide="plus"></i>
-              Add Card
-            </button>
-            <button class="btn-primary" id="exportCollectionBtn">
-              <i class="lucide-icon" data-lucide="download"></i>
-              Export
-            </button>
-          </div>
-        </div>
-
-        <!-- Tabs -->
+        <!-- Tabs (Segmented Control) -->
         <div class="collection-tabs">
             <button class="tab-btn active" data-tab="all-cards">All Cards</button>
             <button class="tab-btn" data-tab="my-collections">My Collections</button>
@@ -240,61 +325,57 @@ export class CollectionPage {
         <!-- All Cards View -->
         <div id="all-cards-view">
 
-        <!-- Stats Overview -->
+        <!-- Stats Overview (Compact) -->
         <div class="collection-stats-grid" id="collectionStatsGrid">
-          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
-              <i class="lucide-icon" data-lucide="package"></i>
+          <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
+                    <i class="lucide-icon" data-lucide="package"></i>
+                </div>
+                <div class="stat-label">Total Cards</div>
             </div>
-            <div class="stat-content">
-              <div class="stat-label">Total Cards</div>
-              <div class="stat-value" id="statTotalCards">0</div>
-              <div class="stat-change">Across all sessions</div>
-            </div>
+            <div class="stat-value" id="statTotalCards">0</div>
           </div>
 
-          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-              <i class="lucide-icon" data-lucide="layers"></i>
+          <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                    <i class="lucide-icon" data-lucide="layers"></i>
+                </div>
+                <div class="stat-label">Unique</div>
             </div>
-            <div class="stat-content">
-              <div class="stat-label">Unique Cards</div>
-              <div class="stat-value" id="statUniqueCards">0</div>
-              <div class="stat-change">Different cards</div>
-            </div>
+            <div class="stat-value" id="statUniqueCards">0</div>
           </div>
 
-          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-              <i class="lucide-icon" data-lucide="dollar-sign"></i>
+          <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                    <i class="lucide-icon" data-lucide="dollar-sign"></i>
+                </div>
+                <div class="stat-label">Value</div>
             </div>
-            <div class="stat-content">
-              <div class="stat-label">Total Value</div>
-              <div class="stat-value" id="statTotalValue">$0.00</div>
-              <div class="stat-change">TCG Low prices</div>
-            </div>
+            <div class="stat-value" id="statTotalValue">$0.00</div>
           </div>
 
-          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
-              <i class="lucide-icon" data-lucide="star"></i>
+          <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
+                    <i class="lucide-icon" data-lucide="star"></i>
+                </div>
+                <div class="stat-label">Best Pull</div>
             </div>
-            <div class="stat-content">
-              <div class="stat-label">Rarest Card</div>
-              <div class="stat-value" id="statRarestCard">-</div>
-              <div class="stat-change" id="statRarestRarity">-</div>
-            </div>
+            <div class="stat-value" id="statRarestCard">-</div>
+            <div class="stat-change" id="statRarestRarity" style="font-size: 0.7rem; opacity: 0.8;">-</div>
           </div>
 
-          <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl stat-card" id="planQuotaCard">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);">
-              <i class="lucide-icon" data-lucide="shield-check"></i>
+          <div class="stat-card" id="planQuotaCard">
+            <div class="stat-header">
+                <div class="stat-icon" style="background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);">
+                    <i class="lucide-icon" data-lucide="shield-check"></i>
+                </div>
+                <div class="stat-label" id="statPlanName">Plan</div>
             </div>
-            <div class="stat-content">
-              <div class="stat-label" id="statPlanName">Plan</div>
-              <div class="stat-value" id="statPlanLimit">Loading…</div>
-              <div class="stat-change" id="statPlanHint">Fetching quota…</div>
-            </div>
+            <div class="stat-value" id="statPlanLimit" style="font-size: 1.2rem;">Loading…</div>
           </div>
         </div>
 
@@ -373,6 +454,30 @@ export class CollectionPage {
               <!-- View Mode -->
               <div class="form-group">
                 <label>
+                  <i class="lucide-icon" data-lucide="layout-grid"></i>
+                  View
+                </label>
+                <div class="view-toggles">
+                  <button class="view-btn active" data-view="grid" title="Grid View">
+                    <i class="lucide-icon" data-lucide="grid"></i>
+                  </button>
+                  <button class="view-btn" data-view="list" title="List View">
+                    <i class="lucide-icon" data-lucide="list"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Condensed Toggle -->
+              <div class="form-group">
+                <label for="condensedToggle">
+                  <i class="lucide-icon" data-lucide="layers"></i>
+                  Condensed
+                </label>
+                <label class="inline-toggle">
+                  <input type="checkbox" id="condensedToggle" class="form-checkbox rounded">
+                  <span>Group Cards</span>
+                </label>
+              </div>
                   <i class="lucide-icon" data-lucide="layout-grid"></i>
                   View Mode
                 </label>
@@ -590,6 +695,52 @@ export class CollectionPage {
   }
 
   /**
+   * Mount header actions to the global page header
+   */
+  mountHeaderActions() {
+    const headerActions = document.getElementById('page-header-actions');
+    if (!headerActions) return;
+
+    // Create container for collection actions
+    const actionContainer = document.createElement('div');
+    actionContainer.id = 'collection-header-actions';
+    actionContainer.className = 'flex items-center gap-2';
+
+    actionContainer.innerHTML = `
+      <button class="btn-secondary" id="refreshCollectionBtn">
+        <i class="lucide-icon" data-lucide="refresh-cw"></i>
+        <span class="hidden sm:inline">Refresh</span>
+      </button>
+      <button class="btn-primary" id="addCardBtn">
+        <i class="lucide-icon" data-lucide="plus"></i>
+        <span class="hidden sm:inline">Add Card</span>
+      </button>
+      <button class="btn-primary" id="exportCollectionBtn">
+        <i class="lucide-icon" data-lucide="download"></i>
+        <span class="hidden sm:inline">Export</span>
+      </button>
+    `;
+
+    // Insert before auth container if it exists, otherwise append
+    const authContainer = document.getElementById('auth-container');
+    if (authContainer) {
+      headerActions.insertBefore(actionContainer, authContainer);
+    } else {
+      headerActions.appendChild(actionContainer);
+    }
+  }
+
+  /**
+   * Unmount header actions
+   */
+  unmountHeaderActions() {
+    const actionContainer = document.getElementById('collection-header-actions');
+    if (actionContainer) {
+      actionContainer.remove();
+    }
+  }
+
+  /**
    * Mount the page
    * @param {HTMLElement} container - Container element
    */
@@ -600,6 +751,12 @@ export class CollectionPage {
 
       // Initialize CollectionManager (Supabase-backed, session fallback)
       this.collectionManager = new CollectionManager(this.app?.sessionManager || null);
+
+      // Subscribe to price updates
+      this.collectionManager.subscribe('priceUpdate', this.handlePriceUpdate.bind(this));
+
+      // Mount header actions
+      this.mountHeaderActions();
 
       // Attach event listeners immediately
       this.attachEvents();
@@ -631,6 +788,9 @@ export class CollectionPage {
 
       // Remove event listeners
       this.removeEvents();
+
+      // Unmount header actions
+      this.unmountHeaderActions();
 
       // Clear container
       if (this.container) {
@@ -1436,14 +1596,21 @@ export class CollectionPage {
       const gridContainer = document.getElementById('collectionGridView');
       if (!gridContainer) return;
 
+      // Clear container
+      gridContainer.innerHTML = '';
+
       this.cardGrid = new CardGrid({
-        container: gridContainer,
         cards: this.state.sortedCards,
         cardSize: this.state.cardSize,
         onRemoveCard: this.boundHandlers.handleCardRemove,
         showRemoveButton: true,
-        emptyMessage: 'No cards to display'
+        viewMode: 'grid'
       });
+
+      const gridElement = this.cardGrid.create();
+      gridContainer.appendChild(gridElement);
+
+      console.log('[CollectionPage] CardGrid initialized and appended to DOM');
 
     } catch (error) {
       console.error('CollectionPage: Error initializing CardGrid', error);
@@ -1480,11 +1647,15 @@ export class CollectionPage {
         rarityFilter.innerHTML = '<option value="all">All Rarities</option>';
         rarities.forEach(rarity => {
           const option = document.createElement('option');
-          option.value = rarity.toLowerCase();
-          option.textContent = rarity;
+          const rarityName = typeof rarity === 'string' ? rarity : (rarity?.name || String(rarity));
+          option.value = rarityName.toLowerCase();
+          option.textContent = rarityName;
           rarityFilter.appendChild(option);
         });
-        if (rarities.map(r => r.toLowerCase()).includes(previousValue)) {
+        if (rarities.some(r => {
+          const rName = typeof r === 'string' ? r : (r?.name || String(r));
+          return rName.toLowerCase() === previousValue;
+        })) {
           rarityFilter.value = previousValue;
         }
       }
@@ -1508,6 +1679,11 @@ export class CollectionPage {
 
       if (searchInput) {
         searchInput.addEventListener('input', this.boundHandlers.handleSearchInput);
+      }
+
+      const condensedToggle = document.getElementById('condensedToggle');
+      if (condensedToggle) {
+        condensedToggle.addEventListener('change', this.boundHandlers.handleCondensedToggle);
       }
       if (setFilter) {
         setFilter.addEventListener('change', this.boundHandlers.handleFilterChange);
@@ -1564,6 +1740,18 @@ export class CollectionPage {
       }
       if (refreshPackHistoryBtn) {
         refreshPackHistoryBtn.addEventListener('click', this.boundHandlers.handlePackRefresh);
+      }
+
+      // Tab switching
+      const tabBtns = this.container.querySelectorAll('.tab-btn');
+      tabBtns.forEach(btn => {
+        btn.addEventListener('click', this.boundHandlers.handleTabChange);
+      });
+
+      // Create collection button
+      const createCollectionBtn = document.getElementById('createCollectionBtn');
+      if (createCollectionBtn) {
+        createCollectionBtn.addEventListener('click', this.boundHandlers.handleCreateCollection);
       }
 
     } catch (error) {
@@ -1988,9 +2176,44 @@ export class CollectionPage {
    */
   applyFiltersAndSort() {
     try {
+      let filtered = [...this.state.cards];
+
+      // Filter by Collection ID (if set)
+      // Filter by Collection ID (if set)
+      if (this.state.filters.collectionId) {
+        console.log('[CollectionPage] Filtering by collectionId:', this.state.filters.collectionId);
+
+        // Debug first card to see structure
+        if (filtered.length > 0) {
+          console.log('[CollectionPage] First card structure:', filtered[0]);
+          console.log('[CollectionPage] First card collectionId:', filtered[0].collectionId, typeof filtered[0].collectionId);
+        }
+
+        // We need to check if the card belongs to the collection
+        // Since we flattened the cards in getAllUserCards, we might not have the collection ID directly on the card object
+        // Let's check how we mapped it in CollectionManager.js
+        // Use loose equality to handle string/number mismatches
+        filtered = filtered.filter(card => String(card.collectionId) === String(this.state.filters.collectionId));
+        console.log('[CollectionPage] After collectionId filter:', filtered.length);
+      }
+
+      // Filter by Set
+      if (this.state.filters.set !== 'all') {
+        filtered = filtered.filter(card => (card.set?.code === this.state.filters.set) || (card.set?.name === this.state.filters.set));
+      }
+
+      // Filter by Rarity
+      if (this.state.filters.rarity !== 'all') {
+        filtered = filtered.filter(card => {
+          // Safely handle rarity comparison
+          const cardRarity = card.rarity?.key || card.rarity?.name || card.rarity || '';
+          return cardRarity.toLowerCase() === this.state.filters.rarity.toLowerCase();
+        });
+      }
+
       // Apply filters
       this.state.filteredCards = this.collectionManager.filterCards(
-        this.state.cards,
+        filtered, // Pass the already filtered cards to the manager for other filters
         this.state.filters
       );
 
@@ -2179,7 +2402,10 @@ export class CollectionPage {
     try {
       if (this.cardGrid) {
         this.cardGrid.update(this.state.sortedCards);
-        this.cardGrid.updateConfig({ cardSize: this.state.cardSize });
+        this.cardGrid.updateConfig({
+          cardSize: this.state.cardSize,
+          consolidated: this.state.consolidated
+        });
       }
     } catch (error) {
       console.error('CollectionPage: Error updating grid view', error);

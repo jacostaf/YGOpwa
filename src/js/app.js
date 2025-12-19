@@ -22,6 +22,7 @@ import { PatternManagerUI } from './ui/PatternManagerUI.js';
 import { Logger } from './utils/Logger.js';
 import { Storage } from './utils/Storage.js';
 import { AchievementManager } from '../services/AchievementManager.js';
+import { CollectionManager } from '../services/CollectionManager.js';
 
 /**
  * Main Application Class
@@ -39,6 +40,7 @@ class YGORipperApp {
         this.permissionManager = new PermissionManager();
         this.voiceEngine = null; // Initialized after permissions
         this.sessionManager = new SessionManager();
+        this.collectionManager = new CollectionManager(this.sessionManager);
         this.priceChecker = new PriceChecker();
         this.uiManager = new UIManager();
         this.trainingUI = null; // Initialized after app setup
@@ -1200,18 +1202,217 @@ class YGORipperApp {
         }
     }
 
+
+
     /**
      * Respond to session stop events regardless of origin
      * @param {Object} session - Session payload at the moment stop was emitted
      */
     handleSessionDeactivated(session) {
         try {
+            console.log('Session deactivated:', session); // Debug log
+
+            // Ensure voice is stopped
+            if (this.voiceEngine && this.voiceEngine.isListening) {
+                this.voiceEngine.stopListening();
+            }
+
             this.uiManager.updateSessionInfo(this.sessionManager.getCurrentSessionInfo());
 
             const setLabel = session?.setName || session?.setId || 'session';
             // this.uiManager.showToast(`Session stopped: ${setLabel}`, 'info');
+
+            // Prompt to add cards to collection if session has cards
+            if (session && session.cards && session.cards.length > 0) {
+                console.log('Prompting to add to collection. Card count:', session.cards.length);
+                this.promptAddSessionToCollection(session);
+            } else {
+                console.log('Session empty or invalid, skipping collection prompt');
+                this.uiManager.showToast('Session stopped (no cards to add)', 'info');
+            }
         } catch (error) {
             this.logger.error('Failed to process session stop event:', error);
+        }
+    }
+
+    /**
+     * Prompt user to add session cards to a collection
+     * @param {Object} session 
+     */
+    /**
+     * Prompt user to add session cards to a collection
+     * @param {Object} session 
+     */
+    async promptAddSessionToCollection(session) {
+        try {
+            // Fetch user collections
+            const collections = await this.collectionManager.getUserCollections();
+            let cardsToAdd = [...session.cards]; // Clone cards array for editing
+
+            // Helper to render review step
+            const renderReviewStep = (collectionId, collectionName, modal) => {
+                const content = `
+                    <div class="add-session-modal">
+                        <p>Review cards to add to <strong>${collectionName}</strong>:</p>
+                        
+                        <div class="review-card-list">
+                            ${cardsToAdd.map((card, index) => `
+                                <div class="review-card-item" data-index="${index}">
+                                    <div class="review-card-info">
+                                        <span class="review-card-name">${card.name || card.cardName}</span>
+                                        <span class="review-card-details">${card.rarity || ''} • ${card.setCode || ''}</span>
+                                    </div>
+                                    <button class="review-card-remove" title="Remove card">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="modal-actions">
+                            <button id="confirm-add-btn" class="btn btn-primary">Confirm & Add (${cardsToAdd.length})</button>
+                            <button id="cancel-add-btn" class="btn btn-secondary">Cancel</button>
+                        </div>
+                    </div>
+                `;
+
+                // Update modal content
+                const modalContent = modal.querySelector('.modal-body') || modal;
+                modalContent.innerHTML = content;
+                lucide.createIcons();
+
+                // Re-bind events
+                const confirmBtn = modal.querySelector('#confirm-add-btn');
+                const cancelBtn = modal.querySelector('#cancel-add-btn');
+
+                // Handle remove buttons
+                modal.querySelectorAll('.review-card-remove').forEach(btn => {
+                    btn.onclick = (e) => {
+                        const item = e.target.closest('.review-card-item');
+                        const index = parseInt(item.dataset.index);
+                        cardsToAdd.splice(index, 1);
+                        // Re-render to update list and indices
+                        renderReviewStep(collectionId, collectionName, modal);
+                    };
+                });
+
+                cancelBtn.onclick = () => this.uiManager.closeModal();
+
+                confirmBtn.onclick = async () => {
+                    if (cardsToAdd.length === 0) {
+                        this.uiManager.showToast('No cards to add', 'warning');
+                        return;
+                    }
+
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = 'Adding...';
+
+                    try {
+                        let addedCount = 0;
+                        for (const card of cardsToAdd) {
+                            await this.collectionManager.addCardToCollection(collectionId, card);
+                            addedCount++;
+                        }
+
+                        this.uiManager.showToast(`Successfully added ${addedCount} cards to "${collectionName}"`, 'success');
+                        this.uiManager.closeModal();
+                    } catch (error) {
+                        this.logger.error('Failed to add cards to collection:', error);
+                        this.uiManager.showToast('Failed to add some cards. See console for details.', 'error');
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = 'Confirm & Add';
+                    }
+                };
+            };
+
+            if (!collections || collections.length === 0) {
+                // Flow 1: No Collections -> Create -> Review -> Add
+                const content = `
+                    <div class="add-session-modal">
+                        <p>You have <strong>${session.cards.length}</strong> cards in this session, but no collections to save them to.</p>
+                        <p>Create a new collection to get started:</p>
+                        
+                        <div class="form-group">
+                            <label for="new-collection-name">Collection Name:</label>
+                            <input type="text" id="new-collection-name" class="form-control" placeholder="e.g., My Binder">
+                        </div>
+
+                        <div class="modal-actions">
+                            <button id="create-collection-btn" class="btn btn-primary">Create & Review Cards</button>
+                            <button id="cancel-create-btn" class="btn btn-secondary">Cancel</button>
+                        </div>
+                    </div>
+                `;
+
+                const modal = this.uiManager.createModal('Create Collection', content);
+                this.uiManager.showModal(modal);
+
+                const createBtn = modal.querySelector('#create-collection-btn');
+                const cancelBtn = modal.querySelector('#cancel-create-btn');
+                const input = modal.querySelector('#new-collection-name');
+
+                cancelBtn.onclick = () => this.uiManager.closeModal();
+
+                createBtn.onclick = async () => {
+                    const name = input.value.trim();
+                    if (!name) {
+                        this.uiManager.showToast('Please enter a collection name', 'warning');
+                        return;
+                    }
+
+                    createBtn.disabled = true;
+                    createBtn.textContent = 'Creating...';
+
+                    try {
+                        const newCollection = await this.collectionManager.createCollection(name);
+                        // Proceed to review step with new collection
+                        renderReviewStep(newCollection.id, newCollection.name, modal);
+                    } catch (error) {
+                        this.logger.error('Failed to create collection:', error);
+                        this.uiManager.showToast('Failed to create collection', 'error');
+                        createBtn.disabled = false;
+                        createBtn.textContent = 'Create & Review Cards';
+                    }
+                };
+            } else {
+                // Flow 2: Has Collections -> Select -> Review -> Add
+                const content = `
+                    <div class="add-session-modal">
+                        <p>You have <strong>${session.cards.length}</strong> cards in this session.</p>
+                        <p>Select a collection to add them to:</p>
+                        
+                        <div class="form-group">
+                            <label for="target-collection">Select Collection:</label>
+                            <select id="target-collection" class="form-control">
+                                ${collections.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                            </select>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button id="review-cards-btn" class="btn btn-primary">Review Cards</button>
+                            <button id="cancel-add-btn" class="btn btn-secondary">Cancel</button>
+                        </div>
+                    </div>
+                `;
+
+                const modal = this.uiManager.createModal('Add Session to Collection', content);
+                this.uiManager.showModal(modal);
+
+                const reviewBtn = modal.querySelector('#review-cards-btn');
+                const cancelBtn = modal.querySelector('#cancel-add-btn');
+                const select = modal.querySelector('#target-collection');
+
+                cancelBtn.onclick = () => this.uiManager.closeModal();
+
+                reviewBtn.onclick = () => {
+                    const collectionId = select.value;
+                    const collectionName = select.options[select.selectedIndex].text;
+                    renderReviewStep(collectionId, collectionName, modal);
+                };
+            }
+        } catch (error) {
+            this.logger.error('Error in promptAddSessionToCollection:', error);
+            this.uiManager.showToast('Error preparing collection prompt', 'error');
         }
     }
 

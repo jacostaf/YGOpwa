@@ -66,8 +66,13 @@ export default class CardGrid {
     container.style.setProperty('--card-width', `${this.cardSize}px`);
 
     const fragment = document.createDocumentFragment();
+    console.log('[CardGrid] Rendering grid view with', displayCards.length, 'cards');
     displayCards.forEach((card, index) => {
-      fragment.appendChild(this.createGridCardElement(card, index));
+      try {
+        fragment.appendChild(this.createGridCardElement(card, index));
+      } catch (err) {
+        console.error('[CardGrid] Error creating card element:', err, card);
+      }
     });
     container.appendChild(fragment);
 
@@ -99,11 +104,14 @@ export default class CardGrid {
    * @returns {HTMLElement} Card element
    */
   createListCardElement(card, index) {
-    const cardName = card.card_name || card.name || 'Unknown Card';
-    const cardNumber = card.cardNumber || card.card_number || card.ext_number || '';
-    const cardRarity = card.rarity || card.displayRarity || card.card_rarity || '';
-    const setCode = card.set || card.set_code || card.setInfo?.setCode || '';
+    const cardName = card.card?.name || card.card_name || card.name || 'Unknown Card';
+    const cardNumber = card.card?.number || card.cardNumber || card.card_number || card.ext_number || '';
+    const cardRarity = card.rarity?.name || card.rarity || card.displayRarity || card.card_rarity || '';
+    const setCode = card.set?.code || card.set || card.set_code || card.setInfo?.setCode || '';
+
+    // Price mapping
     const tcgLow = this.formatPrice(
+      card.pricing?.currentPrice ||
       card.tcgLow ||
       card.tcg_low ||
       card.tcg_price ||
@@ -111,6 +119,7 @@ export default class CardGrid {
       card.low_price
     );
     const tcgMarket = this.formatPrice(
+      card.pricing?.marketPrice ||
       card.tcgMarket ||
       card.tcg_market ||
       card.tcg_market_price ||
@@ -118,7 +127,7 @@ export default class CardGrid {
       card.tcgMarketPrice ||
       card.marketPrice
     );
-    const estPrice = this.formatPrice(card.price);
+    const estPrice = this.formatPrice(card.price || card.pricing?.totalValue);
     const quantity = card.quantity > 1 ? `x${card.quantity}` : '';
     const rarityClass = this.getRarityClass(cardRarity);
     const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
@@ -227,7 +236,7 @@ export default class CardGrid {
     const consolidated = new Map();
 
     this.cards.forEach(card => {
-      const key = card.name || 'Unknown Card';
+      const key = card.card?.name || card.name || 'Unknown Card';
       if (consolidated.has(key)) {
         const existing = consolidated.get(key);
         existing.quantity = (existing.quantity || 1) + 1;
@@ -258,15 +267,32 @@ export default class CardGrid {
    * @returns {HTMLElement} Card element
    */
   createGridCardElement(card, index) {
-    const cardName = card.name || 'Unknown Card';
-    const cardSet = card.set || '';
-    const cardNumber = card.cardNumber || '';
-    const cardRarity = card.rarity || '';
-    const tcgLow = this.formatPrice(card.tcgLow || card.tcg_price);
-    const tcgMarket = this.formatPrice(card.tcgMarket || card.tcg_market_price);
+    if (index === 0) {
+      // console.log('[CardGrid] First card data structure:', JSON.stringify(card, null, 2));
+      const urlToLoad = card.image_url || card.image_small || card.imageUrl || card.image_url_small;
+      console.log('[CardGrid] ATTEMPTING TO LOAD IMAGE URL:', urlToLoad);
+      console.log('[CardGrid] Full Card Object:', card);
+    }
+    const cardName = card.card?.name || card.name || 'Unknown Card';
+    const cardSet = card.set?.code || card.set || '';
+    const cardNumber = card.card?.number || card.cardNumber || '';
+    const cardRarity = card.rarity?.name || card.rarity || '';
+
+    // Price mapping
+    const tcgLow = this.formatPrice(
+      card.pricing?.currentPrice ||
+      card.tcgLow ||
+      card.tcg_price
+    );
+    const tcgMarket = this.formatPrice(
+      card.pricing?.marketPrice ||
+      card.tcgMarket ||
+      card.tcg_market_price
+    );
+
     const quantity = card.quantity > 1 ? `x${card.quantity}` : '';
     const rarityClass = this.getRarityClass(cardRarity);
-    const cardImage = this.getSafeImage(card.imageUrl || card.image_url || card.image_url_small);
+    const cardImage = this.getSafeImage(card.image_url || card.image_small || card.imageUrl || card.image_url_small);
 
     const cardEl = document.createElement('div');
     cardEl.className = `ygo-card card-grid-item card-stagger-${(index % 8) + 1}`;
@@ -466,9 +492,11 @@ export default class CardGrid {
     this.cards = cards || [];
 
     if (this.element && this.element.parentNode) {
+      const oldElement = this.element;
+      const parent = oldElement.parentNode;
       const newElement = this.create();
-      this.element.parentNode.replaceChild(newElement, this.element);
-      this.element = newElement;
+      parent.replaceChild(newElement, oldElement);
+      // this.element is updated by create()
     }
   }
 
@@ -492,9 +520,11 @@ export default class CardGrid {
 
     // Re-render if element exists
     if (this.element && this.element.parentNode) {
+      const oldElement = this.element;
+      const parent = oldElement.parentNode;
       const newElement = this.create();
-      this.element.parentNode.replaceChild(newElement, this.element);
-      this.element = newElement;
+      parent.replaceChild(newElement, oldElement);
+      // this.element is updated by create()
     }
   }
 

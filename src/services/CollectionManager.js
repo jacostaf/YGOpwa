@@ -6,10 +6,18 @@
 
 import { supabase } from '../lib/supabaseClient.js';
 import { authService } from './authService.js';
+import { PriceChecker } from '../js/price/PriceChecker.js';
+import { Storage } from '../js/utils/Storage.js';
 
 export class CollectionManager {
   constructor(sessionManager) {
     this.sessionManager = sessionManager;
+    // Initialize PriceChecker with storage for persistent caching
+    this.storage = new Storage();
+    this.priceChecker = new PriceChecker(this.storage);
+    // Start initialization asynchronously
+    this.priceChecker.initialize().catch(err => console.warn('[CollectionManager] PriceChecker init failed:', err));
+
     this.cache = {
       allCards: null,
       stats: null,
@@ -18,6 +26,23 @@ export class CollectionManager {
       userCollections: null,
       collectionsLastUpdate: null
     };
+
+    // Event system
+    this.listeners = {
+      priceUpdate: []
+    };
+  }
+
+  subscribe(event, callback) {
+    if (this.listeners[event]) {
+      this.listeners[event].push(callback);
+    }
+  }
+
+  notify(event, data) {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach(cb => cb(data));
+    }
   }
 
   /**
@@ -105,6 +130,8 @@ export class CollectionManager {
     const user = authService.getUser();
     if (!user || !supabase) throw new Error('User not authenticated');
 
+    console.log('[CollectionManager] Adding card to collection:', collectionId, card);
+
     const { data, error } = await supabase
       .from('collection_cards')
       .insert({
@@ -118,7 +145,12 @@ export class CollectionManager {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[CollectionManager] Error adding card:', error);
+      throw error;
+    }
+
+    console.log('[CollectionManager] Card added successfully:', data);
     this.invalidateCache();
     return data;
   }
@@ -169,16 +201,21 @@ export class CollectionManager {
       if (cardError) throw cardError;
 
       // Map to standardized format matching CollectionPage expectations
-      return cards.map(card => {
+      const mappedCards = cards.map(card => {
         const collection = collections.find(c => c.id === card.collection_id);
         return {
           id: card.id,
+          collectionId: card.collection_id, // Add collectionId for filtering
           quantity: card.quantity || 1,
           createdAt: card.added_at || new Date().toISOString(),
           card: {
             name: card.name,
-            number: card.set_code, // Fallback
+            number: card.card_number || card.set_code, // Prefer card_number if available
           },
+          // Ensure image properties are passed through
+          image_url: card.image_url || card.image_small,
+          image_small: card.image_small || card.image_url,
+
           set: {
             code: card.set_code,
             name: card.set_code // Fallback
@@ -195,9 +232,130 @@ export class CollectionManager {
         };
       });
 
+      // Fetch prices for unique cards
+      // Create unique keys based on set code and rarity
+      const uniqueKeys = new Set();
+      const uniqueCardsToFetch = [];
+
+      mappedCards.forEach(card => {
+        // Clean card name: remove rarity in parentheses if present
+        let cleanName = card.card.name;
+        if (cleanName.includes('(')) {
+          cleanName = cleanName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+        }
+
+        // Handle set codes disguised as card numbers (match fetchPricesForCards logic)
+        let cleanCardNumber = card.card.number;
+        if (cleanCardNumber === card.set.code && !/\d/.test(cleanCardNumber)) {
+          cleanCardNumber = null;
+        }
+
+        // Synchronous cache check
+        const cacheKey = this.priceChecker.generateCacheKey({
+          cardNumber: cleanCardNumber || 'unknown',
+          rarity: card.rarity.name,
+          cardName: cleanName, // Use clean name
+          condition: 'near-mint', // Match PriceChecker default (lowercase)
+          artVariant: '' // Explicitly include artVariant as empty string
+        });
+        const cached = this.priceChecker.getCachedPrice(cacheKey);
+
+        if (cached) {
+          // Update pricing if available
+          if (cached.aggregated) {
+            const price = cached.aggregated.averagePrice || 0;
+            card.pricing.currentPrice = price;
+            card.pricing.totalValue = price * card.quantity;
+            card.tcgLow = price;
+          }
+
+          // Update image if missing and available in cache
+          // PriceChecker returns { data: { image_url: ... }, aggregated: ... }
+          const cachedImage = cached.data?.image_url || cached.image_url;
+          if ((!card.image_url || card.image_url.includes('back.jpg')) && cachedImage) {
+            card.image_url = cachedImage;
+            card.image_small = cachedImage;
+          }
+        } else {
+          // Only fetch if NOT in cache
+          const key = `${card.set.code}|${card.rarity.name}`;
+          if (!uniqueKeys.has(key)) {
+            uniqueKeys.add(key);
+            uniqueCardsToFetch.push(card);
+          }
+        }
+      });
+
+      console.log(`[CollectionManager] Fetching prices for ${uniqueCardsToFetch.length} unique cards`);
+
+      // Fetch prices in parallel (with simple batching/concurrency limit if needed, but PriceChecker handles some caching)
+      // We'll use a simple Promise.all for now as the number of unique cards shouldn't be huge for a single user yet
+      const priceMap = new Map();
+
+      // Fetch prices in background (non-blocking)
+      if (uniqueCardsToFetch.length > 0) {
+        this.fetchPricesForCards(uniqueCardsToFetch).catch(err =>
+          console.warn('[CollectionManager] Background price fetch failed:', err)
+        );
+      }
+
+      return mappedCards;
     } catch (error) {
       console.error('Error fetching all user cards:', error);
       return [];
+    }
+  }
+
+  /**
+   * Fetch prices for a list of cards and update cache/storage
+   * @param {Array} cards 
+   */
+  async fetchPricesForCards(cards) {
+    console.log(`[CollectionManager] Background fetching prices for ${cards.length} unique cards`);
+
+    // Process in chunks to avoid overwhelming the API
+    const chunkSize = 5;
+    let hasUpdates = false;
+
+    for (let i = 0; i < cards.length; i += chunkSize) {
+      const chunk = cards.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(async (card) => {
+        try {
+          // Don't send set code as card number if it looks like a set code (no numbers/hyphens)
+          // Typical card number: "LOB-EN001" or "LOB-001"
+          // Set code: "LOB" or "SUDA"
+          let cardNumber = card.card.number;
+          if (cardNumber === card.set.code && !/\d/.test(cardNumber)) {
+            cardNumber = null; // It's just a set code, don't use it as card number
+          }
+
+          // Clean card name: remove rarity in parentheses if present
+          // e.g. "Evil HERO Neos Lord (Quarter Century Secret Rare)" -> "Evil HERO Neos Lord"
+          let cleanName = card.card.name;
+          if (cleanName.includes('(')) {
+            cleanName = cleanName.replace(/\s*\([^)]+\)\s*$/, '').trim();
+          }
+
+          const result = await this.priceChecker.checkPrice({
+            cardNumber: cardNumber,
+            rarity: card.rarity.name,
+            cardName: cleanName,
+            setCode: card.set.code // Pass set code explicitly
+          });
+
+          // Only mark as update if it didn't come from cache
+          if (!result.fromCache) {
+            hasUpdates = true;
+          }
+        } catch (err) {
+          // Ignore individual errors
+        }
+      }));
+
+      // Notify listeners incrementally
+      if (hasUpdates) {
+        this.notify('priceUpdate', { count: chunk.length });
+      }
     }
   }
 
@@ -517,7 +675,17 @@ export class CollectionManager {
       allCards.forEach(card => {
         const quantity = Number(card.quantity) && Number(card.quantity) > 0 ? Number(card.quantity) : 1;
         const unitValue = parseFloat(card.tcgLow) || 0;
-        const rarityKey = (card.rarity || 'Common');
+
+        // Safely handle rarity
+        let rarityKey = 'common';
+        if (typeof card.rarity === 'string') {
+          rarityKey = card.rarity;
+        } else if (card.rarity && typeof card.rarity.name === 'string') {
+          rarityKey = card.rarity.name;
+        } else if (card.rarity && typeof card.rarity.key === 'string') {
+          rarityKey = card.rarity.key;
+        }
+
         const rarityScore = card.rareScoreContribution !== undefined
           ? parseFloat(card.rareScoreContribution) || 0
           : (rarityOrder[rarityKey.toLowerCase()] || 0) * quantity;
