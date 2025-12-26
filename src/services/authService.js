@@ -5,6 +5,8 @@
 
 import { supabase } from '../lib/supabaseClient.js';
 
+console.log('AuthService module loaded (TIMESTAMP: ' + Date.now() + ')');
+
 class AuthService {
   constructor() {
     this.user = null;
@@ -12,7 +14,16 @@ class AuthService {
     this.profile = null;
     this._authStateListeners = [];
 
-    this.initialize();
+    // Initialize with a global timeout to prevent initPromise from hanging forever
+    const initPromise = this.initialize();
+    const globalTimeout = new Promise((resolve) =>
+      setTimeout(() => {
+        console.warn('AuthService: Initialization global timeout reached');
+        resolve();
+      }, 8000) // Reduced from 20s to 8s
+    );
+
+    this.initPromise = Promise.race([initPromise, globalTimeout]);
   }
 
   /**
@@ -21,13 +32,48 @@ class AuthService {
   async initialize() {
     if (!supabase) return;
 
-    // Get initial session
-    const { data: { session } } = await supabase.auth.getSession();
-    this.session = session;
-    this.user = session?.user || null;
+    // Get initial session with timeout
+    console.log('AuthService: Fetching initial session...');
+    const sessionPromise = supabase.auth.getSession();
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(() => resolve({ data: { session: null }, error: new Error('Session fetch timeout') }), 4000) // Reduced from 15s to 4s
+    );
+
+    const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]);
+
+    if (error) {
+      console.warn('AuthService: Initial session fetch failed or timed out:', error.message);
+
+      // FALLBACK: If getSession timed out, try to recover from localStorage manually
+      // This prevents the app from logging out the user just because the network was slow
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const projectRef = 'kguazmofmstmethzoeyn';
+        const key = `sb-${projectRef}-auth-token`;
+        const storedSession = window.localStorage.getItem(key);
+        if (storedSession) {
+          try {
+            const parsed = JSON.parse(storedSession);
+            if (parsed && parsed.user) {
+              console.log('AuthService: Recovered session from localStorage after timeout');
+              this.session = parsed;
+              this.user = parsed.user;
+              // Set the session on the client so RLS works
+              await supabase.auth.setSession(parsed);
+            }
+          } catch (e) {
+            console.warn('AuthService: Failed to parse recovered session:', e);
+          }
+        }
+      }
+    } else {
+      console.log('AuthService: Initial session fetched successfully');
+      this.session = session;
+      this.user = session?.user || null;
+    }
 
     if (this.user) {
-      await this.fetchProfile();
+      // Fetch profile in background, don't await it to unblock initialization
+      this.fetchProfile().catch(err => console.warn('AuthService: Background profile fetch failed:', err));
     }
 
     // Listen for auth changes
@@ -147,14 +193,11 @@ class AuthService {
    * Get current user (async wrapper for compatibility)
    */
   async getCurrentUser() {
-    if (!supabase) return { user: null, error: 'Supabase not configured' };
-
     try {
       // 1. FAST PATH: Check localStorage manually for a session
-      // This bypasses supabase.auth.getSession() which can hang if it tries to refresh a stale token synchronously.
-      // We trust the local token initially to unblock the UI.
+      // This bypasses everything else to unblock the UI immediately.
       if (typeof window !== 'undefined' && window.localStorage) {
-        const projectRef = 'kguazmofmstmethzoeyn'; // Hardcoded for now, or extract from URL
+        const projectRef = 'kguazmofmstmethzoeyn';
         const key = `sb-${projectRef}-auth-token`;
         const storedSession = window.localStorage.getItem(key);
 
@@ -162,8 +205,17 @@ class AuthService {
           try {
             const session = JSON.parse(storedSession);
             if (session?.user) {
-              console.log('Optimistic auth: Found local session, returning user immediately.');
-              // We return the user immediately. Supabase will validate in background.
+              // Ensure the supabase client has the session set if we're returning optimistically
+              // This is crucial for RLS to work in subsequent queries
+              if (session.access_token && !this.session) {
+                try {
+                  await supabase.auth.setSession(session);
+                  this.session = session;
+                  this.user = session.user;
+                } catch (err) {
+                  console.warn('Failed to set session optimistically:', err);
+                }
+              }
               return { user: session.user, error: null };
             }
           } catch (e) {
@@ -172,7 +224,23 @@ class AuthService {
         }
       }
 
-      // 2. SLOW PATH: If no local token found, use standard check
+      // 2. FAST EXIT: If no local token, we can assume logged out for UI purposes
+      // This prevents waiting for initPromise (and its timeouts) when the user is clearly not logged in.
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const projectRef = 'kguazmofmstmethzoeyn';
+        const key = `sb-${projectRef}-auth-token`;
+        if (!window.localStorage.getItem(key)) {
+          console.log('AuthService: No local session found, returning null immediately');
+          return { user: null, error: null };
+        }
+      }
+
+      // 3. WAIT FOR INIT: If we have a token but haven't initialized yet, wait for full initialization
+      await this.initPromise;
+
+      if (!supabase) return { user: null, error: 'Supabase not configured' };
+
+      // 3. SLOW PATH: Standard check
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
@@ -194,20 +262,31 @@ class AuthService {
     if (!this.user || !supabase) return null;
 
     try {
-      const { data, error } = await supabase
+      console.log('AuthService: Fetching profile for user:', this.user.id);
+      // Add a timeout to profile fetch to prevent blocking initialization
+      const profilePromise = supabase
         .from('user_profiles')
         .select('*')
         .eq('id', this.user.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle to avoid error if no profile exists
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000) // Reduced from 15s to 5s
+      );
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]);
 
       if (error) {
         console.warn('Error fetching profile:', error);
         // Fallback to metadata if profile fetch fails
         this.profile = {
           id: this.user.id,
-          username: this.user.user_metadata?.username,
+          username: this.user.user_metadata?.username || this.user.email?.split('@')[0],
           avatar_url: this.user.user_metadata?.avatar_url
         };
+      } else if (!data) {
+        console.log('AuthService: No profile found, creating one...');
+        this.profile = await this.createProfile();
       } else {
         this.profile = data;
       }
@@ -216,6 +295,39 @@ class AuthService {
     } catch (err) {
       console.error('Failed to fetch profile:', err);
       return null;
+    }
+  }
+
+  /**
+   * Create a new user profile
+   */
+  async createProfile() {
+    if (!this.user || !supabase) return null;
+
+    const newProfile = {
+      id: this.user.id,
+      username: this.user.user_metadata?.username || this.user.email?.split('@')[0],
+      avatar_url: this.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${this.user.id}`,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .insert([newProfile])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating profile:', error);
+        return newProfile; // Return the object anyway as fallback
+      }
+
+      console.log('AuthService: Profile created successfully');
+      return data;
+    } catch (err) {
+      console.error('Failed to create profile:', err);
+      return newProfile;
     }
   }
 

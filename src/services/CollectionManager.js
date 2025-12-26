@@ -50,32 +50,40 @@ export class CollectionManager {
    * @returns {Promise<Array>} User collections
    */
   async getUserCollections() {
-    const user = authService.getUser();
+    const { user } = await authService.getCurrentUser();
+    console.log('[CollectionManager] getUserCollections - User:', user?.id || 'null');
     if (!user || !supabase) return [];
 
     // Check cache
     if (this.cache.userCollections &&
       this.cache.collectionsLastUpdate &&
       (Date.now() - this.cache.collectionsLastUpdate < this.cache.ttl)) {
+      console.log('[CollectionManager] Returning cached collections:', this.cache.userCollections.length);
       return this.cache.userCollections;
     }
 
     try {
+      console.log('[CollectionManager] Fetching collections from Supabase for user:', user.id);
       const { data, error } = await supabase
         .from('user_collections')
         .select(`
           *,
           cards:collection_cards(*)
         `)
+        .eq('user_id', user.id) // Ensure we filter by user_id
         .order('updated_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[CollectionManager] Supabase error fetching collections:', error);
+        throw error;
+      }
 
+      console.log('[CollectionManager] Fetched collections:', data?.length || 0);
       this.cache.userCollections = data;
       this.cache.collectionsLastUpdate = Date.now();
       return data;
     } catch (error) {
-      console.error('Error fetching user collections:', error);
+      console.error('[CollectionManager] Error fetching user collections:', error);
       return [];
     }
   }
@@ -177,7 +185,7 @@ export class CollectionManager {
    * @returns {Promise<Array>} All user cards
    */
   async getAllUserCards() {
-    const user = authService.getUser();
+    const { user } = await authService.getCurrentUser();
     if (!user || !supabase) return [];
 
     try {
@@ -187,10 +195,16 @@ export class CollectionManager {
         .select('id, name')
         .eq('user_id', user.id);
 
+      console.log('[CollectionManager] User collections fetch result:', collections?.length, colError);
+
       if (colError) throw colError;
-      if (!collections || collections.length === 0) return [];
+      if (!collections || collections.length === 0) {
+        console.warn('[CollectionManager] No collections found for user:', user.id);
+        return [];
+      }
 
       const collectionIds = collections.map(c => c.id);
+      console.log('[CollectionManager] Fetching cards for collection IDs:', collectionIds);
 
       // Fetch cards for these collections
       const { data: cards, error: cardError } = await supabase
@@ -198,7 +212,12 @@ export class CollectionManager {
         .select('*')
         .in('collection_id', collectionIds);
 
-      if (cardError) throw cardError;
+      console.log('[CollectionManager] Collection cards fetch result:', cards?.length || 0, cardError || 'no error');
+
+      if (cardError) {
+        console.error('[CollectionManager] Supabase error fetching cards:', cardError);
+        throw cardError;
+      }
 
       // Map to standardized format matching CollectionPage expectations
       const mappedCards = cards.map(card => {
@@ -215,6 +234,13 @@ export class CollectionManager {
           // Ensure image properties are passed through
           image_url: card.image_url || card.image_small,
           image_small: card.image_small || card.image_url,
+
+          // Flat properties for filtering/sorting compatibility
+          cardName: card.name,
+          setCode: card.set_code,
+          rarity: card.rarity,
+          cardNumber: card.card_number || card.set_code,
+          addedAt: card.added_at || new Date().toISOString(),
 
           set: {
             code: card.set_code,

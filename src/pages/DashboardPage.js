@@ -180,7 +180,7 @@ export default class DashboardPage {
 
     try {
       const types = [LEADERBOARD_TYPES.VALUE, LEADERBOARD_TYPES.QUANTITY, LEADERBOARD_TYPES.RARITY];
-      const results = await Promise.all(types.map((type) => this.leaderboardService.fetchLeaderboard(type, { limit: 1 }))); 
+      const results = await Promise.all(types.map((type) => this.leaderboardService.fetchLeaderboard(type, { limit: 1 })));
 
       const erroredResult = results.find((result) => result && result.error);
       if (erroredResult) {
@@ -248,10 +248,6 @@ export default class DashboardPage {
   render() {
     return `
       <div class="page-content dashboard-page">
-        <!-- Main Stats Grid -->
-        <section class="dashboard-main-stats grid gap-6 mb-8" id="dashboard-main-stats" role="region" aria-label="Main statistics">
-          <!-- Stats cards will be inserted here -->
-        </section>
 
         <!-- Secondary Grid (Activity + Quick Stats) -->
         <div class="dashboard-secondary-grid grid gap-6">
@@ -298,58 +294,6 @@ export default class DashboardPage {
     `;
   }
 
-  /**
-   * Render main stats cards
-   * @private
-   */
-  renderMainStats() {
-    try {
-      const container = this.container.querySelector('#dashboard-main-stats');
-      if (!container) {
-        console.warn('Main stats container not found');
-        return;
-      }
-
-      // Clear existing cards
-      container.innerHTML = '';
-      this.statsCards = [];
-
-      // Get stats from dashboard service
-      if (!this.dashboardService) {
-        this.initializeDashboardService();
-      }
-
-      const mainStats = this.dashboardService.getMainStats();
-
-      // Ensure mainStats is an array
-      if (!Array.isArray(mainStats)) {
-        console.error('mainStats is not an array:', mainStats);
-        return;
-      }
-
-      // Create stat cards
-      mainStats.forEach(stat => {
-        const card = new StatsCard({
-          icon: stat.icon || 'Activity',
-          label: stat.label || 'N/A',
-          value: stat.value || '0',
-          trend: stat.trend || null,
-          trendClass: stat.trendClass || 'text-green-400 bg-green-400/10'
-        });
-
-        const cardElement = card.create();
-        container.appendChild(cardElement);
-        this.statsCards.push(card);
-      });
-
-      // Initialize Lucide icons
-      if (window.lucide) {
-        window.lucide.createIcons();
-      }
-    } catch (error) {
-      console.error('Error rendering main stats:', error);
-    }
-  }
 
   /**
    * Render recent activity feed
@@ -399,11 +343,10 @@ export default class DashboardPage {
                 <div class="text-xs text-neutral-500 mt-1">${this.escapeHtml(activity.typeLabel || 'Activity')}</div>
               </div>
             </div>
-            <div class="activity-value text-sm font-medium ${
-              activity.type === 'price' ? 'text-green-400' :
-              activity.type === 'pack' ? 'text-neutral-300' :
+            <div class="activity-value text-sm font-medium ${activity.type === 'price' ? 'text-green-400' :
+            activity.type === 'pack' ? 'text-neutral-300' :
               'text-neutral-400'
-            }">
+          }">
               ${this.escapeHtml(activity.value || 'N/A')}
             </div>
           </article>
@@ -459,7 +402,6 @@ export default class DashboardPage {
       this.dashboardService.clearCache();
 
       // Re-render all sections
-      this.renderMainStats();
       this.renderRecentActivity();
       this.renderQuickStats();
 
@@ -534,7 +476,6 @@ export default class DashboardPage {
       this.initializeDashboardService();
 
       // Render all sections
-      this.renderMainStats();
       this.renderRecentActivity();
       this.renderQuickStats();
       this.initializeLeaderboardService();
@@ -550,6 +491,14 @@ export default class DashboardPage {
 
       // Listen for data updates
       this.attachEventListeners();
+
+      // Listen for auth changes to reload data
+      this.boundHandlers.handleAuthChange = (e) => {
+        const { user } = e.detail;
+        console.log('[DashboardPage] Auth changed, refreshing data...', user?.email || 'Guest');
+        this.refreshData();
+      };
+      window.addEventListener('auth:changed', this.boundHandlers.handleAuthChange);
 
       console.log('DashboardPage mounted successfully');
     } catch (error) {
@@ -605,6 +554,11 @@ export default class DashboardPage {
     }
 
     // Stop auto-refresh
+    // Cleanup auth listener
+    if (this.boundHandlers?.handleAuthChange) {
+      window.removeEventListener('auth:changed', this.boundHandlers.handleAuthChange);
+    }
+
     this.stopAutoRefresh();
 
     if (this.container) {
@@ -615,7 +569,6 @@ export default class DashboardPage {
     }
 
     // Destroy stat cards
-    this.statsCards.forEach(card => card.destroy());
     this.statsCards = [];
 
     // Clear container

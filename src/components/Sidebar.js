@@ -60,10 +60,23 @@ export default class Sidebar {
     // Initialize Lucide icons after rendering
     setTimeout(() => {
       IconLoader.refreshIcons();
+      // Dispatch render event so other components (like auth) can re-initialize
+      this.dispatchEvent('sidebar:render');
     }, 0);
   }
 
   renderHeader() {
+    if (this.context === 'collection') {
+      return `
+        <div class="sidebar-header collection-header">
+            <div class="sidebar-logo">
+                <i data-lucide="sparkles" class="sidebar-logo-icon"></i>
+                <span class="logo-text">VoxRip</span>
+            </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="sidebar-header">
         <div class="sidebar-logo">
@@ -81,6 +94,10 @@ export default class Sidebar {
   }
 
   renderNavigation() {
+    if (this.context === 'collection') {
+      return this.renderCollectionNavigation();
+    }
+
     const navItemsHtml = this.navItems.map(item => `
       <button
         class="sidebar-nav-item ${item.id === this.activeItem ? 'active' : ''}"
@@ -102,9 +119,78 @@ export default class Sidebar {
     `;
   }
 
+  renderCollectionNavigation() {
+    const collections = this.contextData?.collections || [];
+    const activeCollection = this.contextData?.activeCollection || 'all';
+
+    const collectionsHtml = collections.map(col => `
+      <div class="nav-item ${activeCollection === col.id ? 'active' : ''}" 
+           data-collection-id="${col.id}">
+          <i data-lucide="folder"></i>
+          <span class="label">${col.name}</span>
+          <span class="count">${col.count || 0}</span>
+      </div>
+    `).join('');
+
+    return `
+      <nav class="sidebar-nav" role="menu" aria-label="Collection navigation">
+        <div class="nav-group">
+            <button class="btn-secondary back-btn" id="backToDashboardBtn">
+                <i data-lucide="arrow-left"></i>
+                Back to Dashboard
+            </button>
+
+            <div class="nav-label">Library</div>
+            <div class="nav-item ${activeCollection === 'all' ? 'active' : ''}" 
+                 data-collection-id="all">
+                <i data-lucide="layers"></i>
+                <span>All Cards</span>
+                <span class="count">${this.contextData?.totalCards || 0}</span>
+            </div>
+            <div class="nav-item ${activeCollection === 'favorites' ? 'active' : ''}" 
+                 data-collection-id="favorites">
+                <i data-lucide="heart"></i>
+                <span>Favorites</span>
+                <span class="count">${this.contextData?.favoritesCount || 0}</span>
+            </div>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-label">Collections</div>
+            ${collectionsHtml}
+        </div>
+
+        <div class="sidebar-actions">
+            <button class="btn-secondary new-collection-btn" id="sidebarCreateCollectionBtn">
+                <i data-lucide="plus-circle"></i>
+                New Collection
+            </button>
+        </div>
+      </nav>
+    `;
+  }
+
+  setContext(context, data = {}) {
+    this.context = context;
+    this.contextData = data;
+
+    // Toggle context class
+    if (this.context === 'collection') {
+      this.container.classList.add('collection-context');
+    } else {
+      this.container.classList.remove('collection-context');
+    }
+
+    this.render();
+    this.attachEvents(); // Re-attach events for new elements
+  }
+
   renderFooter() {
     return `
       <div class="sidebar-footer">
+        <!-- Auth UI Container -->
+        <div id="auth-container"></div>
+        
         <div class="sidebar-version">
           <i data-lucide="code" class="sidebar-version-icon"></i>
           <span class="sidebar-version-text">v2.0.0</span>
@@ -117,7 +203,7 @@ export default class Sidebar {
   }
 
   attachEvents() {
-    // Navigation item clicks
+    // Navigation item clicks (Standard)
     this.container.querySelectorAll('.sidebar-nav-item').forEach(item => {
       item.addEventListener('click', (e) => {
         const navId = e.currentTarget.getAttribute('data-nav-id');
@@ -130,6 +216,40 @@ export default class Sidebar {
         }
       });
     });
+
+    // Collection Navigation Clicks (Context)
+    if (this.context === 'collection') {
+      this.container.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          const collectionId = e.currentTarget.getAttribute('data-collection-id');
+
+          // Update active state visually
+          this.container.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+          e.currentTarget.classList.add('active');
+
+          // Dispatch event for CollectionPage to handle
+          this.dispatchEvent('collection:select', { collectionId });
+
+          if (this.isMobile) this.close();
+        });
+      });
+
+      const backBtn = this.container.querySelector('#backToDashboardBtn');
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          this.setContext('default'); // Reset context
+          this.onNavigate('dashboard'); // Navigate back
+          if (this.isMobile) this.close();
+        });
+      }
+
+      const createBtn = this.container.querySelector('#sidebarCreateCollectionBtn');
+      if (createBtn) {
+        createBtn.addEventListener('click', () => {
+          this.dispatchEvent('collection:create');
+        });
+      }
+    }
 
     // Close button (mobile)
     const closeBtn = this.container.querySelector('.sidebar-close');

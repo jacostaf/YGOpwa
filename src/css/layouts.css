@@ -25,8 +25,8 @@
    ================================================ */
 
 .sidebar {
-  width: 240px;
-  min-width: 240px;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
   height: 100vh;
   position: fixed;
   left: 0;
@@ -63,9 +63,12 @@
 
 /* Sidebar Header */
 .sidebar-header {
-  padding: var(--spacing-lg, 1.5rem) var(--spacing-md, 1rem);
+  padding: var(--spacing-xl, 2rem) var(--spacing-md, 1rem);
   border-bottom: 1px solid var(--border-primary, #262626);
   flex-shrink: 0;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
 }
 
 .sidebar-logo {
@@ -100,8 +103,8 @@
 
 .main-content {
   flex: 1;
-  width: calc(100% - 240px);
-  margin-left: 240px;
+  width: calc(100% - var(--sidebar-width));
+  margin-left: var(--sidebar-width);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -168,6 +171,16 @@
   /* 24px vertical, 32px horizontal - matches mockup */
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* Full Width Layout Override for Collection/Dashboard */
+.full-width-layout .page-container {
+  padding: 0 !important;
+}
+
+.full-width-layout .page-content {
+  max-width: none !important;
+  margin: 0 !important;
 }
 
 /* Custom scrollbar for page container */
@@ -363,7 +376,7 @@
 .status-bar {
   position: fixed;
   bottom: 0;
-  left: 240px;
+  left: var(--sidebar-width);
   right: 0;
   height: 32px;
   background: var(--card-bg, rgba(23, 23, 23, 0.4));

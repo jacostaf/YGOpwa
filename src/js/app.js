@@ -198,6 +198,12 @@ class YGORipperApp {
                 const { initAuth } = await import('./authInit.js');
                 await initAuth();
                 this.logger.info('Authentication initialized');
+
+                // Re-initialize auth UI whenever sidebar renders (to restore #auth-container)
+                document.addEventListener('sidebar:render', () => {
+                    this.logger.info('Sidebar rendered, re-initializing auth UI');
+                    initAuth();
+                });
             } catch (error) {
                 this.logger.warn('Authentication not loaded (optional feature):', error.message);
             }

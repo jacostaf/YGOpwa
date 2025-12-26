@@ -32,7 +32,7 @@
     <link rel="stylesheet" href="src/css/sidebar.css">
     <link rel="stylesheet" href="src/css/settings.css">
     <link rel="stylesheet" href="src/css/theme-settings.css">
-    <link rel="stylesheet" href="src/css/collection.css">
+    <link rel="stylesheet" href="src/css/collection.css?v=2.1.0">
     <link rel="stylesheet" href="src/css/pack-opening-compact.css">
     <link rel="stylesheet" href="src/css/animations.css">
     <link rel="stylesheet" href="src/css/accessibility.css">
@@ -95,6 +95,8 @@
 
             <!-- Sidebar Footer -->
             <div class="sidebar-footer">
+                <!-- Auth UI Container -->
+                <div id="auth-container"></div>
                 <span id="app-version">v2.0.0</span>
             </div>
         </aside>
@@ -104,16 +106,7 @@
 
         <!-- Main Content Area -->
         <main class="main-content" id="main-content" role="main" aria-label="Main content">
-            <!-- Page Header -->
-            <header class="page-header" id="page-header" role="banner">
-                <div class="page-header-title">
-                    <h1 id="page-title">Dashboard</h1>
-                </div>
-                <div class="page-header-actions" id="page-header-actions">
-                    <!-- Auth UI Container -->
-                    <div id="auth-container"></div>
-                </div>
-            </header>
+            <!-- Page Header Removed -->
 
             <!-- Page Container (dynamic content) -->
             <div class="page-container" id="page-container">
@@ -296,9 +289,17 @@
                 }
             });
 
-            // Store instances globally for debugging
+            // Store instances globally for debugging and access
             window.router = router;
-            window.sidebar = sidebar;
+            // Avoid overwriting window.sidebar if it's read-only, but try anyway or use app.sidebar
+            try { window.sidebar = sidebar; } catch (e) { console.warn('Could not set window.sidebar', e); }
+
+            if (window.app) {
+                window.app.sidebar = sidebar;
+                console.log('Sidebar attached to window.app');
+            } else {
+                console.warn('window.app not found when attaching sidebar');
+            }
 
             console.log('Router and Sidebar initialized successfully');
         });

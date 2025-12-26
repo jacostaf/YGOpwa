@@ -131,26 +131,34 @@ export class CollectionPage {
   /**
    * Handle tab switching
    */
-  async handleTabChange(e) {
-    const target = e.target;
-    const tabId = target.dataset.tab;
+  async handleTabChange(tabId) {
+    if (typeof tabId === 'object' && tabId.target) {
+      tabId = tabId.target.dataset.tab;
+    }
 
-    // Update active state
-    this.container.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    target.classList.add('active');
+    console.log('[CollectionPage] Tab change:', tabId);
 
-    // Show/Hide views
+    // Update buttons
+    this.container.querySelectorAll('.tab-btn').forEach(btn => {
+      const isActive = btn.dataset.tab === tabId;
+      btn.classList.toggle('active', isActive);
+    });
+
+    // Update Views
+    const allCardsView = document.getElementById('all-cards-view');
+    const myCollectionsView = document.getElementById('my-collections-view');
+
     if (tabId === 'all-cards') {
-      this.container.querySelector('#all-cards-view').style.display = 'block';
-      this.container.querySelector('#my-collections-view').style.display = 'none';
+      if (allCardsView) allCardsView.style.display = 'block';
+      if (myCollectionsView) myCollectionsView.style.display = 'none';
 
       // Clear collection filter
       this.state.filters.collectionId = null;
       this.applyFiltersAndSort();
       this.updateDisplay();
     } else {
-      this.container.querySelector('#all-cards-view').style.display = 'none';
-      this.container.querySelector('#my-collections-view').style.display = 'block';
+      if (allCardsView) allCardsView.style.display = 'none';
+      if (myCollectionsView) myCollectionsView.style.display = 'block';
       await this.loadUserCollections();
     }
   }
@@ -274,13 +282,9 @@ export class CollectionPage {
 
             this.app.showToast(`Viewing collection`, 'info');
           } else if (deleteBtn) {
-            // ... delete logic
             const id = deleteBtn.dataset.id;
-            if (confirm('Are you sure you want to delete this collection?')) {
-              this.collectionManager.deleteCollection(id).then(() => {
-                this.loadUserCollections();
-              });
-            }
+            const name = deleteBtn.closest('.collection-card').querySelector('h3').textContent;
+            this.handleDeleteCollection(id, name);
           }
         };
       }
@@ -294,18 +298,51 @@ export class CollectionPage {
    * Handle create collection
    */
   async handleCreateCollection() {
-    const name = prompt('Enter collection name:');
-    if (!name) return;
-
-    const description = prompt('Enter description (optional):');
-
     try {
-      await this.collectionManager.createCollection(name, description);
-      await this.loadUserCollections();
-      this.app.showToast('Collection created!', 'success');
+      const name = prompt('Enter collection name:');
+      if (!name) return;
+
+      const description = prompt('Enter description (optional):');
+
+      this.toggleLoadingIndicator(true);
+      const newCollection = await this.collectionManager.createCollection(name, description);
+
+      if (newCollection) {
+        this.app.showToast(`Collection "${name}" created!`, 'success');
+        await this.loadUserCollections();
+      }
     } catch (error) {
-      console.error('Error creating collection:', error);
+      console.error('[CollectionPage] Error creating collection:', error);
       this.app.showToast('Failed to create collection', 'error');
+    } finally {
+      this.toggleLoadingIndicator(false);
+    }
+  }
+
+  /**
+   * Handle delete collection
+   */
+  async handleDeleteCollection(collectionId, name) {
+    try {
+      if (!confirm(`Are you sure you want to delete the collection "${name}"? This will also remove all cards inside it.`)) {
+        return;
+      }
+
+      this.toggleLoadingIndicator(true);
+      await this.collectionManager.deleteCollection(collectionId);
+
+      this.app.showToast(`Collection "${name}" deleted`, 'success');
+      await this.loadUserCollections();
+
+      // If we were viewing this collection, switch back to all cards
+      if (this.state.filters.collectionId === collectionId) {
+        this.handleTabChange('all-cards');
+      }
+    } catch (error) {
+      console.error('[CollectionPage] Error deleting collection:', error);
+      this.app.showToast('Failed to delete collection', 'error');
+    } finally {
+      this.toggleLoadingIndicator(false);
     }
   }
 
@@ -316,428 +353,116 @@ export class CollectionPage {
   render() {
     return `
       <div class="collection-page">
-        <!-- Tabs (Segmented Control) -->
-        <div class="collection-tabs">
-            <button class="tab-btn active" data-tab="all-cards">All Cards</button>
-            <button class="tab-btn" data-tab="my-collections">My Collections</button>
+        <!-- Header -->
+        <div class="top-header">
+            <div class="header-title">
+                <h1 id="collectionTitle">Collection</h1>
+            </div>
+            <div class="header-actions">
+                <button class="btn-secondary" id="exportCollectionBtn">
+                    <i data-lucide="download" style="width: 16px;"></i>
+                    Export
+                </button>
+                <button class="btn-primary" id="addCardBtn">
+                    <i data-lucide="plus" style="width: 18px;"></i>
+                    Add Card
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats Ribbon -->
+        <div class="stats-ribbon">
+            <div class="stat-item">
+                <div class="stat-label">Total Value</div>
+                <div class="stat-value" id="statTotalValue">$0.00</div>
+                <div class="stat-trend" id="statValueTrend">
+                    <i data-lucide="trending-up" style="width: 12px;"></i>
+                    <span>+0.0%</span>
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Total Cards</div>
+                <div class="stat-value" id="statTotalCards">0</div>
+                <div class="stat-trend" id="statCardsTrend" style="color: #737373;">
+                    +0 this week
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Unique Cards</div>
+                <div class="stat-value" id="statUniqueCards">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Top Rarity</div>
+                <div class="stat-value" id="statTopRarity">-</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="collection-tabs-container">
+            <div class="collection-tabs">
+                <button class="tab-btn active" data-tab="all-cards">All Cards</button>
+                <button class="tab-btn" data-tab="my-collections">My Collections</button>
+            </div>
         </div>
 
         <!-- All Cards View -->
         <div id="all-cards-view">
-
-        <!-- Stats Overview (Compact) -->
-        <div class="collection-stats-grid" id="collectionStatsGrid">
-          <div class="stat-card">
-            <div class="stat-header">
-                <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">
-                    <i class="lucide-icon" data-lucide="package"></i>
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="search-wrapper">
+                    <i data-lucide="search"></i>
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search by name, set, or description...">
                 </div>
-                <div class="stat-label">Total Cards</div>
-            </div>
-            <div class="stat-value" id="statTotalCards">0</div>
-          </div>
-
-          <div class="stat-card">
-            <div class="stat-header">
-                <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                    <i class="lucide-icon" data-lucide="layers"></i>
+                
+                <div class="filter-chips">
+                    <div class="chip active" data-filter="all">All</div>
+                    <div class="chip" data-filter="monster">Monsters</div>
+                    <div class="chip" data-filter="spell">Spells</div>
+                    <div class="chip" data-filter="trap">Traps</div>
                 </div>
-                <div class="stat-label">Unique</div>
-            </div>
-            <div class="stat-value" id="statUniqueCards">0</div>
-          </div>
 
-          <div class="stat-card">
-            <div class="stat-header">
-                <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-                    <i class="lucide-icon" data-lucide="dollar-sign"></i>
+                <div style="margin-left: auto; display: flex; gap: 8px;">
+                    <button class="btn-secondary" id="filterBtn" style="padding: 8px;">
+                        <i data-lucide="filter" style="width: 16px;"></i>
+                    </button>
+                    <button class="btn-secondary view-btn active" data-view="grid" style="padding: 8px;">
+                        <i data-lucide="layout-grid" style="width: 16px;"></i>
+                    </button>
+                    <button class="btn-secondary view-btn" data-view="list" style="padding: 8px;">
+                        <i data-lucide="list" style="width: 16px;"></i>
+                    </button>
                 </div>
-                <div class="stat-label">Value</div>
             </div>
-            <div class="stat-value" id="statTotalValue">$0.00</div>
-          </div>
 
-          <div class="stat-card">
-            <div class="stat-header">
-                <div class="stat-icon" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
-                    <i class="lucide-icon" data-lucide="star"></i>
-                </div>
-                <div class="stat-label">Best Pull</div>
+            <!-- Collection Display -->
+            <div class="collection-display">
+              <div id="cardGrid" class="card-grid"></div>
+              <div id="emptyState" class="empty-state hidden">
+                <i data-lucide="search-x"></i>
+                <h3>No cards found</h3>
+                <p>Try adjusting your search or filters</p>
+              </div>
+              <div id="loadingState" class="loading-state hidden">
+                <div class="loading-spinner"></div>
+              </div>
             </div>
-            <div class="stat-value" id="statRarestCard">-</div>
-            <div class="stat-change" id="statRarestRarity" style="font-size: 0.7rem; opacity: 0.8;">-</div>
-          </div>
-
-          <div class="stat-card" id="planQuotaCard">
-            <div class="stat-header">
-                <div class="stat-icon" style="background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);">
-                    <i class="lucide-icon" data-lucide="shield-check"></i>
-                </div>
-                <div class="stat-label" id="statPlanName">Plan</div>
-            </div>
-            <div class="stat-value" id="statPlanLimit" style="font-size: 1.2rem;">Loading…</div>
-          </div>
         </div>
 
-        <!-- Filters and Controls -->
-        <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl collection-controls">
-          <div class="controls-section">
-            <h3>
-              <i class="lucide-icon" data-lucide="filter"></i>
-              Filters & Sort
-            </h3>
-
-            <div class="controls-grid">
-              <!-- Search -->
-              <div class="form-group">
-                <label for="searchInput">
-                  <i class="lucide-icon" data-lucide="search"></i>
-                  Search
-                </label>
-                <input
-                  type="text"
-                  id="searchInput"
-                  placeholder="Card name or number..."
-                  class="form-input"
-                />
-              </div>
-
-              <!-- Set Filter -->
-              <div class="form-group">
-                <label for="setFilter">
-                  <i class="lucide-icon" data-lucide="book"></i>
-                  Card Set
-                </label>
-                <select id="setFilter" class="form-select">
-                  <option value="all">All Sets</option>
-                </select>
-              </div>
-
-              <!-- Rarity Filter -->
-              <div class="form-group">
-                <label for="rarityFilter">
-                  <i class="lucide-icon" data-lucide="gem"></i>
-                  Rarity
-                </label>
-                <select id="rarityFilter" class="form-select">
-                  <option value="all">All Rarities</option>
-                </select>
-              </div>
-
-              <!-- Sort By -->
-              <div class="form-group">
-                <label for="sortBy">
-                  <i class="lucide-icon" data-lucide="arrow-up-down"></i>
-                  Sort By
-                </label>
-                <select id="sortBy" class="form-select">
-                  <option value="date">Date Added</option>
-                  <option value="name">Card Name</option>
-                  <option value="value">Card Value</option>
-                  <option value="rarity">Rarity</option>
-                  <option value="number">Card Number</option>
-                </select>
-              </div>
-
-              <!-- Sort Order -->
-              <div class="form-group">
-                <label for="sortOrder">
-                  <i class="lucide-icon" data-lucide="sort-asc"></i>
-                  Order
-                </label>
-                <select id="sortOrder" class="form-select">
-                  <option value="desc">Descending</option>
-                  <option value="asc">Ascending</option>
-                </select>
-              </div>
-
-              <!-- View Mode -->
-              <div class="form-group">
-                <label>
-                  <i class="lucide-icon" data-lucide="layout-grid"></i>
-                  View
-                </label>
-                <div class="view-toggles">
-                  <button class="view-btn active" data-view="grid" title="Grid View">
-                    <i class="lucide-icon" data-lucide="grid"></i>
-                  </button>
-                  <button class="view-btn" data-view="list" title="List View">
-                    <i class="lucide-icon" data-lucide="list"></i>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Condensed Toggle -->
-              <div class="form-group">
-                <label for="condensedToggle">
-                  <i class="lucide-icon" data-lucide="layers"></i>
-                  Condensed
-                </label>
-                <label class="inline-toggle">
-                  <input type="checkbox" id="condensedToggle" class="form-checkbox rounded">
-                  <span>Group Cards</span>
-                </label>
-              </div>
-                  <i class="lucide-icon" data-lucide="layout-grid"></i>
-                  View Mode
-                </label>
-                <div class="view-toggle-group">
-                  <button class="view-toggle-btn active" data-view="grid" id="viewGridBtn">
-                    <i class="lucide-icon" data-lucide="grid-3x3"></i>
-                    Grid
-                  </button>
-                  <button class="view-toggle-btn" data-view="list" id="viewListBtn">
-                    <i class="lucide-icon" data-lucide="list"></i>
-                    List
-                  </button>
-                </div>
-              </div>
+        <!-- My Collections View -->
+        <div id="my-collections-view" style="display: none; padding: 32px;">
+            <div class="collections-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2>My Collections</h2>
+                <button class="btn-primary" id="createCollectionBtn">
+                    <i data-lucide="folder-plus" style="width: 18px;"></i>
+                    New Collection
+                </button>
             </div>
-
-            <!-- Card Size Slider (Grid View Only) -->
-            <div class="form-group" id="cardSizeSliderGroup">
-              <label for="cardSizeSlider">
-                <i class="lucide-icon" data-lucide="maximize"></i>
-                Card Size: <span id="cardSizeValue">150px</span>
-              </label>
-              <input
-                type="range"
-                id="cardSizeSlider"
-                min="100"
-                max="250"
-                value="150"
-                class="slider"
-              />
+            <div id="userCollectionsList" class="collections-grid">
+                <!-- Collections will be rendered here -->
             </div>
-          </div>
-        </div>
-
-        <!-- Collection Display -->
-        <div class="collection-display">
-          <div class="collection-header">
-            <h3>
-              <i class="lucide-icon" data-lucide="package"></i>
-              Cards (<span id="cardCount">0</span>)
-            </h3>
-          </div>
-
-          <!-- Grid View -->
-          <div id="collectionGridView" class="collection-grid-view">
-            <!-- CardGrid component will be mounted here -->
-          </div>
-
-          <!-- List View -->
-          <div id="collectionListView" class="collection-list-view" style="display: none;">
-            <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-              <div class="table-container">
-                <table class="collection-table">
-                  <thead>
-                    <tr>
-                      <th>Image</th>
-                      <th>Name</th>
-                      <th>Number</th>
-                      <th>Set</th>
-                      <th>Rarity</th>
-                      <th>Quantity</th>
-                      <th>Value</th>
-                      <th>Date Added</th>
-                      <th>Session</th>
-                    </tr>
-                  </thead>
-                  <tbody id="collectionTableBody">
-                    <!-- Table rows will be inserted here -->
-                  </tbody>
-                </table>
-              </div>
-          </div>
-        </div>
-
-        <!-- Empty State -->
-        <div id="emptyState" class="empty-state" style="display: none;">
-            <div class="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-              <i class="lucide-icon" data-lucide="package-x"></i>
-              <h3>No Cards Found</h3>
-              <p>Your collection is empty or no cards match your filters.</p>
-              <p>Start adding cards from Pack Opening sessions!</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Pack Performance -->
-        <div class="pack-performance-section">
-          <div class="section-header">
-            <div class="section-title">
-              <i class="lucide-icon" data-lucide="trending-up"></i>
-              <div>
-                <h3>Pack Performance</h3>
-                <p class="section-subtitle">ROI metrics based on your recorded pack events</p>
-              </div>
-            </div>
-            <div class="section-actions">
-              <button class="btn-secondary btn-sm" id="refreshPackHistoryBtn">
-                <i class="lucide-icon" data-lucide="refresh-cw"></i>
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          <div class="pack-insights-grid" id="packInsightsGrid">
-            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-              <div class="insight-header">
-                <i class="lucide-icon" data-lucide="line-chart"></i>
-                <span>Lifetime Gain</span>
-              </div>
-              <div class="insight-value" id="packTotalGain">$0.00</div>
-              <div class="insight-subtitle" id="packProfitableCount">0 profitable packs</div>
-            </div>
-
-            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-              <div class="insight-header">
-                <i class="lucide-icon" data-lucide="wallet"></i>
-                <span>Net vs Pack Cost</span>
-              </div>
-              <div class="insight-value" id="packNetGain">$0.00</div>
-              <div class="insight-subtitle" id="packTotalSpend">Total spend $0.00</div>
-            </div>
-
-            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-              <div class="insight-header">
-                <i class="lucide-icon" data-lucide="percent"></i>
-                <span>Average ROI</span>
-              </div>
-              <div class="insight-value" id="packAverageRoi">—</div>
-              <div class="insight-subtitle" id="packVisiblePacks">Based on visible history</div>
-            </div>
-
-            <div class="pack-insight-card bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-              <div class="insight-header">
-                <i class="lucide-icon" data-lucide="star"></i>
-                <span>Most Valuable Pull</span>
-              </div>
-              <div class="insight-value" id="packBestPullValue">—</div>
-              <div class="insight-subtitle" id="packBestPullName">Log more pack events to surface highlights</div>
-            </div>
-          </div>
-
-          <div class="pack-history-panel bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-            <div class="pack-history-header">
-              <div>
-                <h4>Pack History</h4>
-                <p class="section-subtitle">Compare pack-time prices with current valuations</p>
-              </div>
-              <div class="pack-history-filters">
-                <label class="inline-toggle">
-                  <input type="checkbox" id="packProfitableToggle" class="form-checkbox rounded">
-                  <span>Profitable only</span>
-                </label>
-                <select id="packSourceFilter" class="form-select form-select-sm">
-                  <option value="all">All Sources</option>
-                  <option value="pack">Booster Pack</option>
-                  <option value="purchase">Single Purchase</option>
-                  <option value="trade">Trade</option>
-                  <option value="gift">Gift</option>
-                  <option value="reward">Reward</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            </div>
-
-            <div id="packHistoryError" class="pack-history-error" style="display: none;"></div>
-
-            <div class="table-container pack-history-table-container">
-              <table class="pack-history-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Set</th>
-                    <th>Cards</th>
-                    <th>Pack Value</th>
-                    <th>Current Value</th>
-                    <th>Gain</th>
-                    <th>ROI</th>
-                    <th>Net vs Cost</th>
-                  </tr>
-                </thead>
-                <tbody id="packHistoryTableBody">
-                  <tr class="loading-row">
-                    <td colspan="8">Loading pack history...</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div id="packHistoryEmpty" class="pack-history-empty" style="display: none;">
-              <i class="lucide-icon" data-lucide="archive-restore"></i>
-              <p>No pack events recorded yet.</p>
-              <p>Open packs and sync them to Supabase to unlock ROI insights.</p>
-            </div>
-          </div>
-        </div>
-      </div> <!-- End All Cards View -->
-
-      <!-- My Collections View -->
-      <div id="my-collections-view" style="display: none;">
-        <div class="collections-header">
-            <h2>My Collections</h2>
-            <button class="btn-primary" id="createCollectionBtn">
-                <i class="lucide-icon" data-lucide="plus-circle"></i>
-                New Collection
-            </button>
-        </div>
-        <div id="userCollectionsList" class="user-collections-grid">
-            <!-- Collections will be loaded here -->
-            <div class="loading-state">Loading collections...</div>
         </div>
       </div>
-
-      </div>
     `;
-  }
-
-  /**
-   * Mount header actions to the global page header
-   */
-  mountHeaderActions() {
-    const headerActions = document.getElementById('page-header-actions');
-    if (!headerActions) return;
-
-    // Create container for collection actions
-    const actionContainer = document.createElement('div');
-    actionContainer.id = 'collection-header-actions';
-    actionContainer.className = 'flex items-center gap-2';
-
-    actionContainer.innerHTML = `
-      <button class="btn-secondary" id="refreshCollectionBtn">
-        <i class="lucide-icon" data-lucide="refresh-cw"></i>
-        <span class="hidden sm:inline">Refresh</span>
-      </button>
-      <button class="btn-primary" id="addCardBtn">
-        <i class="lucide-icon" data-lucide="plus"></i>
-        <span class="hidden sm:inline">Add Card</span>
-      </button>
-      <button class="btn-primary" id="exportCollectionBtn">
-        <i class="lucide-icon" data-lucide="download"></i>
-        <span class="hidden sm:inline">Export</span>
-      </button>
-    `;
-
-    // Insert before auth container if it exists, otherwise append
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) {
-      headerActions.insertBefore(actionContainer, authContainer);
-    } else {
-      headerActions.appendChild(actionContainer);
-    }
-  }
-
-  /**
-   * Unmount header actions
-   */
-  unmountHeaderActions() {
-    const actionContainer = document.getElementById('collection-header-actions');
-    if (actionContainer) {
-      actionContainer.remove();
-    }
   }
 
   /**
@@ -746,6 +471,7 @@ export class CollectionPage {
    */
   async mount(container) {
     try {
+      this.isMounted = true;
       this.container = container;
       this.container.innerHTML = this.render();
 
@@ -758,6 +484,44 @@ export class CollectionPage {
       // Mount header actions
       this.mountHeaderActions();
 
+      // Set Full Width Layout
+      document.body.classList.add('full-width-layout');
+
+      // Update Sidebar Context
+      const sidebar = this.app?.sidebar || window.sidebar;
+      if (sidebar) {
+        console.log('CollectionPage: Setting sidebar context to collection');
+        sidebar.setContext('collection', {
+          collections: [],
+          activeCollection: this.state.filters.collectionId || 'all'
+        });
+
+        // Listen for collection selection from sidebar
+        this.container.addEventListener('collection:select', (e) => {
+          const { collectionId } = e.detail;
+          console.log('[CollectionPage] Sidebar collection selected:', collectionId);
+          this.state.filters.collectionId = collectionId === 'all' ? null : collectionId;
+          this.applyFiltersAndSort();
+          this.updateDisplay();
+        });
+
+        // Force style immediately to ensure visual change
+        if (sidebar.container) {
+          sidebar.container.style.backgroundColor = '#121212';
+          sidebar.container.style.borderRightColor = '#262626';
+        }
+      } else {
+        console.warn('CollectionPage: Sidebar not found');
+      }
+
+      // Listen for auth changes to reload data
+      this.boundHandlers.handleAuthChange = async (e) => {
+        const { user } = e.detail;
+        console.log('[CollectionPage] Auth changed, reloading data...', user?.email || 'Guest');
+        await this.loadData({ silent: true });
+      };
+      window.addEventListener('auth:changed', this.boundHandlers.handleAuthChange);
+
       // Attach event listeners immediately
       this.attachEvents();
 
@@ -765,9 +529,15 @@ export class CollectionPage {
         lucide.createIcons();
       }
 
-      // Load initial data from Supabase
-      await this.loadData({ initial: true });
-      await this.loadPackInsights({ initial: true });
+      // Load initial data from Supabase - NON-BLOCKING
+      this.loadData({ initial: true }).catch(err => {
+        console.error('CollectionPage: Initial data load failed', err);
+      });
+
+      // Load pack insights in background (don't block navigation)
+      this.loadPackInsights({ initial: true }).catch(err => {
+        console.warn('CollectionPage: Background pack insights load failed', err);
+      });
 
     } catch (error) {
       console.error('CollectionPage: Error mounting', error);
@@ -776,10 +546,34 @@ export class CollectionPage {
   }
 
   /**
+   * Mount header actions (No longer used as buttons are in top-header)
+   */
+  mountHeaderActions() {
+    // Buttons are now part of the render() template for better layout control
+    // We just need to ensure icons are initialized
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  }
+
+  /**
+   * Unmount header actions
+   */
+  unmountHeaderActions() {
+    // No-op
+  }
+
+  /**
    * Unmount the page
    */
   unmount() {
     try {
+      this.isMounted = false;
+      // Cleanup auth listener
+      if (this.boundHandlers.handleAuthChange) {
+        window.removeEventListener('auth:changed', this.boundHandlers.handleAuthChange);
+      }
+
       // Cleanup CardGrid
       if (this.cardGrid) {
         this.cardGrid.destroy?.();
@@ -791,6 +585,20 @@ export class CollectionPage {
 
       // Unmount header actions
       this.unmountHeaderActions();
+
+      // Reset Sidebar Context
+      const sidebar = this.app?.sidebar || window.sidebar;
+      if (sidebar) {
+        sidebar.setContext('default');
+        // Reset forced styles
+        if (sidebar.container) {
+          sidebar.container.style.backgroundColor = '';
+          sidebar.container.style.borderRightColor = '';
+        }
+      }
+
+      // Reset Full Width Layout
+      document.body.classList.remove('full-width-layout');
 
       // Clear container
       if (this.container) {
@@ -809,13 +617,14 @@ export class CollectionPage {
 
     try {
       console.log('CollectionPage: loadData started');
+      if (!this.isMounted) return;
+
       this.state.isLoading = true;
       if (!silent) {
         this.toggleLoadingIndicator(true);
       }
 
-      const user = authService.getUser();
-      console.log('CollectionPage: user check', user);
+      const { user } = await authService.getCurrentUser();
 
       if (!user) {
         console.log('CollectionPage: Guest mode');
@@ -839,9 +648,10 @@ export class CollectionPage {
       }
 
       // Authenticated mode
-      console.log('CollectionPage: loadData (v2 fix) - Authenticated');
+      console.log('CollectionPage: loadData (v2 fix) - Authenticated user:', user.email, 'ID:', user.id);
       // Use CollectionManager to fetch cards (compatible with current schema)
       const cards = await this.collectionManager.getAllUserCards();
+      console.log('CollectionPage: Fetched cards from manager:', cards?.length || 0);
 
       // Mock summary and plan for now as views might be missing
       const summaryResult = { summary: null, error: null };
@@ -892,8 +702,22 @@ export class CollectionPage {
         this.initializeCardGrid();
       }
 
+      if (!this.isMounted) return;
+
       this.updateDisplay();
       this.updatePlanControls();
+
+      // Update Sidebar with counts
+      if (this.app?.sidebar) {
+        const favoritesCount = this.state.cards.filter(c => c.isFavorite).length;
+        this.app.sidebar.setContext('collection', {
+          collections: [], // TODO: Pass actual user collections here if available
+          activeCollection: 'all',
+          totalCards: this.state.cards.length,
+          favoritesCount: favoritesCount
+        });
+      }
+
       this.state.error = null;
 
     } catch (error) {
@@ -1384,8 +1208,64 @@ export class CollectionPage {
     this.updatePackHistoryTable();
   }
 
+  async loadUserCollections() {
+    const container = document.getElementById('userCollectionsContainer');
+    const loading = document.getElementById('collectionsLoading');
+    const empty = document.getElementById('collectionsEmpty');
+
+    if (!container) return;
+
+    try {
+      if (loading) loading.classList.remove('hidden');
+      if (empty) empty.classList.add('hidden');
+      container.innerHTML = '';
+
+      const collections = await this.collectionManager.getUserCollections();
+
+      if (collections.length === 0) {
+        if (empty) empty.classList.remove('hidden');
+      } else {
+        collections.forEach(collection => {
+          const card = document.createElement('div');
+          card.className = 'collection-card';
+          card.innerHTML = `
+            <i class="lucide-icon collection-icon" data-lucide="folder"></i>
+            <div class="collection-info">
+                <div class="collection-name">${this.escapeHtml(collection.name)}</div>
+                <div class="collection-meta">${collection.cards?.length || 0} cards • Updated ${this.formatDate(collection.updated_at)}</div>
+            </div>
+            <div class="collection-actions">
+                <button class="action-btn" title="Rename"><i class="lucide-icon" data-lucide="edit-2" style="width: 16px;"></i></button>
+                <button class="action-btn delete" title="Delete"><i class="lucide-icon" data-lucide="trash-2" style="width: 16px;"></i></button>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      }
+
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons({ root: container });
+      }
+
+    } catch (error) {
+      console.error('Error loading user collections:', error);
+    } finally {
+      if (loading) loading.classList.add('hidden');
+    }
+  }
+
   async loadPackInsights(options = {}) {
     const { force = true } = options;
+
+    // Skip for guests
+    const user = authService.getUser();
+    if (!user) {
+      this.state.pack.isLoading = false;
+      this.state.pack.events = [];
+      this.state.pack.stats = null;
+      this.updatePackInsightsUI();
+      return;
+    }
 
     if (!force && Array.isArray(this.state.pack?.eventsAll) && this.state.pack.eventsAll.length > 0) {
       this.applyPackFiltersAndStats();
@@ -1593,7 +1473,7 @@ export class CollectionPage {
    */
   initializeCardGrid() {
     try {
-      const gridContainer = document.getElementById('collectionGridView');
+      const gridContainer = document.getElementById('cardGrid');
       if (!gridContainer) return;
 
       // Clear container
@@ -1620,8 +1500,33 @@ export class CollectionPage {
   /**
    * Populate filter dropdowns
    */
-  populateFilters() {
+  async populateFilters(initial = false) {
     try {
+      // Populate Collection Filter
+      const collectionFilter = document.getElementById('collectionFilter');
+      if (collectionFilter && this.collectionManager) {
+        // Only fetch if initial load or empty (to avoid resetting selection during updates)
+        if (initial || collectionFilter.options.length <= 1) {
+          const collections = await this.collectionManager.getUserCollections();
+          const previousValue = collectionFilter.value;
+
+          collectionFilter.innerHTML = '<option value="all">All Cards</option>';
+
+          collections.forEach(col => {
+            const option = document.createElement('option');
+            option.value = col.id;
+            option.textContent = col.name;
+            collectionFilter.appendChild(option);
+          });
+
+          // Restore selection if valid
+          if (previousValue && previousValue !== 'all') {
+            const exists = Array.from(collectionFilter.options).some(opt => opt.value === previousValue);
+            if (exists) collectionFilter.value = previousValue;
+          }
+        }
+      }
+
       // Populate set filter
       const setFilter = document.getElementById('setFilter');
       if (setFilter && this.collectionManager) {
@@ -1670,93 +1575,92 @@ export class CollectionPage {
    */
   attachEvents() {
     try {
-      // Filter changes
+      // Search and Filter
       const searchInput = document.getElementById('searchInput');
       const setFilter = document.getElementById('setFilter');
       const rarityFilter = document.getElementById('rarityFilter');
       const sortBy = document.getElementById('sortBy');
       const sortOrder = document.getElementById('sortOrder');
 
-      if (searchInput) {
-        searchInput.addEventListener('input', this.boundHandlers.handleSearchInput);
-      }
+      if (searchInput) searchInput.addEventListener('input', (e) => this.handleSearchInput(e));
+      if (setFilter) setFilter.addEventListener('change', (e) => this.handleFilterChange(e));
+      if (rarityFilter) rarityFilter.addEventListener('change', (e) => this.handleFilterChange(e));
+      if (sortBy) sortBy.addEventListener('change', (e) => this.handleSortChange(e));
+      // sortOrder might not be in the new HTML if I removed it, but let's keep it safe
+      if (sortOrder) sortOrder.addEventListener('change', (e) => this.handleSortChange(e));
 
-      const condensedToggle = document.getElementById('condensedToggle');
-      if (condensedToggle) {
-        condensedToggle.addEventListener('change', this.boundHandlers.handleCondensedToggle);
-      }
-      if (setFilter) {
-        setFilter.addEventListener('change', this.boundHandlers.handleFilterChange);
-      }
-      if (rarityFilter) {
-        rarityFilter.addEventListener('change', this.boundHandlers.handleFilterChange);
-      }
-      if (sortBy) {
-        sortBy.addEventListener('change', this.boundHandlers.handleSortChange);
-      }
-      if (sortOrder) {
-        sortOrder.addEventListener('change', this.boundHandlers.handleSortChange);
-      }
-
-      // View toggle
-      const viewGridBtn = document.getElementById('viewGridBtn');
-      const viewListBtn = document.getElementById('viewListBtn');
-      if (viewGridBtn) {
-        viewGridBtn.addEventListener('click', () => this.boundHandlers.handleViewToggle('grid'));
-      }
-      if (viewListBtn) {
-        viewListBtn.addEventListener('click', () => this.boundHandlers.handleViewToggle('list'));
-      }
-
-      // Card size slider
-      const cardSizeSlider = document.getElementById('cardSizeSlider');
-      if (cardSizeSlider) {
-        cardSizeSlider.addEventListener('input', this.boundHandlers.handleCardSizeChange);
-      }
-
-      // Action buttons
-      const refreshBtn = document.getElementById('refreshCollectionBtn');
-      const exportBtn = document.getElementById('exportCollectionBtn');
-      const addBtn = document.getElementById('addCardBtn');
-      if (refreshBtn) {
-        refreshBtn.addEventListener('click', this.boundHandlers.handleRefresh);
-      }
-      if (exportBtn) {
-        exportBtn.addEventListener('click', this.boundHandlers.handleExport);
-      }
-      if (addBtn) {
-        addBtn.addEventListener('click', this.boundHandlers.handleAddCard);
-      }
-
-      const packProfitableToggle = document.getElementById('packProfitableToggle');
-      const packSourceFilter = document.getElementById('packSourceFilter');
-      const refreshPackHistoryBtn = document.getElementById('refreshPackHistoryBtn');
-
-      if (packProfitableToggle) {
-        packProfitableToggle.addEventListener('change', this.boundHandlers.handlePackProfitToggle);
-      }
-      if (packSourceFilter) {
-        packSourceFilter.addEventListener('change', this.boundHandlers.handlePackSourceChange);
-      }
-      if (refreshPackHistoryBtn) {
-        refreshPackHistoryBtn.addEventListener('click', this.boundHandlers.handlePackRefresh);
-      }
-
-      // Tab switching
-      const tabBtns = this.container.querySelectorAll('.tab-btn');
-      tabBtns.forEach(btn => {
-        btn.addEventListener('click', this.boundHandlers.handleTabChange);
+      // View Toggle
+      const viewBtns = this.container.querySelectorAll('.view-btn');
+      viewBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const view = e.target.closest('.view-btn').dataset.view;
+          this.handleViewToggle(view);
+        });
       });
 
-      // Create collection button
+      // New Buttons
       const createCollectionBtn = document.getElementById('createCollectionBtn');
+      const addCardBtn = document.getElementById('addCardBtn');
+
       if (createCollectionBtn) {
-        createCollectionBtn.addEventListener('click', this.boundHandlers.handleCreateCollection);
+        createCollectionBtn.addEventListener('click', () => this.handleCreateCollection());
       }
 
+      if (addCardBtn) {
+        addCardBtn.addEventListener('click', () => this.handleAddCard());
+      }
+
+      // Tabs
+      const tabBtns = this.container.querySelectorAll('.tab-btn');
+      tabBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => this.handleTabChange(e));
+      });
+
+      // Export
+      const exportBtn = document.getElementById('exportCollectionBtn');
+      if (exportBtn) {
+        exportBtn.addEventListener('click', () => this.handleExport());
+      }
+
+      // Filter Chips
+      const chips = this.container.querySelectorAll('.chip');
+      chips.forEach(chip => {
+        chip.addEventListener('click', (e) => {
+          const filter = e.target.dataset.filter;
+          this.container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          e.target.classList.add('active');
+          // TODO: Implement chip filtering logic if needed
+          console.log('Chip filter:', filter);
+        });
+      });
+
     } catch (error) {
-      console.error('CollectionPage: Error attaching events', error);
+      console.error('Error attaching events:', error);
     }
+  }
+
+
+  handleViewToggle(viewMode) {
+    this.state.viewMode = viewMode;
+
+    // Update buttons
+    this.container.querySelectorAll('.view-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === viewMode);
+    });
+
+    // Update Grid
+    const cardGrid = document.getElementById('cardGrid');
+    if (cardGrid) {
+      if (viewMode === 'list') {
+        cardGrid.classList.add('list-view');
+      } else {
+        cardGrid.classList.remove('list-view');
+      }
+    }
+
+    // Re-render grid to ensure correct item layout if needed (CardGrid might need to know view mode)
+    // Assuming CardGrid handles CSS-only toggle for now, but if we need different HTML structure:
+    // this.renderCardGrid(); 
   }
 
   /**
@@ -1807,11 +1711,13 @@ export class CollectionPage {
       // Get current filter values
       const setFilter = document.getElementById('setFilter');
       const rarityFilter = document.getElementById('rarityFilter');
+      const collectionFilter = document.getElementById('collectionFilter');
       const searchInput = document.getElementById('searchInput');
 
       this.state.filters = {
         set: setFilter?.value || 'all',
         rarity: rarityFilter?.value || 'all',
+        collectionId: collectionFilter?.value && collectionFilter.value !== 'all' ? collectionFilter.value : null,
         search: searchInput?.value || ''
       };
 
@@ -1999,175 +1905,90 @@ export class CollectionPage {
   /**
    * Handle card remove (not implemented in collection view)
    */
-  handleCardRemove(card) {
-    this.handleRemoveCardAsync(card);
-  }
-
-  async handleRemoveCardAsync(card) {
-    if (!card || !card.cardVariantId) {
-      return;
-    }
-
-    const quantity = Number(card.quantity) || 0;
-    if (quantity === 0) {
-      return;
-    }
-
-    const confirmRemoval = window.confirm(
-      `Remove all ${quantity} copie${quantity === 1 ? '' : 's'} of ${card.cardName || 'this card'}?`
-    );
-
-    if (!confirmRemoval) {
-      return;
-    }
-
-    this.setMutating(true);
-    const rollback = this.applyOptimisticMutation({
-      cardVariantId: card.cardVariantId,
-      quantityDelta: -quantity,
-      pricePerUnit: Number(card.tcgLow) || 0,
-    });
-
+  async handleCardRemove(card) {
     try {
-      const { error } = await removeCollectionQuantity({
-        cardVariantId: card.cardVariantId,
-        quantityDelta: quantity,
-      });
-
-      if (error) {
-        rollback();
-        if (this.app?.showToast) {
-          this.app.showToast(error.message || 'Failed to remove card', 'error');
-        }
+      if (!card || !card.id) {
+        console.error('[CollectionPage] Cannot remove card: missing ID', card);
         return;
       }
 
-      await this.refreshSummary();
+      const confirmRemoval = window.confirm(
+        `Remove ${card.cardName || 'this card'} from your collection?`
+      );
 
-      if (this.app?.showToast) {
-        this.app.showToast('Card removed from collection', 'success');
-      }
+      if (!confirmRemoval) return;
+
+      this.toggleLoadingIndicator(true);
+      await this.collectionManager.removeCardFromCollection(card.id);
+
+      this.app.showToast('Card removed from collection', 'success');
+      await this.loadData({ silent: true });
+
     } catch (error) {
-      console.error('CollectionPage: Error removing card', error);
-      rollback();
-      if (this.app?.showToast) {
-        this.app.showToast('Failed to remove card', 'error');
-      }
+      console.error('[CollectionPage] Error removing card:', error);
+      this.app.showToast('Failed to remove card', 'error');
     } finally {
-      this.setMutating(false);
+      this.toggleLoadingIndicator(false);
     }
   }
 
   async handleAddCard() {
-    const quota = this.state.subscription?.quota;
-    const planName = this.state.subscription?.plan?.planName || this.state.subscription?.plan?.planKey || 'current';
-
-    if (quota && quota.willExceed) {
-      if (this.app?.showToast) {
-        this.app.showToast(`Your ${planName} plan has reached its collection limit. Upgrade to add more variants.`, 'warning');
-      }
-      return;
-    }
-
-    const slugInput = prompt('Enter card slug (e.g., blue-eyes-white-dragon-lob-001-1st)');
-    if (!slugInput) {
-      return;
-    }
-
-    const quantityInput = prompt('How many copies are you adding?', '1');
-    const quantity = Number(quantityInput);
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      if (this.app?.showToast) {
-        this.app.showToast('Quantity must be a positive number', 'warning');
-      }
-      return;
-    }
-
-    this.setMutating(true);
-
-    let rollback = () => { };
-
     try {
-      const { cardVariantId, error: resolveError } = await resolveCardVariantId(slugInput.trim());
-      if (resolveError || !cardVariantId) {
-        if (this.app?.showToast) {
-          this.app.showToast(resolveError?.message || 'Unable to resolve card slug', 'error');
+      const { user } = await authService.getCurrentUser();
+      if (!user) {
+        this.app.showToast('Please log in to add cards to your collection', 'warning');
+        return;
+      }
+
+      // Get collections to choose from
+      const collections = await this.collectionManager.getUserCollections();
+      if (collections.length === 0) {
+        if (confirm('You need a collection first. Create one now?')) {
+          await this.handleCreateCollection();
         }
         return;
       }
 
-      const provisionalCard = {
-        cardVariantId,
-        cardName: slugInput.trim(),
-        name: slugInput.trim(),
-        cardNumber: null,
-        setName: null,
-        setCode: null,
-        rarity: null,
-        rarityKey: null,
-        quantity,
-        tcgLow: 0,
-        tcgMarket: 0,
-        totalValue: 0,
-        addedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        sessionDate: new Date().toISOString(),
-        sessionName: 'Pending',
-        notes: null,
+      const slugInput = prompt('Enter card name or slug (e.g., blue-eyes-white-dragon):');
+      if (!slugInput) return;
+
+      const quantityInput = prompt('Quantity:', '1');
+      const quantity = parseInt(quantityInput) || 1;
+
+      // Select collection
+      let collectionId = this.state.filters.collectionId;
+      if (!collectionId || collectionId === 'all') {
+        const options = collections.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+        const choice = prompt(`Select a collection:\n${options}`, '1');
+        const index = parseInt(choice) - 1;
+        if (collections[index]) {
+          collectionId = collections[index].id;
+        } else {
+          return;
+        }
+      }
+
+      this.toggleLoadingIndicator(true);
+
+      // Mock card data for the insert
+      // In a full implementation, we'd fetch the actual card details from an API first
+      const cardData = {
+        name: slugInput,
+        set_code: 'MANUAL',
+        rarity: 'Common',
+        quantity: quantity
       };
 
-      rollback = this.applyOptimisticMutation({
-        cardVariantId,
-        quantityDelta: quantity,
-        provisionalCard,
-      });
+      await this.collectionManager.addCardToCollection(collectionId, cardData);
 
-      const { item, error } = await upsertCollectionItem({
-        cardVariantId,
-        quantityDelta: quantity,
-        changeType: 'add',
-        source: 'manual',
-      });
-
-      if (error) {
-        rollback();
-        if (this.app?.showToast) {
-          if (error.code === 'PLAN_LIMIT_REACHED') {
-            const exceededPlan = error.details?.planKey || planName;
-            this.app.showToast(
-              `Collection limit reached for the ${exceededPlan} plan. Upgrade to add more cards.`,
-              'warning'
-            );
-          } else {
-            this.app.showToast(error.message || 'Failed to add card', 'error');
-          }
-        }
-        this.updatePlanControls();
-        return;
-      }
-
-      if (item) {
-        this.mergeCollectionItem(item);
-      } else {
-        await this.loadData({ silent: true });
-      }
-
-      await this.refreshSummary();
-
-      if (this.app?.showToast) {
-        this.app.showToast('Card added to collection', 'success');
-      }
-
-      this.updatePlanControls();
+      this.app.showToast(`Added ${quantity}x ${slugInput} to collection`, 'success');
+      await this.loadData({ silent: true });
 
     } catch (error) {
-      console.error('CollectionPage: Error adding card', error);
-      rollback();
-      if (this.app?.showToast) {
-        this.app.showToast('Failed to add card', 'error');
-      }
+      console.error('[CollectionPage] Error adding card:', error);
+      this.app.showToast('Failed to add card', 'error');
     } finally {
-      this.setMutating(false);
+      this.toggleLoadingIndicator(false);
     }
   }
 
@@ -2315,18 +2136,34 @@ export class CollectionPage {
         totalValue.textContent = `$${totalValueDollars.toFixed(2)}`;
       }
 
-      const rarestCardNode = document.getElementById('statRarestCard');
-      const rarestRarity = document.getElementById('statRarestRarity');
-      if (rarestCardNode && rarestRarity) {
-        if (stats.rarestCard) {
-          rarestCardNode.textContent = this.truncate(stats.rarestCard.cardName || 'Unknown', 20);
-          rarestRarity.textContent = stats.rarestCard.rarity || 'Unknown';
-        } else {
-          rarestCardNode.textContent = '-';
-          rarestRarity.textContent = '-';
-        }
+      const valueTrend = document.getElementById('statValueTrend');
+      if (valueTrend) {
+        const trend = summary.valueTrend || 0;
+        const trendClass = trend >= 0 ? 'trend-up' : 'trend-down';
+        const trendIcon = trend >= 0 ? 'trending-up' : 'trending-down';
+        valueTrend.innerHTML = `
+        <i data-lucide="${trendIcon}" style="width: 12px;"></i>
+        <span>${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%</span>
+      `;
+        valueTrend.style.color = trend >= 0 ? '#10b981' : '#ef4444';
       }
 
+      const cardsTrend = document.getElementById('statCardsTrend');
+      if (cardsTrend) {
+        const weeklyCount = summary.weeklyCount || 0;
+        cardsTrend.textContent = `+${weeklyCount} this week`;
+      }
+
+      const topRarity = document.getElementById('statTopRarity');
+      if (topRarity) {
+        if (stats.rarestCard) {
+          const rarityVal = stats.rarestCard.rarity;
+          const rarityName = typeof rarityVal === 'object' ? (rarityVal.name || rarityVal.key || 'Unknown') : rarityVal;
+          topRarity.textContent = rarityName || 'Unknown';
+        } else {
+          topRarity.textContent = '-';
+        }
+      }
       const planNameEl = document.getElementById('statPlanName');
       const planLimitEl = document.getElementById('statPlanLimit');
       const planHintEl = document.getElementById('statPlanHint');

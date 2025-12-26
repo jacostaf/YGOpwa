@@ -27,7 +27,8 @@ export async function initAuth() {
 
   const authContainer = document.getElementById('auth-container');
   if (!authContainer) {
-    console.error('Auth container not found in HTML. Add <div id="auth-container"></div> to your header.');
+    console.warn('Auth container not found, retrying in 500ms...');
+    setTimeout(initAuth, 500);
     return;
   }
 
@@ -35,7 +36,13 @@ export async function initAuth() {
 
   // Check current auth state
   try {
-    const { user } = await getCurrentUser();
+    // Add a timeout to ensure the UI eventually renders even if auth is stuck
+    const authPromise = getCurrentUser();
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(() => resolve({ user: null, error: 'Auth check timeout' }), 1000) // Reduced from 3s to 1s
+    );
+
+    const { user } = await Promise.race([authPromise, timeoutPromise]);
 
     if (user) {
       // User is authenticated - show profile
@@ -132,21 +139,20 @@ function renderUserProfile(user, container) {
  * Handle profile menu actions
  */
 function handleProfileAction(action) {
+  if (!window.router) {
+    console.error('Router not found');
+    return;
+  }
+
   switch (action) {
     case 'settings':
-      console.log('Navigate to settings');
-      // TODO: Navigate to settings page
-      alert('Settings page - Coming in Phase 4!');
+      window.router.navigate('settings');
       break;
     case 'collection':
-      console.log('Navigate to collection');
-      // TODO: Navigate to collection page
-      alert('Collection page - Coming in Phase 4!');
+      window.router.navigate('collection');
       break;
     case 'packs':
-      console.log('Navigate to pack history');
-      // TODO: Navigate to pack history page
-      alert('Pack history - Coming in Phase 6!');
+      window.router.navigate('pack-opening');
       break;
     default:
       console.log('Unknown action:', action);

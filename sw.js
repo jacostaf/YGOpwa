@@ -9,7 +9,7 @@
  * - Performance optimizations
  */
 
-const CACHE_NAME = 'voxrip-v2.0.0';
+const CACHE_NAME = 'voxrip-v2.0.1';
 const RUNTIME_CACHE = 'voxrip-runtime';
 
 // Resources to cache for offline use
@@ -99,7 +99,7 @@ const ROUTE_CONFIG = [
 // Install event - cache core resources
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing service worker...');
-  
+
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -120,7 +120,7 @@ self.addEventListener('install', (event) => {
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating service worker...');
-  
+
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
@@ -149,20 +149,20 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  
+
   // Skip non-GET requests
   if (request.method !== 'GET') {
     return;
   }
-  
+
   // Skip cross-origin requests (unless specifically configured)
   if (url.origin !== location.origin) {
     return;
   }
-  
+
   // Find matching route configuration
   const routeConfig = findRouteConfig(request.url);
-  
+
   if (routeConfig) {
     event.respondWith(
       handleRequest(request, routeConfig)
@@ -182,24 +182,24 @@ function findRouteConfig(url) {
  */
 async function handleRequest(request, config) {
   const { strategy, cache: cacheName } = config;
-  
+
   try {
     switch (strategy) {
       case CACHE_STRATEGIES.CACHE_FIRST:
         return await cacheFirst(request, cacheName);
-      
+
       case CACHE_STRATEGIES.NETWORK_FIRST:
         return await networkFirst(request, cacheName);
-      
+
       case CACHE_STRATEGIES.STALE_WHILE_REVALIDATE:
         return await staleWhileRevalidate(request, cacheName);
-      
+
       case CACHE_STRATEGIES.NETWORK_ONLY:
         return await fetch(request);
-      
+
       case CACHE_STRATEGIES.CACHE_ONLY:
         return await cacheOnly(request, cacheName);
-      
+
       default:
         return await networkFirst(request, cacheName);
     }
@@ -215,20 +215,20 @@ async function handleRequest(request, config) {
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
-  
+
   if (cached) {
     console.log('[SW] Serving from cache:', request.url);
     return cached;
   }
-  
+
   console.log('[SW] Cache miss, fetching:', request.url);
   const response = await fetch(request);
-  
+
   if (response.status === 200) {
     const responseClone = response.clone();
     cache.put(request, responseClone);
   }
-  
+
   return response;
 }
 
@@ -237,25 +237,25 @@ async function cacheFirst(request, cacheName) {
  */
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
-  
+
   try {
     console.log('[SW] Trying network first:', request.url);
     const response = await fetch(request);
-    
+
     if (response.status === 200) {
       const responseClone = response.clone();
       cache.put(request, responseClone);
     }
-    
+
     return response;
   } catch (error) {
     console.log('[SW] Network failed, trying cache:', request.url);
     const cached = await cache.match(request);
-    
+
     if (cached) {
       return cached;
     }
-    
+
     throw error;
   }
 }
@@ -266,7 +266,7 @@ async function networkFirst(request, cacheName) {
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
-  
+
   // Start fetch in background
   const fetchPromise = fetch(request).then((response) => {
     if (response.status === 200) {
@@ -277,12 +277,12 @@ async function staleWhileRevalidate(request, cacheName) {
   }).catch(() => {
     // Ignore fetch errors for this strategy
   });
-  
+
   if (cached) {
     console.log('[SW] Serving stale content, revalidating:', request.url);
     return cached;
   }
-  
+
   console.log('[SW] No cache, waiting for network:', request.url);
   return await fetchPromise;
 }
@@ -293,11 +293,11 @@ async function staleWhileRevalidate(request, cacheName) {
 async function cacheOnly(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
-  
+
   if (cached) {
     return cached;
   }
-  
+
   throw new Error('Resource not found in cache');
 }
 
@@ -307,11 +307,11 @@ async function cacheOnly(request, cacheName) {
 async function getOfflinePage() {
   const cache = await caches.open(CACHE_NAME);
   const offlinePage = await cache.match('/');
-  
+
   if (offlinePage) {
     return offlinePage;
   }
-  
+
   // Return a basic offline response
   return new Response(
     createOfflineHTML(),
@@ -410,7 +410,7 @@ function createOfflineHTML() {
 // Background sync (for future implementation)
 self.addEventListener('sync', (event) => {
   console.log('[SW] Background sync event:', event.tag);
-  
+
   if (event.tag === 'session-sync') {
     event.waitUntil(syncSessionData());
   }
@@ -422,19 +422,19 @@ self.addEventListener('sync', (event) => {
 async function syncSessionData() {
   try {
     console.log('[SW] Syncing session data...');
-    
+
     // Get stored session data
     const cache = await caches.open(RUNTIME_CACHE);
     const sessionData = await cache.match('/offline-sessions');
-    
+
     if (sessionData) {
       const sessions = await sessionData.json();
-      
+
       // Sync each session (implementation depends on backend)
       for (const session of sessions) {
         await syncSession(session);
       }
-      
+
       // Clear offline sessions after sync
       await cache.delete('/offline-sessions');
       console.log('[SW] Session data synced successfully');
@@ -456,11 +456,11 @@ async function syncSession(session) {
       },
       body: JSON.stringify(session)
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    
+
     console.log('[SW] Session synced:', session.id);
   } catch (error) {
     console.error('[SW] Failed to sync session:', session.id, error);
@@ -471,24 +471,24 @@ async function syncSession(session) {
 // Message handling
 self.addEventListener('message', (event) => {
   const { type, payload } = event.data;
-  
+
   switch (type) {
     case 'SKIP_WAITING':
       self.skipWaiting();
       break;
-      
+
     case 'GET_VERSION':
       event.ports[0].postMessage({ version: CACHE_NAME });
       break;
-      
+
     case 'CACHE_SESSION':
       cacheSessionOffline(payload);
       break;
-      
+
     case 'CLEAN_CACHE':
       cleanOldCache();
       break;
-      
+
     default:
       console.log('[SW] Unknown message type:', type);
   }
@@ -500,23 +500,23 @@ self.addEventListener('message', (event) => {
 async function cacheSessionOffline(sessionData) {
   try {
     const cache = await caches.open(RUNTIME_CACHE);
-    
+
     // Get existing offline sessions
     let offlineSessions = [];
     const existingData = await cache.match('/offline-sessions');
-    
+
     if (existingData) {
       offlineSessions = await existingData.json();
     }
-    
+
     // Add new session
     offlineSessions.push(sessionData);
-    
+
     // Store updated sessions
     const response = new Response(JSON.stringify(offlineSessions), {
       headers: { 'Content-Type': 'application/json' }
     });
-    
+
     await cache.put('/offline-sessions', response);
     console.log('[SW] Session cached for offline sync');
   } catch (error) {
@@ -531,17 +531,17 @@ async function cleanOldCache() {
   try {
     const cache = await caches.open(RUNTIME_CACHE);
     const requests = await cache.keys();
-    
+
     const now = Date.now();
     const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
-    
+
     for (const request of requests) {
       const response = await cache.match(request);
       const dateHeader = response.headers.get('date');
-      
+
       if (dateHeader) {
         const responseDate = new Date(dateHeader).getTime();
-        
+
         if (now - responseDate > maxAge) {
           await cache.delete(request);
           console.log('[SW] Deleted old cache entry:', request.url);

@@ -103,8 +103,8 @@ export default class Router {
    * @param {boolean} replace - Replace history instead of push (default: false)
    */
   navigate(route, replace = false) {
-    // Prevent re-entrant navigation
-    if (this.isNavigating) {
+    // Prevent re-entrant navigation, but allow if it's been too long (safety)
+    if (this.isNavigating && (Date.now() - (this.navigationStartTime || 0) < 5000)) {
       console.log('Navigation already in progress, skipping:', route);
       return;
     }
@@ -191,6 +191,7 @@ export default class Router {
 
     // Now we're committed to navigating - set the guard
     this.isNavigating = true;
+    this.navigationStartTime = Date.now();
     console.log(`Loading route: ${route}`);
 
     try {
