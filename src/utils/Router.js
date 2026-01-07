@@ -176,11 +176,25 @@ export default class Router {
 
     // Check if route exists
     if (!this.routes.has(route)) {
-      console.warn(`Route not found: ${route}, loading ${this.notFoundRoute}`);
-      route = this.notFoundRoute;
+      // Check if it's a Supabase auth hash (access_token, error, type=signup, etc.)
+      const hash = window.location.hash;
+      const isAuthHash = hash.includes('access_token=') ||
+        hash.includes('error=') ||
+        hash.includes('type=recovery') ||
+        hash.includes('type=signup') ||
+        hash.includes('type=invite');
 
-      // Update URL to 404 route without triggering another navigation
-      window.location.replace(`#/${route}`);
+      if (isAuthHash) {
+        console.log('Router: Detected Supabase auth hash, preserving for processing');
+        route = this.defaultRoute;
+        // We do NOT call window.location.replace here to preserve the hash for Supabase
+      } else {
+        console.warn(`Route not found: ${route}, loading ${this.notFoundRoute}`);
+        route = this.notFoundRoute;
+
+        // Update URL to 404 route without triggering another navigation
+        window.location.replace(`#/${route}`);
+      }
     }
 
     // Don't reload if already on this route (check BEFORE setting isNavigating)
@@ -226,7 +240,7 @@ export default class Router {
 
       // Create page instance
       const pageInstance = typeof PageComponent === 'function'
-        ? new PageComponent(this.app || this)
+        ? new PageComponent(this)
         : PageComponent;
 
       // Mount the new page (stays in correct layout position)

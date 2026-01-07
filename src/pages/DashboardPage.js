@@ -252,10 +252,9 @@ export default class DashboardPage {
         <!-- Secondary Grid (Activity + Quick Stats) -->
         <div class="dashboard-secondary-grid grid gap-6">
           <!-- Recent Activity Section -->
-          <section class="dashboard-activity bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6" role="region" aria-label="Recent activity">
-            <div class="section-header flex items-center justify-between mb-6">
-              <h2 class="text-lg font-semibold text-white">Recent Activity</h2>
-              <i data-lucide="Clock" class="w-5 h-5 text-neutral-500" aria-hidden="true"></i>
+          <section class="dashboard-activity" role="region" aria-label="Recent activity">
+            <div class="section-header flex items-center justify-between mb-4">
+              <h2 class="text-xs font-bold text-neutral-500 uppercase tracking-wider">Recent Activity</h2>
             </div>
             <div class="activity-list space-y-4" id="activity-list" role="feed" aria-label="Activity feed">
               <!-- Activity items will be inserted here -->
@@ -263,26 +262,25 @@ export default class DashboardPage {
           </section>
 
           <!-- Quick Stats Section -->
-          <section class="dashboard-quick-stats bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6" role="region" aria-label="Quick statistics">
-            <div class="section-header flex items-center justify-between mb-6">
-              <h2 class="text-lg font-semibold text-white">Quick Stats</h2>
-              <i data-lucide="trending-up" class="w-5 h-5 text-neutral-500" aria-hidden="true"></i>
+          <section class="dashboard-quick-stats" role="region" aria-label="Quick statistics">
+            <div class="section-header flex items-center justify-between mb-4">
+              <h2 class="text-xs font-bold text-neutral-500 uppercase tracking-wider">Quick Stats</h2>
             </div>
-            <div class="quick-stats-grid grid gap-4" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
+            <div class="quick-stats-grid grid grid-cols-2 md:grid-cols-4 gap-4" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
               <!-- Quick stats will be inserted here -->
             </div>
           </section>
         </div>
 
+
+
         <!-- Leaderboard Highlights -->
-        <section class="dashboard-leaderboards bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl p-6" role="region" aria-label="Leaderboard highlights">
-          <div class="section-header flex items-center justify-between mb-6">
+        <section class="dashboard-leaderboards" role="region" aria-label="Leaderboard highlights">
+          <div class="section-header flex items-center justify-between mb-4">
             <div>
-              <h2 class="text-lg font-semibold text-white">Leaderboard Highlights</h2>
-              <p class="text-neutral-500 text-sm">Top performers across value, quantity, and rarity.</p>
+              <h2 class="text-xs font-bold text-neutral-500 uppercase tracking-wider">Leaderboard Highlights</h2>
             </div>
-            <button class="btn-secondary" id="dashboardViewLeaderboardsBtn" data-testid="dashboard-view-leaderboards">
-              <i data-lucide="trophy"></i>
+            <button class="btn-secondary text-xs py-1 px-3" id="dashboardViewLeaderboardsBtn" data-testid="dashboard-view-leaderboards">
               View all
             </button>
           </div>
@@ -333,14 +331,14 @@ export default class DashboardPage {
       } else {
         // Render activity items
         container.innerHTML = activities.map((activity, index) => `
-          <article class="activity-item flex items-center justify-between p-3 rounded-lg bg-neutral-800/30 hover:bg-neutral-800/50 transition-colors" role="article" aria-label="${this.escapeHtml(activity.name || 'Unknown')} - ${this.escapeHtml(activity.value || 'N/A')}">
+          <article class="activity-item flex items-center justify-between py-3 border-b border-neutral-800 last:border-0" role="article" aria-label="${this.escapeHtml(activity.name || 'Unknown')} - ${this.escapeHtml(activity.value || 'N/A')}">
             <div class="activity-info flex items-center gap-3">
-              <div class="activity-icon p-2 rounded-lg bg-neutral-700/30" aria-hidden="true">
+              <div class="activity-icon p-2 rounded-lg bg-neutral-800/50" aria-hidden="true">
                 <i data-lucide="${activity.icon || 'Activity'}" class="w-4 h-4 text-neutral-400"></i>
               </div>
               <div>
                 <div class="text-sm font-medium text-white">${this.escapeHtml(activity.name || 'Unknown')}</div>
-                <div class="text-xs text-neutral-500 mt-1">${this.escapeHtml(activity.typeLabel || 'Activity')}</div>
+                <div class="text-xs text-neutral-500 mt-0.5">${this.escapeHtml(activity.typeLabel || 'Activity')}</div>
               </div>
             </div>
             <div class="activity-value text-sm font-medium ${activity.type === 'price' ? 'text-green-400' :
@@ -383,9 +381,9 @@ export default class DashboardPage {
       }
 
       container.innerHTML = quickStats.map(stat => `
-        <div class="quick-stat-item p-4 rounded-lg bg-neutral-800/30" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
+        <div class="quick-stat-item p-4 rounded-xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-colors" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
           <div class="text-2xl font-bold text-white mb-1" aria-hidden="true">${this.escapeHtml(stat.value || '0')}</div>
-          <div class="text-xs text-neutral-400" aria-hidden="true">${this.escapeHtml(stat.label || 'N/A')}</div>
+          <div class="text-xs text-neutral-500 font-medium uppercase tracking-wide" aria-hidden="true">${this.escapeHtml(stat.label || 'N/A')}</div>
         </div>
       `).join('');
     } catch (error) {

@@ -24,8 +24,8 @@ export default class AuthModal {
    * @param {string} options.mode - Initial mode: 'signin' or 'signup'
    */
   constructor(options = {}) {
-    this.onSuccess = options.onSuccess || (() => {});
-    this.onClose = options.onClose || (() => {});
+    this.onSuccess = options.onSuccess || (() => { });
+    this.onClose = options.onClose || (() => { });
     this.mode = options.mode || 'signin'; // 'signin' or 'signup'
     this.element = null;
     this.loading = false;
@@ -209,16 +209,14 @@ export default class AuthModal {
     if (!this.isAuthEnabled()) {
       return `
         <div class="auth-modal-overlay" data-auth-overlay>
-          <div class="auth-modal-card glass-card auth-modal-card--compact" role="dialog" aria-modal="true">
+          <div class="auth-modal-card card auth-modal-card--compact" role="dialog" aria-modal="true">
             <button
               type="button"
               class="auth-modal-close"
               data-auth-close
               aria-label="Close authentication modal"
             >
-              <svg class="auth-modal-close-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-              </svg>
+              <i data-lucide="x"></i>
             </button>
 
             <header class="auth-modal-header">
@@ -254,7 +252,7 @@ export default class AuthModal {
     return `
       <div class="auth-modal-overlay" data-auth-overlay>
         <div
-          class="auth-modal-card glass-card"
+          class="auth-modal-card card"
           role="dialog"
           aria-modal="true"
           aria-labelledby="auth-modal-title"
@@ -267,21 +265,13 @@ export default class AuthModal {
             data-auth-close
             aria-label="Close authentication modal"
           >
-            <svg class="auth-modal-close-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+            <i data-lucide="x"></i>
           </button>
 
           <header class="auth-modal-header">
             <div class="auth-modal-heading">
               <span class="auth-modal-kicker">${kicker}</span>
               <h2 class="auth-modal-title" id="auth-modal-title">${title}</h2>
-            </div>
-            <div class="auth-modal-illustration" aria-hidden="true">
-              <svg class="auth-modal-lock-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                <path d="M7 11V7a5 5 0 0110 0v4"></path>
-              </svg>
             </div>
           </header>
 
@@ -313,40 +303,49 @@ export default class AuthModal {
             ${!isSignIn ? `
               <div class="form-group">
                 <label for="auth-displayName">Display name</label>
-                <input
-                  type="text"
-                  id="auth-displayName"
-                  name="displayName"
-                  placeholder="How should we call you?"
-                  autocomplete="name"
-                  data-auth-display-name
-                />
+                <div class="input-with-icon">
+                  <i data-lucide="user"></i>
+                  <input
+                    type="text"
+                    id="auth-displayName"
+                    name="displayName"
+                    placeholder="How should we call you?"
+                    autocomplete="name"
+                    data-auth-display-name
+                  />
+                </div>
               </div>
             ` : ''}
 
             <div class="form-group">
               <label for="auth-email">Email</label>
-              <input
-                type="email"
-                id="auth-email"
-                name="email"
-                required
-                placeholder="your@email.com"
-                autocomplete="email"
-              />
+              <div class="input-with-icon">
+                <i data-lucide="mail"></i>
+                <input
+                  type="email"
+                  id="auth-email"
+                  name="email"
+                  required
+                  placeholder="your@email.com"
+                  autocomplete="email"
+                />
+              </div>
             </div>
 
             <div class="form-group">
               <label for="auth-password">Password</label>
-              <input
-                type="password"
-                id="auth-password"
-                name="password"
-                required
-                minlength="6"
-                placeholder="Enter your password"
-                autocomplete="${passwordAutocomplete}"
-              />
+              <div class="input-with-icon">
+                <i data-lucide="lock"></i>
+                <input
+                  type="password"
+                  id="auth-password"
+                  name="password"
+                  required
+                  minlength="6"
+                  placeholder="Enter your password"
+                  autocomplete="${passwordAutocomplete}"
+                />
+              </div>
               <small>Minimum 6 characters</small>
             </div>
 
@@ -359,15 +358,18 @@ export default class AuthModal {
             </button>
           </form>
 
-          <div class="auth-modal-divider"><span>or use a magic link</span></div>
+          <div class="auth-modal-divider"><span>or continue with</span></div>
 
-          <button
-            type="button"
-            class="btn btn-secondary auth-modal-magic"
-            data-auth-magic-link
-          >
-            Send Magic Link
-          </button>
+          <div class="auth-modal-social">
+            <button type="button" class="btn btn-secondary social-btn" data-provider="google">
+              <i data-lucide="chrome"></i>
+              <span>Google</span>
+            </button>
+            <button type="button" class="btn btn-secondary social-btn" data-provider="discord">
+              <i data-lucide="message-square"></i>
+              <span>Discord</span>
+            </button>
+          </div>
 
           <p class="auth-modal-toggle">
             ${toggleText}
@@ -425,10 +427,9 @@ export default class AuthModal {
     }
 
     // Close on overlay click
-    const overlay = this.element.querySelector('[data-auth-overlay]');
-    if (overlay) {
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) this.close();
+    if (this.element.hasAttribute('data-auth-overlay')) {
+      this.element.addEventListener('click', (e) => {
+        if (e.target === this.element) this.close();
       });
     }
 
@@ -458,6 +459,21 @@ export default class AuthModal {
     if (magicLinkBtn) {
       magicLinkBtn.addEventListener('click', () => this.handleMagicLink());
     }
+
+    // Social providers
+    const socialButtons = this.element.querySelectorAll('.social-btn');
+    socialButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const provider = btn.getAttribute('data-provider');
+        try {
+          this.setLoading(true);
+          await authService.signInWithOAuth(provider);
+        } catch (error) {
+          this.setError(error.message);
+          this.setLoading(false);
+        }
+      });
+    });
 
     // ESC key to close
     const handleEsc = (e) => {

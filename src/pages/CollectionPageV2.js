@@ -505,11 +505,7 @@ export class CollectionPage {
           this.updateDisplay();
         });
 
-        // Force style immediately to ensure visual change
-        if (sidebar.container) {
-          sidebar.container.style.backgroundColor = '#121212';
-          sidebar.container.style.borderRightColor = '#262626';
-        }
+        // Styles are now handled by CSS variables - no inline overrides needed
       } else {
         console.warn('CollectionPage: Sidebar not found');
       }

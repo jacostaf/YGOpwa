@@ -122,22 +122,6 @@ export default class LeaderboardPage {
   render() {
     return `
       <div class="page-content leaderboard-page" data-testid="leaderboard-page">
-        <div class="page-header">
-          <div class="page-title-section">
-            <i class="lucide-icon" data-lucide="trophy"></i>
-            <div>
-              <h1>Leaderboards</h1>
-              <p class="page-subtitle">See how your collection stacks up across key metrics</p>
-            </div>
-          </div>
-          <div class="page-actions">
-            <button class="btn-secondary" id="leaderboardRefreshBtn" data-testid="leaderboard-refresh-btn">
-              <i class="lucide-icon" data-lucide="refresh-cw"></i>
-              Refresh
-            </button>
-          </div>
-        </div>
-
         <div class="leaderboard-tabs" role="tablist">
           ${this.renderTabButton(LEADERBOARD_TYPES.VALUE, 'Value', 'banknote')}
           ${this.renderTabButton(LEADERBOARD_TYPES.QUANTITY, 'Quantity', 'package')}

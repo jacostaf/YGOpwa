@@ -196,7 +196,7 @@ function normalizeEntry(raw, defaultType) {
     rank: safeNumber(raw.rank, 0),
     dense_rank: safeNumber(raw.dense_rank, safeNumber(raw.rank, 0)),
     user_id: raw.user_id || null,
-    display_name: raw.display_name || 'Collector',
+    display_name: raw.display_name || raw.username || 'Duelist',
     avatar_url: raw.avatar_url || null,
     metric_value: safeNumber(raw.metric_value),
     total_market_value: safeNumber(raw.total_market_value),

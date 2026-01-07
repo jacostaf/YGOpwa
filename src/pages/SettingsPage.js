@@ -16,6 +16,7 @@
 
 import ToggleSwitch from '../components/ToggleSwitch.js';
 import themeManager from '../themes/ThemeManager.js';
+import { authService } from '../services/authService.js';
 
 export default class SettingsPage {
   constructor(router) {
@@ -36,8 +37,73 @@ export default class SettingsPage {
       handleThemeChange: this.handleThemeChange.bind(this),
       handleSliderChange: this.handleSliderChange.bind(this),
       handleInputChange: this.handleInputChange.bind(this),
-      handleToggleChange: this.handleToggleChange.bind(this)
+      handleToggleChange: this.handleToggleChange.bind(this),
+      handleProfileUpdate: this.handleProfileUpdate.bind(this)
     };
+  }
+
+  /**
+   * Get current username from auth service
+   */
+  getProfileUsername() {
+    const profile = authService?.profile;
+    return profile?.username || '';
+  }
+
+  /**
+   * Handle profile update
+   */
+  async handleProfileUpdate() {
+    const input = this.container.querySelector('#profileUsername');
+    const btn = this.container.querySelector('#saveProfileBtn');
+
+    if (!input || !btn) return;
+
+    const newUsername = input.value.trim();
+    const currentUsername = this.getProfileUsername();
+
+    if (!newUsername) {
+      this.showToast('Username cannot be empty', 'error');
+      return;
+    }
+
+    if (newUsername === currentUsername) {
+      this.showToast('No changes to save', 'info');
+      return;
+    }
+
+    // Validate username format (alphanumeric + underscore, 3-20 chars)
+    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!usernameRegex.test(newUsername)) {
+      this.showToast('Username must be 3-20 characters, alphanumeric or underscore', 'error');
+      return;
+    }
+
+    try {
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i> Saving...';
+
+      if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+
+      const { error } = await authService.updateProfile({ username: newUsername });
+
+      if (error) {
+        if (error.code === '23505') { // Unique violation
+          this.showToast('Username is already taken', 'error');
+        } else {
+          throw error;
+        }
+      } else {
+        this.showToast('Username updated successfully', 'success');
+        // Refresh page to show new state if needed, though auth listener might handle it
+      }
+    } catch (err) {
+      console.error('Profile update failed:', err);
+      this.showToast('Failed to update username', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Update';
+    }
   }
 
   /**
@@ -46,6 +112,39 @@ export default class SettingsPage {
   render() {
     return `
       <div class="page-content settings-page">
+        <!-- Profile Settings -->
+        <div class="settings-section bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
+          <div class="section-header">
+            <h2><i data-lucide="user"></i> Profile Settings</h2>
+            <p class="section-description">Manage your public profile information</p>
+          </div>
+
+          <div class="settings-list">
+            <!-- Username -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="profileUsername" class="setting-label">Username</label>
+                <p class="setting-description">Your unique display name across the platform</p>
+              </div>
+              <div class="setting-control">
+                <div class="input-group">
+                  <input
+                    type="text"
+                    id="profileUsername"
+                    class="setting-input-text"
+                    placeholder="Enter username"
+                    value="${this.getProfileUsername()}"
+                    maxlength="20"
+                  >
+                  <button class="btn btn-sm btn-secondary" id="saveProfileBtn">
+                    Update
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Voice Recognition Settings -->
         <div class="settings-section bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div class="section-header">
@@ -412,6 +511,12 @@ export default class SettingsPage {
       input.addEventListener('change', this.boundHandlers.handleInputChange);
       input.addEventListener('blur', this.boundHandlers.handleInputChange);
     });
+
+    // Profile update button
+    const profileBtn = this.container.querySelector('#saveProfileBtn');
+    if (profileBtn) {
+      profileBtn.addEventListener('click', this.boundHandlers.handleProfileUpdate);
+    }
   }
 
   /**

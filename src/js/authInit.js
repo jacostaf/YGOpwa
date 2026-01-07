@@ -39,7 +39,7 @@ export async function initAuth() {
     // Add a timeout to ensure the UI eventually renders even if auth is stuck
     const authPromise = getCurrentUser();
     const timeoutPromise = new Promise((resolve) =>
-      setTimeout(() => resolve({ user: null, error: 'Auth check timeout' }), 1000) // Reduced from 3s to 1s
+      setTimeout(() => resolve({ user: null, error: 'Auth check timeout' }), 5000) // Increased to 5s
     );
 
     const { user } = await Promise.race([authPromise, timeoutPromise]);
@@ -68,6 +68,40 @@ export async function initAuth() {
       renderSignInButton(authContainer);
     }
   });
+
+  // Check for OAuth errors in URL query parameters
+  checkUrlForErrors();
+}
+
+/**
+ * Check URL for authentication errors (e.g., from OAuth redirect)
+ */
+function checkUrlForErrors() {
+  const params = new URLSearchParams(window.location.search);
+  const error = params.get('error');
+  const errorDescription = params.get('error_description');
+
+  if (error) {
+    console.error('Auth error detected in URL:', error, errorDescription);
+
+    // Show the auth modal with the error
+    const authModal = new AuthModal({
+      mode: 'signin',
+      onClose: () => {
+        // Clear query params after closing to avoid showing error again on refresh
+        const url = new URL(window.location);
+        url.search = '';
+        window.history.replaceState({}, document.title, url.toString());
+      }
+    });
+
+    authModal.show();
+
+    // Set the error message in the modal (using a small delay to ensure it's rendered)
+    setTimeout(() => {
+      authModal.setError(errorDescription || error);
+    }, 100);
+  }
 }
 
 /**
@@ -81,9 +115,14 @@ function renderSignInButton(container) {
       aria-label="Sign in to VoxRip"
       type="button"
     >
+      <i data-lucide="log-in"></i>
       <span class="auth-trigger-label">Sign In</span>
     </button>
   `;
+
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
 
   const signInBtn = document.getElementById('sign-in-btn');
   if (signInBtn) {

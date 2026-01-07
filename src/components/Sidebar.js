@@ -11,6 +11,8 @@
  */
 
 import IconLoader from '../utils/IconLoader.js';
+import { getEnv } from '../lib/config.js';
+import { authService } from '../services/authService.js';
 
 export default class Sidebar {
   constructor(options = {}) {
@@ -48,6 +50,17 @@ export default class Sidebar {
     this.render();
     this.attachEvents();
     this.updateMobileState();
+
+    // Subscribe to auth changes to update sidebar when user logs in/out or profile loads
+    if (authService) {
+      authService.onAuthStateChange((event, session) => {
+        console.log('Sidebar: Auth state changed:', event);
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'PROFILE_UPDATED') {
+          this.render();
+          this.attachEvents(); // Re-attach events after re-render
+        }
+      });
+    }
   }
 
   render() {
@@ -98,7 +111,17 @@ export default class Sidebar {
       return this.renderCollectionNavigation();
     }
 
-    const navItemsHtml = this.navItems.map(item => `
+    const profile = authService?.profile;
+    console.log('Sidebar: Profile state:', profile);
+    const isAdmin = profile && profile.is_admin;
+    console.log('Sidebar: isAdmin:', isAdmin);
+
+    const itemsToRender = [...this.navItems];
+    if (isAdmin) {
+      itemsToRender.push({ id: 'admin', label: 'Admin', icon: 'shield-alert' });
+    }
+
+    const navItemsHtml = itemsToRender.map(item => `
       <button
         class="sidebar-nav-item ${item.id === this.activeItem ? 'active' : ''}"
         data-nav-id="${item.id}"

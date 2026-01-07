@@ -22,13 +22,6 @@
     <link rel="icon" type="image/png" sizes="192x192" href="src/assets/icons/icon-192.png">
     <link rel="apple-touch-icon" href="src/assets/icons/icon-192.png">
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap"
-        rel="stylesheet">
-
     <!-- Stylesheets -->
     <link rel="stylesheet" href="src/css/main.css">
 
@@ -39,7 +32,7 @@
     <link rel="stylesheet" href="src/css/sidebar.css">
     <link rel="stylesheet" href="src/css/settings.css">
     <link rel="stylesheet" href="src/css/theme-settings.css">
-    <link rel="stylesheet" href="src/css/collection.css?v=2.1.0">
+    <link rel="stylesheet" href="src/css/collection.css">
     <link rel="stylesheet" href="src/css/pack-opening-compact.css">
     <link rel="stylesheet" href="src/css/animations.css">
     <link rel="stylesheet" href="src/css/accessibility.css">
@@ -61,6 +54,9 @@
 </head>
 
 <body>
+    <h1
+        style="color: red; position: fixed; z-index: 9999; top: 0; left: 0; background: white; padding: 20px; border: 5px solid red;">
+        VERSION 2 LOADED</h1>
     <!-- Skip to Content Link (for keyboard navigation) -->
     <a href="#main-content" class="skip-to-content">Skip to main content</a>
 
@@ -102,8 +98,6 @@
 
             <!-- Sidebar Footer -->
             <div class="sidebar-footer">
-                <!-- Auth UI Container -->
-                <div id="auth-container"></div>
                 <span id="app-version">v2.0.0</span>
             </div>
         </aside>
@@ -113,7 +107,16 @@
 
         <!-- Main Content Area -->
         <main class="main-content" id="main-content" role="main" aria-label="Main content">
-            <!-- Page Header Removed -->
+            <!-- Page Header -->
+            <header class="page-header" id="page-header" role="banner">
+                <div class="page-header-title">
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+                <div class="page-header-actions" id="page-header-actions">
+                    <!-- Auth UI Container -->
+                    <div id="auth-container"></div>
+                </div>
+            </header>
 
             <!-- Page Container (dynamic content) -->
             <div class="page-container" id="page-container">
@@ -215,7 +218,6 @@
     <!-- Router & Sidebar Integration (Phase 5) -->
     <script type="module">
         console.log('Index.html module script loaded (TIMESTAMP: ' + Date.now() + ')');
-        import config from './src/lib/config.js';
         import Router from './src/utils/Router.js';
         import Sidebar from './src/components/Sidebar.js';
 
@@ -229,7 +231,6 @@
         import LeaderboardPage from './src/pages/LeaderboardPage.js';
         import SettingsPage from './src/pages/SettingsPage.js';
         import ThemeSettingsPage from './src/pages/ThemeSettingsPage.js';
-        import AdminPage from './src/pages/AdminPage.js';
 
         // Initialize router and sidebar when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
@@ -252,7 +253,6 @@
             router.register('leaderboards', LeaderboardPage);
             router.register('settings', SettingsPage);
             router.register('theme', ThemeSettingsPage);
-            router.register('admin', AdminPage);
 
             router.initialize(pageContainer, pageTitle);
 
@@ -299,17 +299,9 @@
                 }
             });
 
-            // Store instances globally for debugging and access
+            // Store instances globally for debugging
             window.router = router;
-            // Avoid overwriting window.sidebar if it's read-only, but try anyway or use app.sidebar
-            try { window.sidebar = sidebar; } catch (e) { console.warn('Could not set window.sidebar', e); }
-
-            if (window.app) {
-                window.app.sidebar = sidebar;
-                console.log('Sidebar attached to window.app');
-            } else {
-                console.warn('window.app not found when attaching sidebar');
-            }
+            window.sidebar = sidebar;
 
             console.log('Router and Sidebar initialized successfully');
         });

@@ -17,22 +17,19 @@
   left: 0;
   width: var(--sidebar-width);
   height: 100vh;
-  background: var(--sidebar-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-right: 1px solid var(--border-primary);
+  background-color: var(--sidebar-bg);
+  /* NO backdrop-filter - solid surface */
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  transition: transform 0.3s ease, background-color 0.3s ease;
+  transition: transform var(--transition-normal);
 }
 
-/* Collection Context Override - Force Dark Background */
+/* Collection Context Override - Uses theme variables */
 .sidebar.collection-context {
-  background-color: #121212 !important;
-  background: #121212 !important;
-  --sidebar-bg: #121212 !important;
-  border-right-color: #262626 !important;
+  background-color: var(--sidebar-bg);
+  border-right-color: var(--border-subtle);
 }
 
 /* Mobile: Hidden by default */
@@ -86,15 +83,13 @@
 
 .sidebar-logo-text {
   font-size: 1.25rem;
-  /* Reduced from 1.5rem to fit better */
   font-weight: 700;
-  background: linear-gradient(135deg, var(--accent-primary), var(--text-primary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  /* NO gradient text - solid color */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
 .sidebar-branding {
@@ -293,10 +288,9 @@
 }
 
 .sidebar-nav-item:hover {
-  background: var(--sidebar-hover);
+  background-color: var(--sidebar-hover);
   color: var(--text-primary);
-  transform: translateX(2px);
-  box-shadow: var(--shadow-sm);
+  /* NO transform - subtle bg change only */
 }
 
 .sidebar-nav-item.active {
@@ -348,13 +342,13 @@
   }
 }
 
-/* Hover icon rotation effect */
+/* Icon styling on hover - NO rotation effect */
 .sidebar-nav-item:hover .sidebar-nav-icon {
-  transform: scale(1.1) rotate(5deg);
+  color: var(--text-primary);
 }
 
 .sidebar-nav-item.active .sidebar-nav-icon {
-  transform: scale(1.05);
+  color: white;
 }
 
 /* Focus states for accessibility */
@@ -447,12 +441,12 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.6);
+  /* NO backdrop-filter - solid overlay */
   z-index: 999;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-fast);
 }
 
 body.sidebar-open .sidebar-overlay {

@@ -29,107 +29,73 @@
   /* This file only contains layout-specific and utility variables */
 
   /* Typography */
-  --font-family-primary: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  --font-family-primary: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
-  --font-size-xs: 0.75rem;
-  /* 12px */
-  --font-size-sm: 0.875rem;
-  /* 14px */
-  --font-size-base: 1rem;
-  /* 16px */
-  --font-size-lg: 1.125rem;
-  /* 18px */
-  --font-size-xl: 1.25rem;
-  /* 20px */
-  --font-size-2xl: 1.5rem;
-  /* 24px */
-  --font-size-3xl: 1.875rem;
-  /* 30px */
-  --font-size-4xl: 2.25rem;
-  /* 36px */
+  --font-size-xs: var(--text-xs);
+  --font-size-sm: var(--text-sm);
+  --font-size-base: var(--text-base);
+  --font-size-lg: var(--text-lg);
+  --font-size-xl: var(--text-xl);
+  --font-size-2xl: var(--text-2xl);
+  --font-size-3xl: var(--text-3xl);
+  --font-size-4xl: var(--text-4xl);
 
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
+  --font-weight-normal: var(--font-normal);
+  --font-weight-medium: var(--font-medium);
+  --font-weight-semibold: var(--font-semibold);
+  --font-weight-bold: var(--font-bold);
 
-  --line-height-tight: 1.25;
-  --line-height-normal: 1.5;
-  --line-height-relaxed: 1.75;
+  --line-height-tight: var(--leading-tight);
+  --line-height-normal: var(--leading-normal);
+  --line-height-relaxed: var(--leading-relaxed);
 
   /* Spacing */
-  --spacing-xs: 0.25rem;
-  /* 4px */
-  --spacing-sm: 0.5rem;
-  /* 8px */
-  --spacing-md: 1rem;
-  /* 16px */
-  --spacing-lg: 1.5rem;
-  /* 24px */
-  --spacing-xl: 2rem;
-  /* 32px */
-  --spacing-2xl: 3rem;
-  /* 48px */
-  --spacing-3xl: 4rem;
-  /* 64px */
+  --spacing-xs: var(--spacing-xs);
+  --spacing-sm: var(--spacing-sm);
+  --spacing-md: var(--spacing-md);
+  --spacing-lg: var(--spacing-lg);
+  --spacing-xl: var(--spacing-xl);
+  --spacing-2xl: var(--spacing-2xl);
+  --spacing-3xl: var(--spacing-3xl);
 
   /* Layout */
   --container-max-width: 1200px;
   --header-height: 48px;
-  /* Updated to 48px */
   --sidebar-width: 260px;
-  /* Slightly narrower to match prototype */
-  --border-radius: 8px;
-  --border-radius-sm: 4px;
-  --border-radius-lg: 12px;
-  --border-radius-xl: 16px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  --shadow-glow: 0 0 20px rgba(255, 255, 255, 0.1);
-  /* Monochrome glow */
+  /* Border Radius */
+  --border-radius: var(--radius-md);
+  --border-radius-sm: var(--radius-sm);
+  --border-radius-lg: var(--radius-lg);
+  --border-radius-xl: var(--radius-xl);
+
+  /* Shadows - inherited from themes.css */
+  /* NO glow shadows */
 
   /* Transitions */
-  --transition-fast: 150ms ease-in-out;
-  --transition-normal: 250ms ease-in-out;
-  --transition-slow: 350ms ease-in-out;
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Z-index Layering System - Centralized Management */
   --z-base: 0;
   --z-docked: 10;
-  /* Docked elements like sticky headers */
   --z-dropdown: 1000;
-  /* Dropdown menus, select options */
   --z-sticky: 1020;
-  /* Sticky positioned elements */
   --z-fixed: 1030;
-  /* Fixed positioned elements */
   --z-floating: 1040;
-  /* Floating action buttons, voice controls */
   --z-voice-transcript: 1050;
-  /* Live voice transcript display */
   --z-training-ui: 1060;
-  /* Voice training buttons and UI */
   --z-modal-backdrop: 1070;
-  /* Modal backdrop overlays */
   --z-modal: 1080;
-  /* Modal dialogs */
   --z-training-modal: 1090;
-  /* Training specific modals (higher priority) */
   --z-popover: 1100;
-  /* Popovers and dropdowns from modals */
   --z-tooltip: 1110;
-  /* Tooltips (highest interactive element) */
   --z-toast: 1120;
-  /* Toast notifications (always visible) */
 
   /* Component Sizes */
   --icon-btn-size: 36px;
-  /* Smaller buttons for thinner header */
   --spinner-size-sm: 16px;
   --spinner-size-md: 40px;
   --spinner-size-lg: 60px;
@@ -159,8 +125,7 @@ html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   min-height: 100%;
-  background-color: var(--bg-primary);
-  /* Prevent white flash on overscroll */
+  background-color: var(--surface-primary);
 }
 
 body {
@@ -169,11 +134,10 @@ body {
   font-weight: var(--font-weight-normal);
   line-height: var(--line-height-normal);
   color: var(--text-primary);
-  background-color: var(--bg-primary);
+  background-color: var(--surface-primary);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Safe area support for mobile devices */
   padding-left: var(--safe-area-inset-left);
   padding-right: var(--safe-area-inset-right);
 }
@@ -197,7 +161,7 @@ body {
   top: -40px;
   left: 6px;
   background: var(--accent-primary);
-  color: var(--text-primary);
+  color: var(--text-inverse);
   padding: 8px;
   border-radius: var(--border-radius);
   text-decoration: none;
@@ -250,7 +214,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-primary);
+  background: var(--surface-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -270,17 +234,19 @@ body {
 }
 
 .app-logo h1 {
+  font-family: var(--font-display);
   font-size: var(--font-size-3xl);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
   margin-bottom: var(--spacing-lg);
+  letter-spacing: -0.02em;
 }
 
 .loading-spinner {
   width: var(--spinner-size-lg);
   height: var(--spinner-size-lg);
   margin: var(--spacing-lg) auto;
-  border: 4px solid var(--bg-tertiary);
+  border: 4px solid var(--surface-tertiary);
   border-top: 4px solid var(--accent-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -306,7 +272,7 @@ body {
 .loading-progress {
   width: 100%;
   height: 4px;
-  background: var(--bg-secondary);
+  background: var(--surface-tertiary);
   border-radius: var(--border-radius);
   overflow: hidden;
   margin-top: var(--spacing-md);
@@ -325,7 +291,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
+  background: var(--surface-primary);
 }
 
 /* Header styles removed */
@@ -377,23 +343,19 @@ body {
 /* Cards and Sections */
 .card,
 .section-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--border-radius-lg);
-  padding: 1.5rem;
-  /* 24px - matches mockup */
-  box-shadow: none;
-  backdrop-filter: blur(var(--blur-md));
-  -webkit-backdrop-filter: blur(var(--blur-md));
-  transition: all var(--transition-normal);
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  transition: box-shadow var(--transition-normal),
+    border-color var(--transition-fast);
 }
 
 .card:hover,
 .section-card:hover {
-  transform: translateY(-4px);
-  background: var(--card-bg-hover);
-  border-color: var(--accent-primary);
-  box-shadow: var(--shadow-lg), 0 0 20px rgba(115, 115, 115, 0.1);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
+  /* NO transform - subtle shadow only */
 }
 
 .section-card h2,
@@ -5180,10 +5142,10 @@ body {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-xl);
-  background: rgba(10, 10, 10, 0.7);
-  backdrop-filter: blur(var(--blur-lg));
-  -webkit-backdrop-filter: blur(var(--blur-lg));
+  background: rgba(0, 0, 0, 0.85);
+  /* Darker, solid feel */
   z-index: var(--z-modal);
+  animation: fadeIn var(--transition-normal);
 }
 
 @media (max-width: 640px) {
@@ -5194,12 +5156,12 @@ body {
 
 .auth-modal-card {
   position: relative;
-  width: min(420px, 100%);
+  width: min(400px, 100%);
   padding: var(--spacing-xl);
-  background: var(--card-bg);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-2xl);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
@@ -5214,7 +5176,7 @@ body {
 @media (max-width: 640px) {
   .auth-modal-card {
     padding: var(--spacing-lg);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
   }
 }
 
@@ -5259,15 +5221,17 @@ body {
 }
 
 .auth-modal-kicker {
+  font-family: var(--font-display);
   font-size: var(--text-xs);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
 
 .auth-modal-title {
+  font-family: var(--font-display);
   font-size: var(--text-2xl);
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
 }
 
@@ -5317,8 +5281,8 @@ body {
 
 .auth-modal-tab.is-active {
   background: var(--accent-primary);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-accent-md);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-sm);
 }
 
 .auth-modal-description {
@@ -5381,9 +5345,40 @@ body {
   white-space: nowrap;
 }
 
-.auth-modal-magic {
+.auth-modal-social {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+}
+
+.social-btn {
+  font-size: var(--text-sm);
+  gap: var(--spacing-sm);
+}
+
+.social-btn i {
+  width: 16px;
+  height: 16px;
+}
+
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-icon i {
+  position: absolute;
+  left: var(--spacing-md);
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.input-with-icon input {
+  padding-left: calc(var(--spacing-md) * 2 + 16px) !important;
   width: 100%;
-  justify-content: center;
 }
 
 .auth-modal-toggle {
@@ -5853,26 +5848,30 @@ body {
 }
 
 .leaderboard-highlight-card {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  background: rgba(5, 8, 14, 0.35);
+  background: var(--surface-secondary);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
   min-height: 180px;
-  transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .leaderboard-highlight-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(99, 102, 241, 0.6);
-  background: rgba(5, 8, 14, 0.5);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
 }
 
 .leaderboard-highlight-card.error {
-  border-color: rgba(248, 113, 113, 0.4);
-  background: rgba(127, 29, 29, 0.25);
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(254, 202, 202, 0.15);
+}
+
+[data-theme="light"] .leaderboard-highlight-card.error {
+  border-color: #fca5a5;
+  background: rgba(254, 202, 202, 0.3);
 }
 
 .leaderboard-highlight-card.skeleton {

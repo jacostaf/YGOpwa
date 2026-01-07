@@ -13,15 +13,20 @@ class AuthService {
     this.session = null;
     this.profile = null;
     this._authStateListeners = [];
+    this.projectRef = this._extractProjectRef();
 
     // Initialize with a global timeout to prevent initPromise from hanging forever
-    const initPromise = this.initialize();
-    const globalTimeout = new Promise((resolve) =>
-      setTimeout(() => {
+    let timeoutId;
+    const globalTimeout = new Promise((resolve) => {
+      timeoutId = setTimeout(() => {
         console.warn('AuthService: Initialization global timeout reached');
         resolve();
-      }, 8000) // Reduced from 20s to 8s
-    );
+      }, 15000); // Increased to 15s
+    });
+
+    const initPromise = this.initialize().finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+    });
 
     this.initPromise = Promise.race([initPromise, globalTimeout]);
   }
@@ -36,7 +41,7 @@ class AuthService {
     console.log('AuthService: Fetching initial session...');
     const sessionPromise = supabase.auth.getSession();
     const timeoutPromise = new Promise((resolve) =>
-      setTimeout(() => resolve({ data: { session: null }, error: new Error('Session fetch timeout') }), 4000) // Reduced from 15s to 4s
+      setTimeout(() => resolve({ data: { session: null }, error: new Error('Session fetch timeout') }), 10000) // Increased to 10s
     );
 
     const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]);
@@ -47,8 +52,7 @@ class AuthService {
       // FALLBACK: If getSession timed out, try to recover from localStorage manually
       // This prevents the app from logging out the user just because the network was slow
       if (typeof window !== 'undefined' && window.localStorage) {
-        const projectRef = 'kguazmofmstmethzoeyn';
-        const key = `sb-${projectRef}-auth-token`;
+        const key = `sb-${this.projectRef}-auth-token`;
         const storedSession = window.localStorage.getItem(key);
         if (storedSession) {
           try {
@@ -150,6 +154,24 @@ class AuthService {
   }
 
   /**
+   * Sign in with OAuth provider
+   * @param {string} provider 
+   */
+  async signInWithOAuth(provider) {
+    if (!supabase) throw new Error('Supabase not configured');
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+
+    if (error) throw error;
+    return data;
+  }
+
+  /**
    * Sign out the current user
  */
   async signOut() {
@@ -197,8 +219,7 @@ class AuthService {
       // 1. FAST PATH: Check localStorage manually for a session
       // This bypasses everything else to unblock the UI immediately.
       if (typeof window !== 'undefined' && window.localStorage) {
-        const projectRef = 'kguazmofmstmethzoeyn';
-        const key = `sb-${projectRef}-auth-token`;
+        const key = `sb-${this.projectRef}-auth-token`;
         const storedSession = window.localStorage.getItem(key);
 
         if (storedSession) {
@@ -225,12 +246,16 @@ class AuthService {
       }
 
       // 2. FAST EXIT: If no local token, we can assume logged out for UI purposes
-      // This prevents waiting for initPromise (and its timeouts) when the user is clearly not logged in.
+      // UNLESS there is an auth-related hash in the URL (OAuth redirect)
       if (typeof window !== 'undefined' && window.localStorage) {
-        const projectRef = 'kguazmofmstmethzoeyn';
-        const key = `sb-${projectRef}-auth-token`;
-        if (!window.localStorage.getItem(key)) {
-          console.log('AuthService: No local session found, returning null immediately');
+        const key = `sb-${this.projectRef}-auth-token`;
+        const hasAuthHash = window.location.hash && (
+          window.location.hash.includes('access_token=') ||
+          window.location.hash.includes('error=')
+        );
+
+        if (!window.localStorage.getItem(key) && !hasAuthHash) {
+          console.log('AuthService: No local session or auth hash found, returning null immediately');
           return { user: null, error: null };
         }
       }
@@ -271,7 +296,7 @@ class AuthService {
         .maybeSingle(); // Use maybeSingle to avoid error if no profile exists
 
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000) // Reduced from 15s to 5s
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000) // Increased to 10s
       );
 
       const { data, error } = await Promise.race([profilePromise, timeoutPromise]);
@@ -288,8 +313,14 @@ class AuthService {
         console.log('AuthService: No profile found, creating one...');
         this.profile = await this.createProfile();
       } else {
+        console.log('AuthService: Profile fetched successfully:', data);
         this.profile = data;
       }
+
+
+
+      // Notify listeners that profile has been updated
+      this.notifyListeners('PROFILE_UPDATED', this.session);
 
       return this.profile;
     } catch (err) {
@@ -332,6 +363,44 @@ class AuthService {
   }
 
   /**
+   * Update user profile
+   * @param {Object} updates - Fields to update
+   */
+  async updateProfile(updates) {
+    if (!this.user || !supabase) return { error: new Error('Not authenticated') };
+
+    try {
+      console.log('AuthService: Updating profile:', updates);
+
+      // Add updated_at timestamp
+      const updatesWithTimestamp = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update(updatesWithTimestamp)
+        .eq('id', this.user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local state
+      this.profile = data;
+
+      // Notify listeners
+      this.notifyListeners('PROFILE_UPDATED', this.session);
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('AuthService: Failed to update profile:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
    * Subscribe to auth state changes
    * @param {Function} callback 
    * @returns {Function} Unsubscribe function
@@ -362,6 +431,25 @@ class AuthService {
       }
     });
   }
+
+  /**
+   * Extract project ref from Supabase URL
+   * @private
+   */
+  _extractProjectRef() {
+    try {
+      // Try to get URL from supabase client options
+      const url = supabase?.auth?.options?.url || '';
+      if (url) {
+        const hostname = new URL(url).hostname;
+        return hostname.split('.')[0];
+      }
+    } catch (e) {
+      console.warn('AuthService: Failed to extract projectRef from URL');
+    }
+    // Fallback to the one previously hardcoded if extraction fails
+    return 'kguazmofmstmethzoeyn';
+  }
 }
 
 // Export singleton instance
@@ -370,9 +458,11 @@ export default authService;
 
 // Export bound methods for convenience
 export const signUp = authService.signUp.bind(authService);
-export const signIn = authService.signIn.bind(authService);
+export const signInWithMagicLink = authService.signInWithMagicLink.bind(authService);
+export const signInWithOAuth = authService.signInWithOAuth.bind(authService);
 export const signOut = authService.signOut.bind(authService);
 export const getSession = authService.getSession.bind(authService);
 export const getUser = authService.getUser.bind(authService);
 export const getCurrentUser = authService.getCurrentUser.bind(authService);
 export const onAuthStateChange = authService.onAuthStateChange.bind(authService);
+export const updateProfile = authService.updateProfile.bind(authService);
