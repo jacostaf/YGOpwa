@@ -14,6 +14,7 @@
 import StatsCard from '../components/StatsCard.js';
 import DashboardService from '../services/DashboardService.js';
 import LeaderboardService, { LEADERBOARD_TYPES } from '../services/leaderboardService.js';
+import { CollectionManager } from '../services/CollectionManager.js';
 
 let lastDashboardMountHash = null;
 
@@ -27,9 +28,15 @@ export default class DashboardPage {
     this.refreshInterval = null;
     this.mountHash = null;
     this.leaderboardError = null;
+    // Collection preview state
+    this.collectionManager = null;
+    this.collectionCards = [];
+    this.collectionCycleInterval = null;
+    this.priceUpdateDebounceTimer = null;
     this.boundHandlers = {
       handleViewAllLeaderboards: this.handleViewAllLeaderboards.bind(this),
       handleHighlightNavigate: this.handleHighlightNavigate.bind(this),
+      handleCollectionCTA: this.handleCollectionCTA.bind(this),
     };
   }
 
@@ -102,7 +109,7 @@ export default class DashboardPage {
     }
   }
 
-  buildHighlightCard(type, winner, source) {
+  buildHighlightCard(type, winner, source, isFirst = false) {
     const label = this.getLeaderboardLabel(type);
     const metric = this.formatLeaderboardMetric(type, winner);
     const userName = winner?.display_name || 'No leader yet';
@@ -114,10 +121,15 @@ export default class DashboardPage {
 
     const meta = source === 'fallback' ? '<span class="leaderboard-highlight-badge">Sample Data</span>' : '';
 
+    // First card (Value) gets emphasized treatment, others are more subtle
+    const cardClass = isFirst
+      ? 'leaderboard-highlight-card leaderboard-highlight-card--primary'
+      : 'leaderboard-highlight-card leaderboard-highlight-card--secondary';
+
     return `
-      <article class="leaderboard-highlight-card" data-type="${type}" data-testid="leaderboard-highlight">
+      <article class="${cardClass}" data-type="${type}" data-testid="leaderboard-highlight">
         <header class="leaderboard-highlight-header">
-          <span class="leaderboard-highlight-title">${label} Leaderboard ${meta}</span>
+          <span class="leaderboard-highlight-title">${label} ${meta}</span>
           <span class="leaderboard-highlight-metric">${metric}</span>
         </header>
         <div class="leaderboard-highlight-body">
@@ -126,8 +138,7 @@ export default class DashboardPage {
         </div>
         <footer class="leaderboard-highlight-footer">
           <button class="leaderboard-highlight-btn" data-action="view-leaderboard" data-leaderboard-type="${type}">
-            View leaderboard
-            <i data-lucide="arrow-right"></i>
+            View →
           </button>
         </footer>
       </article>
@@ -193,7 +204,7 @@ export default class DashboardPage {
 
       const cards = results.map(({ data, source }, index) => {
         const leader = Array.isArray(data) && data.length > 0 ? data[0] : null;
-        return this.buildHighlightCard(types[index], leader, source);
+        return this.buildHighlightCard(types[index], leader, source, index === 0);
       });
 
       grid.innerHTML = cards.join('');
@@ -249,45 +260,58 @@ export default class DashboardPage {
     return `
       <div class="page-content dashboard-page">
 
-        <!-- Secondary Grid (Activity + Quick Stats) -->
-        <div class="dashboard-secondary-grid grid gap-6">
-          <!-- Recent Activity Section -->
-          <section class="dashboard-activity" role="region" aria-label="Recent activity">
+        <!-- Top Row: Collection Preview (2/3) + Quick Stats (1/3) -->
+        <div class="dashboard-top-row grid md:grid-cols-[2fr_1fr] gap-6 mb-8">
+
+          <!-- Collection at a Glance -->
+          <section class="collection-preview-section" role="region" aria-label="Collection preview">
             <div class="section-header flex items-center justify-between mb-4">
-              <h2 class="text-xs font-bold text-neutral-500 uppercase tracking-wider">Recent Activity</h2>
+              <h2 class="text-sm font-semibold text-neutral-300 tracking-wide">Collection at a Glance</h2>
             </div>
-            <div class="activity-list space-y-4" id="activity-list" role="feed" aria-label="Activity feed">
+            <div class="collection-preview-container" id="collection-preview">
+              <!-- Card grid rendered dynamically -->
+            </div>
+          </section>
+
+          <!-- Quick Stats (2x2 grid) -->
+          <section class="dashboard-quick-stats" role="region" aria-label="Quick statistics">
+            <div class="section-header flex items-center justify-between mb-4">
+              <h2 class="text-xs font-medium text-neutral-500 uppercase tracking-wider">Quick Stats</h2>
+            </div>
+            <div class="quick-stats-grid grid grid-cols-2 gap-3" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
+              <!-- 4 equal stat boxes -->
+            </div>
+          </section>
+
+        </div>
+
+        <!-- Activity + Leaderboards Row -->
+        <div class="dashboard-lower-grid grid md:grid-cols-[1fr_1.5fr] gap-6">
+
+          <!-- Recent Activity Section - Dense, secondary -->
+          <section class="dashboard-activity" role="region" aria-label="Recent activity">
+            <div class="section-header flex items-center justify-between mb-3">
+              <h2 class="text-xs font-medium text-neutral-500 uppercase tracking-wider">Recent Activity</h2>
+            </div>
+            <div class="activity-list" id="activity-list" role="feed" aria-label="Activity feed">
               <!-- Activity items will be inserted here -->
             </div>
           </section>
 
-          <!-- Quick Stats Section -->
-          <section class="dashboard-quick-stats" role="region" aria-label="Quick statistics">
-            <div class="section-header flex items-center justify-between mb-4">
-              <h2 class="text-xs font-bold text-neutral-500 uppercase tracking-wider">Quick Stats</h2>
+          <!-- Leaderboard Highlights -->
+          <section class="dashboard-leaderboards" role="region" aria-label="Leaderboard highlights">
+            <div class="section-header flex items-center justify-between mb-3">
+              <h2 class="text-xs font-medium text-neutral-500 uppercase tracking-wider">Leaderboards</h2>
+              <button class="text-xs text-neutral-500 hover:text-neutral-300 transition-colors" id="dashboardViewLeaderboardsBtn" data-testid="dashboard-view-leaderboards">
+                View all →
+              </button>
             </div>
-            <div class="quick-stats-grid grid grid-cols-2 md:grid-cols-4 gap-4" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
-              <!-- Quick stats will be inserted here -->
+            <div class="leaderboard-highlight-grid" id="dashboard-leaderboard-highlights">
+              <!-- Highlight cards rendered dynamically -->
             </div>
           </section>
+
         </div>
-
-
-
-        <!-- Leaderboard Highlights -->
-        <section class="dashboard-leaderboards" role="region" aria-label="Leaderboard highlights">
-          <div class="section-header flex items-center justify-between mb-4">
-            <div>
-              <h2 class="text-xs font-bold text-neutral-500 uppercase tracking-wider">Leaderboard Highlights</h2>
-            </div>
-            <button class="btn-secondary text-xs py-1 px-3" id="dashboardViewLeaderboardsBtn" data-testid="dashboard-view-leaderboards">
-              View all
-            </button>
-          </div>
-          <div class="leaderboard-highlight-grid" id="dashboard-leaderboard-highlights">
-            <!-- Highlight cards rendered dynamically -->
-          </div>
-        </section>
       </div>
     `;
   }
@@ -320,30 +344,30 @@ export default class DashboardPage {
       }
 
       if (activities.length === 0) {
-        // Show empty state
+        // Show empty state - minimal, not card-heavy
         container.innerHTML = `
-          <div class="empty-state text-center py-8">
-            <i data-lucide="Activity" class="w-12 h-12 text-neutral-600 mx-auto mb-3"></i>
+          <div class="empty-state py-6 text-center">
+            <i data-lucide="Activity" class="w-8 h-8 text-neutral-600 mx-auto mb-2"></i>
             <p class="text-neutral-500 text-sm">No recent activity</p>
-            <p class="text-neutral-600 text-xs mt-1">Start using voice recognition or checking prices to see activity here</p>
+            <p class="text-neutral-600 text-xs mt-1">Use voice recognition or check prices to see activity</p>
           </div>
         `;
       } else {
-        // Render activity items
+        // Render activity items - dense list, no heavy card treatment
         container.innerHTML = activities.map((activity, index) => `
-          <article class="activity-item flex items-center justify-between py-3 border-b border-neutral-800 last:border-0" role="article" aria-label="${this.escapeHtml(activity.name || 'Unknown')} - ${this.escapeHtml(activity.value || 'N/A')}">
-            <div class="activity-info flex items-center gap-3">
-              <div class="activity-icon p-2 rounded-lg bg-neutral-800/50" aria-hidden="true">
-                <i data-lucide="${activity.icon || 'Activity'}" class="w-4 h-4 text-neutral-400"></i>
+          <article class="activity-item flex items-center justify-between py-2 ${index < activities.length - 1 ? 'border-b border-neutral-800/40' : ''}" role="article" aria-label="${this.escapeHtml(activity.name || 'Unknown')} - ${this.escapeHtml(activity.value || 'N/A')}">
+            <div class="activity-info flex items-center gap-2.5">
+              <div class="activity-icon w-7 h-7 flex items-center justify-center" aria-hidden="true">
+                <i data-lucide="${activity.icon || 'Activity'}" class="w-4 h-4 ${activity.type === 'price' ? 'text-green-400/70' : 'text-neutral-500'}"></i>
               </div>
               <div>
-                <div class="text-sm font-medium text-white">${this.escapeHtml(activity.name || 'Unknown')}</div>
-                <div class="text-xs text-neutral-500 mt-0.5">${this.escapeHtml(activity.typeLabel || 'Activity')}</div>
+                <div class="text-sm text-neutral-200">${this.escapeHtml(activity.name || 'Unknown')}</div>
+                <div class="text-xs text-neutral-500">${this.escapeHtml(activity.typeLabel || 'Activity')}</div>
               </div>
             </div>
-            <div class="activity-value text-sm font-medium ${activity.type === 'price' ? 'text-green-400' :
-            activity.type === 'pack' ? 'text-neutral-300' :
-              'text-neutral-400'
+            <div class="activity-value text-sm tabular-nums ${activity.type === 'price' ? 'text-green-400 font-medium' :
+            activity.type === 'pack' ? 'text-neutral-400' :
+              'text-neutral-500'
           }">
               ${this.escapeHtml(activity.value || 'N/A')}
             </div>
@@ -361,7 +385,7 @@ export default class DashboardPage {
   }
 
   /**
-   * Render quick stats grid
+   * Render quick stats in symmetrical 2x2 grid
    * @private
    */
   renderQuickStats() {
@@ -380,14 +404,204 @@ export default class DashboardPage {
         return;
       }
 
+      // Render all 4 stats equally in a 2x2 grid
       container.innerHTML = quickStats.map(stat => `
-        <div class="quick-stat-item p-4 rounded-xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-colors" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
-          <div class="text-2xl font-bold text-white mb-1" aria-hidden="true">${this.escapeHtml(stat.value || '0')}</div>
+        <div class="quick-stat-item p-4 rounded-xl bg-neutral-900/50 border border-neutral-800/50 hover:border-neutral-700/50 transition-colors" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
+          <div class="text-xl font-bold text-white tabular-nums mb-1" aria-hidden="true">${this.escapeHtml(stat.value || '0')}</div>
           <div class="text-xs text-neutral-500 font-medium uppercase tracking-wide" aria-hidden="true">${this.escapeHtml(stat.label || 'N/A')}</div>
         </div>
       `).join('');
     } catch (error) {
       console.error('Error rendering quick stats:', error);
+    }
+  }
+
+  /**
+   * Initialize collection manager
+   * @private
+   */
+  initializeCollectionManager() {
+    if (!this.collectionManager) {
+      const sessionManager = window.app?.sessionManager || null;
+      this.collectionManager = new CollectionManager(sessionManager);
+
+      // Subscribe to price/image updates to re-render when images load
+      // Use debouncing since priceUpdate fires after each chunk
+      this.boundHandlers.handlePriceUpdate = () => {
+        // Debounce: wait 300ms after last update before re-rendering
+        if (this.priceUpdateDebounceTimer) {
+          clearTimeout(this.priceUpdateDebounceTimer);
+        }
+        this.priceUpdateDebounceTimer = setTimeout(() => {
+          if (this.container && this.collectionManager) {
+            console.log('[DashboardPage] Price/image update received, re-rendering collection');
+            this.renderCollectionPreview();
+          }
+        }, 300);
+      };
+
+      this.collectionManager.subscribe('priceUpdate', this.boundHandlers.handlePriceUpdate);
+      console.log('[DashboardPage] CollectionManager initialized with price update listener');
+    }
+  }
+
+  /**
+   * Render collection preview with card thumbnails
+   * @private
+   */
+  async renderCollectionPreview() {
+    const container = this.container?.querySelector('#collection-preview');
+    if (!container) {
+      return;
+    }
+
+    // Only show loading state on initial render (when no cards cached)
+    const isInitialRender = this.collectionCards.length === 0;
+
+    if (isInitialRender) {
+      container.innerHTML = `
+        <div class="collection-preview-loading p-8 text-center">
+          <div class="animate-pulse">
+            <div class="grid grid-cols-6 gap-2 mb-4">
+              ${[0, 1, 2, 3, 4, 5].map(() => `
+                <div class="aspect-[59/86] bg-neutral-800/50 rounded-lg"></div>
+              `).join('')}
+            </div>
+            <p class="text-neutral-500 text-sm">Loading collection...</p>
+          </div>
+        </div>
+      `;
+    }
+
+    try {
+      // Initialize collection manager if needed
+      this.initializeCollectionManager();
+
+      // Fetch user's collection cards using CollectionManager (includes images)
+      const cards = await this.collectionManager.getAllUserCards();
+      console.log('[DashboardPage] Fetched collection cards:', cards?.length || 0,
+        'with images:', cards?.filter(c => c.image_url && !c.image_url.includes('back.jpg')).length || 0);
+
+      this.collectionCards = cards || [];
+
+      if (this.collectionCards.length === 0) {
+        this.renderCollectionEmpty(container);
+        return;
+      }
+
+      // Take first 6 cards for preview (most recently added)
+      const previewCards = this.collectionCards.slice(0, 6);
+      this.renderCollectionCards(container, previewCards);
+
+    } catch (error) {
+      console.error('[DashboardPage] Error rendering collection preview:', error);
+      this.renderCollectionEmpty(container);
+    }
+  }
+
+  /**
+   * Render collection cards grid
+   * @private
+   */
+  renderCollectionCards(container, cards) {
+    const cardGridHtml = cards.map(card => {
+      // CollectionManager returns image_url and image_small directly on card
+      // Fallback to card back image if no image available
+      const imageUrl = card.image_url || card.image_small || card.card?.image_url ||
+        'https://images.ygoprodeck.com/images/cards_small/back.jpg';
+      const cardName = card.card?.name || card.cardName || card.name || 'Unknown Card';
+
+      return `
+        <div class="collection-preview-card aspect-[59/86] rounded-lg overflow-hidden bg-neutral-800/30 border border-neutral-700/30" title="${this.escapeHtml(cardName)}">
+          ${imageUrl ? `
+            <img
+              src="${this.escapeHtml(imageUrl)}"
+              alt="${this.escapeHtml(cardName)}"
+              class="w-full h-full object-cover"
+              loading="lazy"
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+            />
+            <div class="w-full h-full items-center justify-center text-neutral-600 text-xs text-center p-2" style="display: none;">
+              <span>${this.escapeHtml(cardName)}</span>
+            </div>
+          ` : `
+            <div class="w-full h-full flex items-center justify-center text-neutral-600 text-xs text-center p-2">
+              <span>${this.escapeHtml(cardName)}</span>
+            </div>
+          `}
+        </div>
+      `;
+    }).join('');
+
+    // Pad with empty slots if less than 6 cards
+    const emptySlots = Math.max(0, 6 - cards.length);
+    const emptySlotsHtml = Array(emptySlots).fill(`
+      <div class="collection-preview-card aspect-[59/86] rounded-lg bg-neutral-800/20 border border-neutral-800/30 border-dashed"></div>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="collection-preview-content">
+        <div class="collection-preview-grid">
+          ${cardGridHtml}${emptySlotsHtml}
+        </div>
+        <div class="flex items-center justify-between mt-3">
+          <p class="text-xs text-neutral-500">${this.collectionCards.length} cards in collection</p>
+          <button class="text-xs text-neutral-400 hover:text-neutral-200 transition-colors" id="viewCollectionBtn">
+            View all →
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Attach event listener for view all button
+    const viewBtn = container.querySelector('#viewCollectionBtn');
+    if (viewBtn) {
+      viewBtn.addEventListener('click', () => {
+        if (this.router) {
+          this.router.navigate('collection');
+        }
+      });
+    }
+  }
+
+  /**
+   * Render empty collection state with CTA
+   * @private
+   */
+  renderCollectionEmpty(container) {
+    container.innerHTML = `
+      <div class="collection-preview-empty p-6 rounded-xl bg-neutral-900/30 border border-neutral-800/40 border-dashed text-center">
+        <div class="mb-4">
+          <i data-lucide="layers" class="w-10 h-10 text-neutral-600 mx-auto"></i>
+        </div>
+        <p class="text-neutral-400 text-sm mb-1">No cards yet</p>
+        <p class="text-neutral-500 text-xs mb-4">Start scanning cards to build your collection</p>
+        <button class="btn-primary text-sm px-4 py-2" id="collectionCTABtn">
+          Add Cards
+        </button>
+      </div>
+    `;
+
+    // Initialize Lucide icons
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+
+    // Attach CTA handler
+    const ctaBtn = container.querySelector('#collectionCTABtn');
+    if (ctaBtn) {
+      ctaBtn.addEventListener('click', this.boundHandlers.handleCollectionCTA);
+    }
+  }
+
+  /**
+   * Handle collection CTA button click
+   * @private
+   */
+  handleCollectionCTA() {
+    if (this.router) {
+      // Navigate to scan/voice recognition page
+      this.router.navigate('scan');
     }
   }
 
@@ -405,6 +619,19 @@ export default class DashboardPage {
 
       console.log('Dashboard data refreshed');
     }
+
+    // Clear collection manager cache and re-render
+    if (this.collectionManager) {
+      this.collectionManager.cache = {
+        allCards: null,
+        stats: null,
+        lastUpdate: null,
+        ttl: 5000,
+        userCollections: null,
+        collectionsLastUpdate: null
+      };
+    }
+    this.renderCollectionPreview();
 
     if (this.leaderboardService) {
       this.leaderboardService.clearAllCaches();
@@ -476,6 +703,7 @@ export default class DashboardPage {
       // Render all sections
       this.renderRecentActivity();
       this.renderQuickStats();
+      this.renderCollectionPreview();
       this.initializeLeaderboardService();
       this.renderLeaderboardHighlights();
 
@@ -568,6 +796,21 @@ export default class DashboardPage {
 
     // Destroy stat cards
     this.statsCards = [];
+
+    // Clear collection state - unsubscribe before nulling
+    if (this.collectionManager && this.boundHandlers.handlePriceUpdate) {
+      this.collectionManager.unsubscribe('priceUpdate', this.boundHandlers.handlePriceUpdate);
+    }
+    this.collectionManager = null;
+    this.collectionCards = [];
+    if (this.collectionCycleInterval) {
+      clearInterval(this.collectionCycleInterval);
+      this.collectionCycleInterval = null;
+    }
+    if (this.priceUpdateDebounceTimer) {
+      clearTimeout(this.priceUpdateDebounceTimer);
+      this.priceUpdateDebounceTimer = null;
+    }
 
     // Clear container
     if (this.container) {

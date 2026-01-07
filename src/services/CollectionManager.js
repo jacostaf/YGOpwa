@@ -39,6 +39,12 @@ export class CollectionManager {
     }
   }
 
+  unsubscribe(event, callback) {
+    if (this.listeners[event]) {
+      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+    }
+  }
+
   notify(event, data) {
     if (this.listeners[event]) {
       this.listeners[event].forEach(cb => cb(data));

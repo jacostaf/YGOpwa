@@ -5958,6 +5958,120 @@ body {
   height: 16px;
 }
 
+/* Leaderboard card variants for visual hierarchy */
+.leaderboard-highlight-card--primary {
+  border-color: var(--border-default);
+  background: var(--surface-secondary);
+}
+
+.leaderboard-highlight-card--secondary {
+  border-color: var(--border-subtle);
+  background: transparent;
+  min-height: 140px;
+}
+
+.leaderboard-highlight-card--secondary .leaderboard-highlight-metric {
+  font-size: var(--text-sm);
+}
+
+.leaderboard-highlight-card--secondary .leaderboard-highlight-body h3 {
+  font-size: var(--text-base);
+}
+
+/* Collection Preview Styles */
+.collection-preview-container {
+  height: 100%;
+}
+
+.collection-preview-content {
+  padding: var(--spacing-md, 1rem);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.collection-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--spacing-sm, 0.5rem);
+  flex: 1;
+  align-items: center;
+}
+
+.collection-preview-card {
+  aspect-ratio: 59/86; /* Yu-Gi-Oh card ratio */
+  border-radius: var(--radius-sm, 4px);
+  overflow: hidden;
+  height: 100%;
+  max-height: 120px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.collection-preview-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.collection-preview-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.collection-preview-empty {
+  height: 100%;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Dashboard top row - Collection (2/3) + Stats (1/3) side by side */
+.dashboard-top-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-lg, 1.5rem);
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .dashboard-top-row {
+    grid-template-columns: 2fr 1fr;
+  }
+
+  .dashboard-top-row > section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dashboard-top-row > section > div:last-child {
+    flex: 1;
+  }
+}
+
+/* Override quick-stats-grid to be 2x2 when in sidebar position */
+.dashboard-top-row .quick-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-sm, 0.75rem);
+}
+
+/* Mobile: Stats above collection */
+@media (max-width: 767px) {
+  .dashboard-top-row {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-preview-section {
+    order: 2;
+  }
+
+  .dashboard-quick-stats {
+    order: 1;
+  }
+}
+
 .pack-performance-section {
   margin-top: 2rem;
   display: flex;
