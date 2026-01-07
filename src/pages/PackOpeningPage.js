@@ -117,184 +117,141 @@ export default class PackOpeningPage {
   }
 
   /**
-   * Render the page (COMPACT VERSION)
+   * Render the page - Flat layout with clear hierarchy
    * @returns {string} HTML string
    */
   render() {
     return `
       <div class="page-content pack-opening-page">
-        <div class="pack-opening-controls">
-          <section class="control-card set-panel">
-            <header class="control-card__header">
-              <div class="control-card__title">
-                <i data-lucide="Package" class="control-card__icon"></i>
-                <div>
-                  <h2 class="control-card__heading">Pack Setup</h2>
-                  <p class="control-card__subheading">Choose a card set to start ripping packs</p>
-                </div>
-              </div>
-            </header>
 
-            <div class="set-autocomplete">
-              <div class="set-input">
-                <i data-lucide="Search" class="field-icon"></i>
-                <input
-                  type="text"
-                  id="set-search"
-                  class="set-input-field"
-                  placeholder="Search by set name or code"
-                  autocomplete="off"
-                  aria-label="Search card sets"
-                >
-                <button type="button" class="set-input-clear" id="clear-set-search" aria-label="Clear search">
-                  <i data-lucide="X"></i>
-                </button>
-              </div>
-              <div id="set-suggestions" class="set-suggestions" role="listbox" aria-label="Card set suggestions"></div>
-              <select id="set-select" class="visually-hidden" aria-hidden="true" tabindex="-1"></select>
-            </div>
-
-            <div class="set-meta">
-              <span class="set-count text-xs text-neutral-500">
-                <span id="sets-count">0</span> of <span id="total-sets-count">0</span> sets
-              </span>
-              <div class="set-actions">
-                <button id="refresh-sets-btn" class="icon-button" type="button" title="Refresh sets">
-                  <i data-lucide="refresh-cw"></i>
-                </button>
-                <button
-                  id="start-session-btn"
-                  class="btn btn-primary btn-sm btn-pulse-ready"
-                  type="button"
-                  data-router-controlled="pack-opening"
-                  disabled
-                >
-                  <i data-lucide="package-open"></i>
-                  <span>Rip Pack</span>
-                </button>
-                <button id="stop-session-btn" class="btn btn-danger btn-sm hidden" type="button">
-                  <i data-lucide="square"></i>
-                  <span>Stop</span>
-                </button>
-                <button id="swap-set-btn" class="btn btn-secondary btn-sm hidden" type="button">
-                  <i data-lucide="refresh-ccw"></i>
-                  <span>Swap</span>
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section class="control-card voice-panel">
-            <header class="control-card__header">
-              <div class="control-card__title">
-                <i data-lucide="Mic" class="control-card__icon"></i>
-                <div>
-                  <h2 class="control-card__heading">Voice Control</h2>
-                  <p class="control-card__subheading">Hands-free pack logging</p>
-                </div>
-              </div>
-            </header>
-
-            <div class="voice-status-row">
-              <span class="status-dot status-dot-secondary" id="voice-indicator"></span>
-              <span class="voice-status-text" id="voice-status-text">Initializing...</span>
-            </div>
-
-            <div class="voice-actions">
-              <button id="start-voice-btn" class="btn btn-primary btn-sm" type="button" disabled>
-                <i data-lucide="Mic"></i>
-                <span>Listen</span>
-              </button>
-              <button id="stop-voice-btn" class="btn btn-danger btn-sm hidden" type="button">
-                <i data-lucide="Square"></i>
-                <span>Stop</span>
-              </button>
-              <button id="test-voice-btn" class="btn btn-secondary btn-sm" type="button">
-                <i data-lucide="test-tube"></i>
-                <span>Test</span>
+        <!-- Primary Action: Set Selection -->
+        <div class="pack-setup-bar">
+          <div class="set-autocomplete">
+            <div class="set-input">
+              <i data-lucide="Search" class="field-icon"></i>
+              <input
+                type="text"
+                id="set-search"
+                class="set-input-field"
+                placeholder="Search by set name or code"
+                autocomplete="off"
+                aria-label="Search card sets"
+              >
+              <button type="button" class="set-input-clear" id="clear-set-search" aria-label="Clear search">
+                <i data-lucide="X"></i>
               </button>
             </div>
-          </section>
-
-          <section class="control-card session-panel">
-            <header class="control-card__header">
-              <div class="control-card__title">
-                <i data-lucide="folder-open" class="control-card__icon"></i>
-                <div>
-                  <h2 class="control-card__heading">Current Session</h2>
-                  <p class="control-card__subheading">Track progress at a glance</p>
-                </div>
-              </div>
-              <span class="badge-sm" id="cards-count-badge">0</span>
-            </header>
-
-            <div class="session-summary">
-              <div class="summary-item">
-                <span class="summary-label">Set</span>
-                <span class="summary-value" id="current-set">None</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">Cards</span>
-                <span class="summary-value" id="cards-count">0</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">TCG Low</span>
-                <span class="summary-value text-success" id="tcg-low-total">$0.00</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">TCG Market</span>
-                <span class="summary-value" id="tcg-market-total">$0.00</span>
-              </div>
-              <div class="summary-item summary-status">
-                <span class="summary-label">Status</span>
-                <span class="summary-value" id="session-status">
-                  <span class="status-pill">Not Started</span>
-                </span>
-              </div>
-            </div>
-
-            <div class="session-actions">
-              <button id="export-session-btn" class="btn btn-secondary btn-sm" type="button" disabled>
-                <i data-lucide="Download"></i>
-                <span>Export</span>
-              </button>
-              <button id="import-session-btn" class="btn btn-secondary btn-sm" type="button">
-                <i data-lucide="Upload"></i>
-                <span>Import</span>
-              </button>
-              <button id="clear-session-btn" class="btn btn-danger btn-sm" type="button" disabled>
-                <i data-lucide="Trash2"></i>
-                <span>Clear</span>
-              </button>
-              <button id="refresh-pricing-btn" class="btn btn-secondary btn-sm" type="button" disabled>
-                <i data-lucide="refresh-cw"></i>
-                <span>Pricing</span>
-              </button>
-              <button id="add-to-collection-btn" class="btn btn-primary btn-sm" type="button" disabled>
-                <i data-lucide="plus-circle"></i>
-                <span>Add to Collection</span>
-              </button>
-            </div>
-          </section>
-        </div>
-
-        <div class="view-controls view-strip">
-          <label class="view-toggle">
-            <input type="checkbox" id="consolidated-view-toggle" class="form-checkbox rounded">
-            <span>Consolidated view</span>
-          </label>
-          <div class="size-control">
-            <label for="card-size-slider">Card size</label>
-            <input type="range" id="card-size-slider" min="80" max="200" value="120" step="10">
-            <span id="card-size-value" class="size-value">120px</span>
+            <div id="set-suggestions" class="set-suggestions" role="listbox" aria-label="Card set suggestions"></div>
+            <select id="set-select" class="visually-hidden" aria-hidden="true" tabindex="-1"></select>
+          </div>
+          <div class="pack-setup-actions">
+            <button
+              id="start-session-btn"
+              class="btn btn-primary btn-pulse-ready"
+              type="button"
+              data-router-controlled="pack-opening"
+              disabled
+            >
+              <i data-lucide="package-open"></i>
+              <span>Rip Pack</span>
+            </button>
+            <button id="stop-session-btn" class="btn btn-danger hidden" type="button">
+              <i data-lucide="square"></i>
+              <span>Stop</span>
+            </button>
+            <button id="swap-set-btn" class="btn btn-secondary hidden" type="button">
+              <i data-lucide="refresh-ccw"></i>
+              <span>Swap</span>
+            </button>
           </div>
         </div>
 
+        <div class="set-meta-row">
+          <span class="text-xs text-neutral-500">
+            <span id="sets-count">0</span> of <span id="total-sets-count">0</span> sets
+          </span>
+          <button id="refresh-sets-btn" class="icon-button-sm" type="button" title="Refresh sets">
+            <i data-lucide="refresh-cw"></i>
+          </button>
+        </div>
+
+        <!-- Status & Stats Toolbar (flat, inline) -->
+        <div class="status-toolbar">
+          <div class="voice-status">
+            <span class="status-dot status-dot-secondary" id="voice-indicator"></span>
+            <span class="status-text" id="voice-status-text">Initializing...</span>
+            <button id="start-voice-btn" class="btn-ghost btn-sm" type="button" disabled>
+              <i data-lucide="Mic"></i>
+              <span>Listen</span>
+            </button>
+            <button id="stop-voice-btn" class="btn-ghost btn-sm btn-ghost-danger hidden" type="button">
+              <i data-lucide="Square"></i>
+              <span>Stop</span>
+            </button>
+            <button id="test-voice-btn" class="btn-ghost btn-sm" type="button" title="Test voice">
+              <i data-lucide="test-tube"></i>
+            </button>
+          </div>
+          <div class="session-stats-inline">
+            <span class="stat-item">
+              <span class="stat-label">Set</span>
+              <span class="stat-value" id="current-set">None</span>
+            </span>
+            <span class="stat-item">
+              <span class="stat-label">Cards</span>
+              <span class="stat-value" id="cards-count">0</span>
+            </span>
+            <span class="stat-item">
+              <span class="stat-label">TCG Low</span>
+              <span class="stat-value text-green-400" id="tcg-low-total">$0.00</span>
+            </span>
+            <span class="stat-item">
+              <span class="stat-label">Market</span>
+              <span class="stat-value" id="tcg-market-total">$0.00</span>
+            </span>
+          </div>
+          <button id="pack-settings-btn" class="btn-ghost btn-sm" type="button" title="Pack opening settings">
+            <i data-lucide="Settings"></i>
+          </button>
+        </div>
+
+        <!-- View Controls + Session Actions (combined toolbar) -->
+        <div class="controls-toolbar">
+          <label class="view-toggle">
+            <input type="checkbox" id="consolidated-view-toggle" class="form-checkbox rounded">
+            <span>Consolidated</span>
+          </label>
+          <div class="size-control">
+            <input type="range" id="card-size-slider" min="80" max="200" value="120" step="10">
+            <span id="card-size-value" class="size-value">120px</span>
+          </div>
+          <div class="toolbar-spacer"></div>
+          <div class="session-actions-inline">
+            <button id="export-session-btn" class="btn-ghost btn-sm" type="button" disabled title="Export session">
+              <i data-lucide="Download"></i>
+            </button>
+            <button id="import-session-btn" class="btn-ghost btn-sm" type="button" title="Import session">
+              <i data-lucide="Upload"></i>
+            </button>
+            <button id="clear-session-btn" class="btn-ghost btn-sm" type="button" disabled title="Clear session">
+              <i data-lucide="Trash2"></i>
+            </button>
+            <button id="refresh-pricing-btn" class="btn-ghost btn-sm" type="button" disabled title="Refresh pricing">
+              <i data-lucide="refresh-cw"></i>
+            </button>
+            <button id="add-to-collection-btn" class="btn btn-primary btn-sm" type="button" disabled>
+              <i data-lucide="plus-circle"></i>
+              <span>Add to Collection</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Cards Display -->
         <div class="cards-surface bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
           <div id="session-cards" class="card-grid-container">
             <div class="empty-state">
               <i data-lucide="package-open"></i>
-              <p>Start a session and use voice recognition to add cards</p>
+              <p>Select a set and start ripping packs</p>
             </div>
           </div>
         </div>
@@ -850,19 +807,16 @@ export default class PackOpeningPage {
     // Update set name
     const currentSetEl = this.container?.querySelector('#current-set');
     if (currentSetEl) {
-      currentSetEl.textContent = this.currentSession?.setName || 'None';
+      const setName = this.currentSession?.setName || 'None';
+      // Truncate long set names for inline display
+      currentSetEl.textContent = setName.length > 20 ? setName.slice(0, 18) + '...' : setName;
+      currentSetEl.title = setName;
     }
 
     // Update card count
     const cardsCountEl = this.container?.querySelector('#cards-count');
     if (cardsCountEl) {
       cardsCountEl.textContent = cardCount;
-    }
-
-    // Update card count badge (new in compact layout)
-    const cardsCountBadge = this.container?.querySelector('#cards-count-badge');
-    if (cardsCountBadge) {
-      cardsCountBadge.textContent = cardCount;
     }
 
     // Update TCG Low total
@@ -877,14 +831,6 @@ export default class PackOpeningPage {
     if (tcgMarketEl) {
       const total = this.currentSession?.totalTcgMarket || 0;
       tcgMarketEl.textContent = `$${total.toFixed(2)}`;
-    }
-
-    // Update status (if element exists - optional in compact layout)
-    const statusEl = this.container?.querySelector('#session-status');
-    if (statusEl) {
-      const status = this.isSessionActive ? 'Active' : 'Not Started';
-      const statusClass = this.isSessionActive ? 'bg-green-600/20 text-green-400' : 'bg-neutral-700/50 text-neutral-400';
-      statusEl.innerHTML = `<span class="inline-flex items-center px-2 py-1 rounded ${statusClass}">${status}</span>`;
     }
 
     if (this.isSessionActive && this.currentSession?.setId && this.selectedSetId !== this.currentSession.setId) {
@@ -1188,6 +1134,17 @@ export default class PackOpeningPage {
     if (testVoiceBtn) {
       this.boundHandlers.testVoice = () => this.testVoice();
       testVoiceBtn.addEventListener('click', this.boundHandlers.testVoice);
+    }
+
+    // Settings button - navigates to settings page
+    const packSettingsBtn = this.container?.querySelector('#pack-settings-btn');
+    if (packSettingsBtn) {
+      this.boundHandlers.openSettings = () => {
+        if (this.router) {
+          this.router.navigate('settings');
+        }
+      };
+      packSettingsBtn.addEventListener('click', this.boundHandlers.openSettings);
     }
 
     // Session buttons
