@@ -159,6 +159,7 @@ function mapRowToItem(row) {
       edition: normalizeString(row.edition),
       artStyle: normalizeString(row.art_style),
       language: normalizeString(row.language),
+      productId: normalizeNumber(row.tcgcsv_product_id),  // TCGcsv product ID for direct price lookups
     },
     set: {
       id: row.set_id,

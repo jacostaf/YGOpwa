@@ -266,7 +266,7 @@ export default class DashboardPage {
           <!-- Collection at a Glance -->
           <section class="collection-preview-section" role="region" aria-label="Collection preview">
             <div class="section-header flex items-center justify-between mb-4">
-              <h2 class="text-sm font-semibold text-neutral-300 tracking-wide">Collection at a Glance</h2>
+              <h2 class="text-xs font-medium text-neutral-500 uppercase tracking-wider">Collections at a Glance</h2>
             </div>
             <div class="collection-preview-container" id="collection-preview">
               <!-- Card grid rendered dynamically -->

@@ -26,7 +26,7 @@
 
 .sidebar {
   width: var(--sidebar-width);
-  min-width: var(--sidebar-width);
+  /* min-width removed to allow collapse */
   height: 100vh;
   position: fixed;
   left: 0;
@@ -37,7 +37,7 @@
   z-index: var(--z-fixed);
   display: flex;
   flex-direction: column;
-  transition: transform var(--transition-normal);
+  transition: transform var(--transition-normal), width 0.2s ease;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -109,7 +109,14 @@
   flex-direction: column;
   background: transparent;
   padding: 0;
-  transition: margin-left var(--transition-normal, 300ms ease-in-out);
+  transition: margin-left var(--transition-normal, 300ms ease-in-out),
+              width var(--transition-normal, 300ms ease-in-out);
+}
+
+/* Collapsed sidebar state - more content space */
+body.sidebar-collapsed .main-content {
+  margin-left: 64px;
+  width: calc(100% - 64px);
 }
 
 /* ================================================
@@ -165,7 +172,7 @@
 .page-container {
   flex: 1;
   padding: var(--spacing-lg, 1.5rem) var(--spacing-xl, 2rem);
-  /* 24px vertical, 32px horizontal - matches mockup */
+  padding-bottom: calc(var(--spacing-lg, 1.5rem) + 40px); /* Extra space for 32px status bar */
   overflow-y: auto;
   overflow-x: hidden;
 }

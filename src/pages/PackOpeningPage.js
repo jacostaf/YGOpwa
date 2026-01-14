@@ -117,144 +117,149 @@ export default class PackOpeningPage {
   }
 
   /**
-   * Render the page - Flat layout with clear hierarchy
+   * Render the page - Two-column layout with sidebar
    * @returns {string} HTML string
    */
   render() {
     return `
-      <div class="page-content pack-opening-page">
+      <div class="page-content pack-opening-page pack-layout">
 
-        <!-- Primary Action: Set Selection -->
-        <div class="pack-setup-bar">
-          <div class="set-autocomplete">
-            <div class="set-input">
-              <i data-lucide="Search" class="field-icon"></i>
-              <input
-                type="text"
-                id="set-search"
-                class="set-input-field"
-                placeholder="Search by set name or code"
-                autocomplete="off"
-                aria-label="Search card sets"
-              >
-              <button type="button" class="set-input-clear" id="clear-set-search" aria-label="Clear search">
-                <i data-lucide="X"></i>
+        <!-- Left: Controls Panel -->
+        <aside class="pack-sidebar">
+          <!-- Set Search -->
+          <div class="sidebar-section">
+            <div class="set-autocomplete">
+              <div class="set-input">
+                <i data-lucide="Search" class="field-icon"></i>
+                <input
+                  type="text"
+                  id="set-search"
+                  class="set-input-field"
+                  placeholder="Search sets..."
+                  autocomplete="off"
+                  aria-label="Search card sets"
+                >
+                <button type="button" class="set-input-clear" id="clear-set-search" aria-label="Clear">
+                  <i data-lucide="X"></i>
+                </button>
+              </div>
+              <div id="set-suggestions" class="set-suggestions" role="listbox"></div>
+              <select id="set-select" class="visually-hidden" aria-hidden="true" tabindex="-1"></select>
+            </div>
+            <div class="set-meta-inline">
+              <span class="text-xs text-neutral-500"><span id="sets-count">0</span>/<span id="total-sets-count">0</span></span>
+              <button id="refresh-sets-btn" class="icon-btn-xs" type="button" title="Refresh">
+                <i data-lucide="refresh-cw"></i>
               </button>
             </div>
-            <div id="set-suggestions" class="set-suggestions" role="listbox" aria-label="Card set suggestions"></div>
-            <select id="set-select" class="visually-hidden" aria-hidden="true" tabindex="-1"></select>
           </div>
-          <div class="pack-setup-actions">
-            <button
-              id="start-session-btn"
-              class="btn btn-primary btn-pulse-ready"
-              type="button"
-              data-router-controlled="pack-opening"
-              disabled
-            >
-              <i data-lucide="package-open"></i>
-              <span>Rip Pack</span>
-            </button>
-            <button id="stop-session-btn" class="btn btn-danger hidden" type="button">
-              <i data-lucide="square"></i>
-              <span>Stop</span>
-            </button>
-            <button id="swap-set-btn" class="btn btn-secondary hidden" type="button">
-              <i data-lucide="refresh-ccw"></i>
-              <span>Swap</span>
-            </button>
-          </div>
-        </div>
 
-        <div class="set-meta-row">
-          <span class="text-xs text-neutral-500">
-            <span id="sets-count">0</span> of <span id="total-sets-count">0</span> sets
-          </span>
-          <button id="refresh-sets-btn" class="icon-button-sm" type="button" title="Refresh sets">
-            <i data-lucide="refresh-cw"></i>
-          </button>
-        </div>
-
-        <!-- Status & Stats Toolbar (flat, inline) -->
-        <div class="status-toolbar">
-          <div class="voice-status">
-            <span class="status-dot status-dot-secondary" id="voice-indicator"></span>
-            <span class="status-text" id="voice-status-text">Initializing...</span>
-            <button id="start-voice-btn" class="btn-ghost btn-sm" type="button" disabled>
-              <i data-lucide="Mic"></i>
-              <span>Listen</span>
-            </button>
-            <button id="stop-voice-btn" class="btn-ghost btn-sm btn-ghost-danger hidden" type="button">
-              <i data-lucide="Square"></i>
-              <span>Stop</span>
-            </button>
-            <button id="test-voice-btn" class="btn-ghost btn-sm" type="button" title="Test voice">
-              <i data-lucide="test-tube"></i>
-            </button>
-          </div>
-          <div class="session-stats-inline">
-            <span class="stat-item">
-              <span class="stat-label">Set</span>
-              <span class="stat-value" id="current-set">None</span>
-            </span>
-            <span class="stat-item">
-              <span class="stat-label">Cards</span>
-              <span class="stat-value" id="cards-count">0</span>
-            </span>
-            <span class="stat-item">
-              <span class="stat-label">TCG Low</span>
-              <span class="stat-value text-green-400" id="tcg-low-total">$0.00</span>
-            </span>
-            <span class="stat-item">
-              <span class="stat-label">Market</span>
-              <span class="stat-value" id="tcg-market-total">$0.00</span>
-            </span>
-          </div>
-          <button id="pack-settings-btn" class="btn-ghost btn-sm" type="button" title="Pack opening settings">
-            <i data-lucide="Settings"></i>
-          </button>
-        </div>
-
-        <!-- View Controls + Session Actions (combined toolbar) -->
-        <div class="controls-toolbar">
-          <label class="view-toggle">
-            <input type="checkbox" id="consolidated-view-toggle" class="form-checkbox rounded">
-            <span>Consolidated</span>
-          </label>
-          <div class="size-control">
-            <input type="range" id="card-size-slider" min="80" max="200" value="120" step="10">
-            <span id="card-size-value" class="size-value">120px</span>
-          </div>
-          <div class="toolbar-spacer"></div>
-          <div class="session-actions-inline">
-            <button id="export-session-btn" class="btn-ghost btn-sm" type="button" disabled title="Export session">
-              <i data-lucide="Download"></i>
-            </button>
-            <button id="import-session-btn" class="btn-ghost btn-sm" type="button" title="Import session">
-              <i data-lucide="Upload"></i>
-            </button>
-            <button id="clear-session-btn" class="btn-ghost btn-sm" type="button" disabled title="Clear session">
-              <i data-lucide="Trash2"></i>
-            </button>
-            <button id="refresh-pricing-btn" class="btn-ghost btn-sm" type="button" disabled title="Refresh pricing">
-              <i data-lucide="refresh-cw"></i>
-            </button>
-            <button id="add-to-collection-btn" class="btn btn-primary btn-sm" type="button" disabled>
-              <i data-lucide="plus-circle"></i>
-              <span>Add to Collection</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Cards Display -->
-        <div class="cards-surface bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/50 rounded-xl">
-          <div id="session-cards" class="card-grid-container">
-            <div class="empty-state">
-              <i data-lucide="package-open"></i>
-              <p>Select a set and start ripping packs</p>
+          <!-- Session Actions -->
+          <div class="sidebar-section">
+            <div class="session-buttons">
+              <button id="start-session-btn" class="btn btn-primary btn-pulse-ready w-full" type="button" disabled>
+                <i data-lucide="package-open"></i>
+                <span>Rip Pack</span>
+              </button>
+              <button id="stop-session-btn" class="btn btn-danger w-full hidden" type="button">
+                <i data-lucide="square"></i>
+                <span>Stop Session</span>
+              </button>
+              <button id="swap-set-btn" class="btn btn-secondary w-full hidden" type="button">
+                <i data-lucide="refresh-ccw"></i>
+                <span>Swap Set</span>
+              </button>
             </div>
           </div>
-        </div>
+
+          <!-- Voice Control -->
+          <div class="sidebar-section voice-section">
+            <div class="voice-header">
+              <span class="status-dot status-dot-secondary" id="voice-indicator"></span>
+              <span class="voice-label" id="voice-status-text">Voice Ready</span>
+            </div>
+            <div class="voice-buttons">
+              <button id="start-voice-btn" class="btn btn-sm flex-1" type="button" disabled>
+                <i data-lucide="Mic"></i> Listen
+              </button>
+              <button id="stop-voice-btn" class="btn btn-danger btn-sm flex-1 hidden" type="button">
+                <i data-lucide="Square"></i> Stop
+              </button>
+              <button id="test-voice-btn" class="icon-btn-sm" type="button" title="Test">
+                <i data-lucide="test-tube"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Session Stats -->
+          <div class="sidebar-section stats-section">
+            <div class="stat-row">
+              <span class="stat-key">Set</span>
+              <span class="stat-val truncate" id="current-set" title="None">None</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-key">Cards</span>
+              <span class="stat-val" id="cards-count">0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-key">TCG Low</span>
+              <span class="stat-val text-green-400" id="tcg-low-total">$0.00</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-key">Market</span>
+              <span class="stat-val" id="tcg-market-total">$0.00</span>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="sidebar-section sidebar-actions">
+            <button id="add-to-collection-btn" class="btn btn-primary btn-sm w-full" type="button" disabled>
+              <i data-lucide="plus-circle"></i> Add to Collection
+            </button>
+            <div class="action-row">
+              <button id="export-session-btn" class="icon-btn-sm" type="button" disabled title="Export">
+                <i data-lucide="Download"></i>
+              </button>
+              <button id="import-session-btn" class="icon-btn-sm" type="button" title="Import">
+                <i data-lucide="Upload"></i>
+              </button>
+              <button id="clear-session-btn" class="icon-btn-sm" type="button" disabled title="Clear">
+                <i data-lucide="Trash2"></i>
+              </button>
+              <button id="refresh-pricing-btn" class="icon-btn-sm" type="button" disabled title="Refresh Prices">
+                <i data-lucide="refresh-cw"></i>
+              </button>
+              <button id="pack-settings-btn" class="icon-btn-sm" type="button" title="Settings">
+                <i data-lucide="Settings"></i>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Right: Cards Area -->
+        <main class="pack-main">
+          <div class="pack-toolbar">
+            <label class="toggle-compact">
+              <input type="checkbox" id="consolidated-view-toggle">
+              <span>Consolidated</span>
+            </label>
+            <div class="size-slider">
+              <i data-lucide="Minimize2" class="slider-icon"></i>
+              <input type="range" id="card-size-slider" min="80" max="200" value="120" step="10">
+              <i data-lucide="Maximize2" class="slider-icon"></i>
+              <span id="card-size-value" class="size-val">120</span>
+            </div>
+          </div>
+
+          <div class="cards-area">
+            <div id="session-cards" class="card-grid-container">
+              <div class="empty-state">
+                <i data-lucide="package-open"></i>
+                <p>Select a set and start ripping</p>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     `;
   }
@@ -808,8 +813,7 @@ export default class PackOpeningPage {
     const currentSetEl = this.container?.querySelector('#current-set');
     if (currentSetEl) {
       const setName = this.currentSession?.setName || 'None';
-      // Truncate long set names for inline display
-      currentSetEl.textContent = setName.length > 20 ? setName.slice(0, 18) + '...' : setName;
+      currentSetEl.textContent = setName;
       currentSetEl.title = setName;
     }
 

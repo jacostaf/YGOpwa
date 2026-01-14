@@ -1,9 +1,20 @@
 /**
  * Catalog normalization helpers used by ingestion scripts.
  * These functions stay pure so they can be unit-tested without hitting upstream APIs.
+ *
+ * Rarity data is now dynamically loaded from Supabase via rarityService.
+ * Call initializeNormalizer() at app startup to pre-cache rarities.
  */
 
-const RARITY_MAP = new Map([
+import {
+  getAllRarities,
+  getAllRaritiesSync,
+  getRarityWeightSync,
+  getRarityRankSync,
+} from '../rarityService.js';
+
+// Fallback rarity map - used when rarityService hasn't loaded yet
+const FALLBACK_RARITY_MAP = new Map([
   ['Common', { key: 'common', rank: 1, weight: 1 }],
   ['Short Print', { key: 'rare', rank: 2, weight: 2 }],
   ['Rare', { key: 'rare', rank: 2, weight: 2 }],
@@ -17,6 +28,24 @@ const RARITY_MAP = new Map([
 ]);
 
 const DEFAULT_RARITY = { key: 'common', rank: 1, weight: 1 };
+
+// Track whether rarities have been initialized
+let raritiesInitialized = false;
+
+/**
+ * Initialize the normalizer by pre-loading rarities from Supabase.
+ * Call this at app startup for best performance.
+ * @returns {Promise<void>}
+ */
+export async function initializeNormalizer() {
+  try {
+    await getAllRarities();
+    raritiesInitialized = true;
+    console.log('[CatalogNormalizer] Rarities initialized from Supabase');
+  } catch (err) {
+    console.warn('[CatalogNormalizer] Failed to initialize rarities, using fallback:', err);
+  }
+}
 
 /**
  * Attempt to collapse YGOProDeck set code into canonical Supabase set code.
@@ -98,7 +127,18 @@ export function determineArtStyle(images = []) {
 }
 
 /**
+ * Normalizes a rarity key for lookup
+ * @param {string} name - Rarity name or key
+ * @returns {string} Normalized key
+ */
+function normalizeRarityKey(name) {
+  if (!name) return '';
+  return name.toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+}
+
+/**
  * Maps a YGOProDeck rarity label to Supabase rarity metadata.
+ * Uses dynamic rarities from Supabase if available, falls back to hardcoded map.
  * @param {string} rarityLabel
  * @returns {{ key: string, rank: number, weight: number, name: string }}
  */
@@ -107,13 +147,46 @@ export function mapRarity(rarityLabel) {
     return { ...DEFAULT_RARITY, name: 'Common' };
   }
 
-  const entry = RARITY_MAP.get(rarityLabel);
+  const sanitizedName = rarityLabel.trim();
+
+  // Try dynamic rarities first (if initialized)
+  if (raritiesInitialized) {
+    const dynamicRarities = getAllRaritiesSync();
+    const normalizedLabel = normalizeRarityKey(sanitizedName);
+
+    const match = dynamicRarities.find(r =>
+      normalizeRarityKey(r.rarity_key) === normalizedLabel ||
+      normalizeRarityKey(r.rarity_name) === normalizedLabel
+    );
+
+    if (match) {
+      return {
+        key: match.rarity_key,
+        rank: match.rarity_rank || 1,
+        weight: match.weight || 1,
+        name: match.rarity_name || sanitizedName
+      };
+    }
+
+    // For unknown rarities, use dynamic weight calculation fallback
+    const weight = getRarityWeightSync(sanitizedName);
+    const rank = getRarityRankSync(sanitizedName);
+
+    return {
+      key: normalizedLabel || 'common',
+      rank,
+      weight,
+      name: sanitizedName
+    };
+  }
+
+  // Fallback to hardcoded map
+  const entry = FALLBACK_RARITY_MAP.get(rarityLabel);
   if (entry) {
     return { ...entry, name: rarityLabel };
   }
 
-  // Normalise unexpected rarity values using title case.
-  const sanitizedName = rarityLabel.trim();
+  // Unknown rarity - return with common defaults
   return {
     ...DEFAULT_RARITY,
     name: sanitizedName || 'Common'
@@ -121,22 +194,63 @@ export function mapRarity(rarityLabel) {
 }
 
 /**
+ * Extract art version from card name (e.g., "Dark Magician (8th Art)" -> "8")
+ * @param {string} cardName
+ * @returns {string|null}
+ */
+export function extractArtVersion(cardName) {
+  if (!cardName) return null;
+
+  // Patterns to match art versions in card names
+  const patterns = [
+    /\[(\d+)(?:st|nd|rd|th)?\s*art\]/i,      // "[9th Art]", "[7th art]"
+    /\((\d+)(?:st|nd|rd|th)?\s*art\)/i,      // "(7th art)", "(1st art)"
+    /\b(\d+)(?:st|nd|rd|th)?\s*art\b/i,      // "7th art", "1st artwork"
+  ];
+
+  for (const pattern of patterns) {
+    const match = cardName.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+/**
  * Build slug used for card_variants.card_slug column.
+ * Canonical format: {name}-{set_code}-{card_number}-{rarity}[-art-{version}]
  * @param {string} cardName
  * @param {string} rawSetCode
  * @param {string|null} cardNumber
+ * @param {string|null} rarity
+ * @param {string|null} artVersion - Pass null to auto-extract from cardName
  * @returns {string}
  */
-export function buildCardSlug(cardName, rawSetCode, cardNumber) {
-  const namePart = (cardName || 'unknown-card')
+export function buildCardSlug(cardName, rawSetCode, cardNumber, rarity = null, artVersion = null) {
+  // Extract art version from name if not provided
+  const extractedArtVersion = artVersion ?? extractArtVersion(cardName);
+
+  // Clean name part - remove art version text from name
+  let namePart = (cardName || 'unknown-card')
     .toLowerCase()
+    .replace(/\s*\(\d+(?:st|nd|rd|th)?\s*art\)\s*/gi, '') // Remove "(8th Art)" etc.
+    .replace(/\s*\[\d+(?:st|nd|rd|th)?\s*art\]\s*/gi, '') // Remove "[8th Art]" etc.
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
   const setPart = normalizeSetCode(rawSetCode).toLowerCase();
   const numberPart = cardNumber ? cardNumber.toLowerCase() : null;
+  const rarityPart = rarity ? rarity.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : null;
 
-  return [namePart, setPart, numberPart].filter(Boolean).join('-');
+  // Build slug: name-set_code-card_number-rarity[-art-version]
+  const parts = [namePart, setPart, numberPart, rarityPart].filter(Boolean);
+  if (extractedArtVersion) {
+    parts.push(`art-${extractedArtVersion}`);
+  }
+
+  return parts.join('-');
 }
 
 /**
@@ -227,8 +341,10 @@ export function normalizeCardRecord(card = {}) {
       weight: rarity.weight
     });
 
+    const cardSlug = buildCardSlug(cardName, baseSetCode, cardNumber, rarity.name);
+
     normalizedVariants.push({
-      card_slug: buildCardSlug(cardName, baseSetCode, cardNumber),
+      card_slug: cardSlug,
       card_name: cardName,
       set_code: baseSetCode,
       rarity_key: rarity.key,
@@ -243,7 +359,7 @@ export function normalizeCardRecord(card = {}) {
       const priceValue = Number.parseFloat(priceInfo.tcgplayer_price);
       if (!Number.isNaN(priceValue) && priceValue > 0) {
         normalizedPrices.push({
-          card_slug: buildCardSlug(cardName, baseSetCode, cardNumber),
+          card_slug: cardSlug,
           price: priceValue,
           currency: 'USD',
           source: 'ygoprodeck',
@@ -303,6 +419,7 @@ export function chunk(items, size) {
 }
 
 export default {
+  initializeNormalizer,
   normalizeCardRecord,
   normalizeSetCode,
   extractCardNumber,
@@ -310,6 +427,7 @@ export default {
   determineArtStyle,
   mapRarity,
   buildCardSlug,
+  extractArtVersion,
   inferLanguage,
   inferSetType,
   dedupeBy,

@@ -23,7 +23,8 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  transition: transform var(--transition-normal);
+  transition: transform var(--transition-normal),
+              width 0.2s ease;
 }
 
 /* Collection Context Override - Uses theme variables */
@@ -562,6 +563,120 @@ body.sidebar-open .sidebar-overlay {
 /* ===== PRINT STYLES ===== */
 @media print {
   .sidebar {
+    display: none;
+  }
+}
+
+/* ===== COLLAPSIBLE SIDEBAR ===== */
+
+/* Collapse toggle button */
+.sidebar-collapse-toggle {
+  position: absolute;
+  top: 50%;
+  right: -12px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  transition: all 0.2s ease;
+  opacity: 0;
+}
+
+.sidebar:hover .sidebar-collapse-toggle,
+.sidebar-collapse-toggle:focus {
+  opacity: 1;
+}
+
+.sidebar-collapse-toggle:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.sidebar-collapse-toggle i {
+  width: 14px;
+  height: 14px;
+}
+
+/* Collapsed sidebar state */
+.sidebar.collapsed {
+  width: 64px !important;
+  min-width: 64px !important;
+  max-width: 64px !important;
+}
+
+.sidebar.collapsed .sidebar-header {
+  padding: 0 0.75rem;
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-logo {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-branding,
+.sidebar.collapsed .sidebar-logo-text,
+.sidebar.collapsed .sidebar-subtitle {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-nav {
+  padding: 1rem 0.5rem;
+}
+
+.sidebar.collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: 0.875rem;
+}
+
+.sidebar.collapsed .sidebar-nav-label {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-nav-icon {
+  margin: 0;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  padding: 0.75rem 0.5rem;
+}
+
+.sidebar.collapsed .user-profile {
+  padding: 0.5rem;
+  justify-content: center;
+}
+
+.sidebar.collapsed .user-info,
+.sidebar.collapsed #app-version {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-collapse-toggle {
+  opacity: 1;
+}
+
+/* Adjust main content when sidebar is collapsed */
+body.sidebar-collapsed .main-content {
+  margin-left: 64px;
+}
+
+/* Keep collapse toggle visible on collapsed state */
+.sidebar.collapsed:hover .sidebar-collapse-toggle,
+.sidebar.collapsed .sidebar-collapse-toggle {
+  opacity: 1;
+}
+
+/* Hide collapse toggle on mobile */
+@media (max-width: 767px) {
+  .sidebar-collapse-toggle {
     display: none;
   }
 }

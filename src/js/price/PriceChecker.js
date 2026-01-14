@@ -134,7 +134,8 @@ export class PriceChecker {
                 card_name: cardData.cardName || '',
                 card_rarity: cardData.rarity,
                 art_variant: cardData.artVariant || '',
-                setCode: cardData.setCode || '', // Pass setCode for targeted search
+                setCode: cardData.setCode || '',
+                product_id: cardData.productId || null,  // TCGcsv product_id for O(1) lookup
                 force_refresh: cardData.forceRefresh || false
             };
 

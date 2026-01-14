@@ -230,6 +230,7 @@
         import SettingsPage from './src/pages/SettingsPage.js';
         import ThemeSettingsPage from './src/pages/ThemeSettingsPage.js';
         import AdminPage from './src/pages/AdminPage.js';
+        import RarityAdminPage from './src/pages/RarityAdminPage.js';
 
         // Initialize router and sidebar when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
@@ -253,6 +254,7 @@
             router.register('settings', SettingsPage);
             router.register('theme', ThemeSettingsPage);
             router.register('admin', AdminPage);
+            router.register('rarity-admin', RarityAdminPage, 'Rarity Vault');
 
             router.initialize(pageContainer, pageTitle);
 

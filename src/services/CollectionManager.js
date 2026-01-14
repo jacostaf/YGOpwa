@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabaseClient.js';
 import { authService } from './authService.js';
 import { PriceChecker } from '../js/price/PriceChecker.js';
 import { Storage } from '../js/utils/Storage.js';
+import { getRarityRankSync, getRarityWeightSync, getAllRarities } from './rarityService.js';
 
 export class CollectionManager {
   constructor(sessionManager) {
@@ -372,7 +373,8 @@ export class CollectionManager {
             cardNumber: cardNumber,
             rarity: card.rarity.name,
             cardName: cleanName,
-            setCode: card.set.code // Pass set code explicitly
+            setCode: card.set.code,
+            productId: card.card.productId  // TCGcsv product_id for O(1) lookup
           });
 
           // Only mark as update if it didn't come from cache
@@ -621,18 +623,9 @@ export class CollectionManager {
             break;
 
           case 'rarity':
-            const rarityOrder = {
-              'common': 1,
-              'rare': 2,
-              'super rare': 3,
-              'ultra rare': 4,
-              'secret rare': 5,
-              'ultimate rare': 6,
-              'ghost rare': 7,
-              'starlight rare': 8
-            };
-            compareA = rarityOrder[(a.rarity || 'common').toLowerCase()] || 0;
-            compareB = rarityOrder[(b.rarity || 'common').toLowerCase()] || 0;
+            // Use dynamic rarity ranks from rarityService
+            compareA = getRarityRankSync(a.rarity || 'common');
+            compareB = getRarityRankSync(b.rarity || 'common');
             break;
 
           case 'number':
@@ -693,16 +686,6 @@ export class CollectionManager {
       let totalRareScore = 0;
 
       const rarityDistribution = {};
-      const rarityOrder = {
-        'starlight rare': 8,
-        'ghost rare': 7,
-        'ultimate rare': 6,
-        'secret rare': 5,
-        'ultra rare': 4,
-        'super rare': 3,
-        'rare': 2,
-        'common': 1
-      };
 
       allCards.forEach(card => {
         const quantity = Number(card.quantity) && Number(card.quantity) > 0 ? Number(card.quantity) : 1;
@@ -718,9 +701,11 @@ export class CollectionManager {
           rarityKey = card.rarity.key;
         }
 
+        // Use dynamic rarity weights from rarityService
+        const dynamicWeight = getRarityWeightSync(rarityKey);
         const rarityScore = card.rareScoreContribution !== undefined
           ? parseFloat(card.rareScoreContribution) || 0
-          : (rarityOrder[rarityKey.toLowerCase()] || 0) * quantity;
+          : dynamicWeight * quantity;
 
         totalCards += quantity;
         totalValue += unitValue * quantity;
@@ -730,7 +715,7 @@ export class CollectionManager {
 
         const rarityValue = (card.rarityWeight !== undefined
           ? parseFloat(card.rarityWeight) || 0
-          : rarityOrder[rarityKey.toLowerCase()] || 0);
+          : dynamicWeight);
 
         if (rarityValue > highestRarityScore) {
           highestRarityScore = rarityValue;

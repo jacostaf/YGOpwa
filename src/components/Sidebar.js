@@ -21,6 +21,7 @@ export default class Sidebar {
     this.activeItem = options.defaultActive || 'dashboard';
     this.isMobile = window.innerWidth < 768;
     this.isOpen = !this.isMobile; // Open on desktop, closed on mobile by default
+    this.isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
 
     // Navigation items configuration
     this.navItems = [
@@ -50,6 +51,7 @@ export default class Sidebar {
     this.render();
     this.attachEvents();
     this.updateMobileState();
+    this.updateCollapsedState();
 
     // Subscribe to auth changes to update sidebar when user logs in/out or profile loads
     if (authService) {
@@ -64,7 +66,11 @@ export default class Sidebar {
   }
 
   render() {
+    const collapseIcon = this.isCollapsed ? 'chevron-right' : 'chevron-left';
     this.container.innerHTML = `
+      <button class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" aria-label="${this.isCollapsed ? 'Expand' : 'Collapse'} sidebar">
+        <i data-lucide="${collapseIcon}"></i>
+      </button>
       ${this.renderHeader()}
       ${this.renderNavigation()}
       ${this.renderFooter()}
@@ -282,6 +288,14 @@ export default class Sidebar {
       });
     }
 
+    // Collapse toggle button
+    const collapseBtn = this.container.querySelector('.sidebar-collapse-toggle');
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', () => {
+        this.toggleCollapse();
+      });
+    }
+
     // Handle window resize
     window.addEventListener('resize', () => {
       this.handleResize();
@@ -354,6 +368,57 @@ export default class Sidebar {
     }
   }
 
+  // Collapse/Expand functionality (for desktop - hides labels, shows icons only)
+  collapse() {
+    this.isCollapsed = true;
+    localStorage.setItem('sidebarCollapsed', 'true');
+    this.updateCollapsedState();
+    this.dispatchEvent('sidebar:collapse');
+  }
+
+  expand() {
+    this.isCollapsed = false;
+    localStorage.setItem('sidebarCollapsed', 'false');
+    this.updateCollapsedState();
+    this.dispatchEvent('sidebar:expand');
+  }
+
+  toggleCollapse() {
+    if (this.isCollapsed) {
+      this.expand();
+    } else {
+      this.collapse();
+    }
+  }
+
+  updateCollapsedState() {
+    if (this.isMobile) {
+      // Don't collapse on mobile - use drawer instead
+      this.container.classList.remove('collapsed');
+      document.body.classList.remove('sidebar-collapsed');
+      return;
+    }
+
+    if (this.isCollapsed) {
+      this.container.classList.add('collapsed');
+      document.body.classList.add('sidebar-collapsed');
+    } else {
+      this.container.classList.remove('collapsed');
+      document.body.classList.remove('sidebar-collapsed');
+    }
+
+    // Update the toggle button icon
+    const collapseBtn = this.container.querySelector('.sidebar-collapse-toggle');
+    if (collapseBtn) {
+      const icon = collapseBtn.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', this.isCollapsed ? 'chevron-right' : 'chevron-left');
+        collapseBtn.setAttribute('aria-label', this.isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+        IconLoader.refreshIcons();
+      }
+    }
+  }
+
   handleResize() {
     const wasMobile = this.isMobile;
     this.isMobile = window.innerWidth < 768;
@@ -369,6 +434,7 @@ export default class Sidebar {
     }
 
     this.updateMobileState();
+    this.updateCollapsedState();
   }
 
   updateMobileState() {
