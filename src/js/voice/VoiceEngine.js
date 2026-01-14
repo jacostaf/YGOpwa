@@ -591,11 +591,18 @@ export class VoiceEngine {
                 return;
             }
 
-            if (confidence < (this.config.confidenceThreshold ?? 0)) {
-                this.logger.warn('Recognition confidence below threshold', { transcript, confidence });
-                return;
+            // Check if confidence is below threshold - but DON'T return early
+            // Instead, flag the result so downstream handlers can show manual selection
+            const isLowConfidence = confidence < (this.config.confidenceThreshold ?? 0);
+            if (isLowConfidence) {
+                this.logger.info('Recognition confidence below threshold - will show options', {
+                    transcript,
+                    confidence,
+                    threshold: this.config.confidenceThreshold
+                });
             }
 
+            // Collect alternatives from Web Speech API (other possible interpretations)
             const alternatives = Array.from(lastResult).map((alt) => ({
                 transcript: alt.transcript,
                 confidence: alt.confidence || 0,
@@ -608,6 +615,8 @@ export class VoiceEngine {
                 engine: engineType,
                 timestamp: new Date().toISOString(),
                 isFinal: true,
+                isLowConfidence,  // Flag for downstream handlers to show manual selection
+                confidenceThreshold: this.config.confidenceThreshold  // Include threshold for UI display
             };
 
             if (this.config.cardNameOptimization !== false) {

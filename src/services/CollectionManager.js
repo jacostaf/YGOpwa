@@ -226,21 +226,120 @@ export class CollectionManager {
         throw cardError;
       }
 
+      // Collect unique product IDs to fetch card_variants for pricing and history
+      const productIds = [...new Set(cards.map(c => c.card_id).filter(Boolean))];
+      let variantLookup = new Map(); // productId -> variantId
+      let priceLookup = new Map();   // variantId -> latest price data
+      let packPriceLookup = new Map(); // variantId -> price at pack
+
+      if (productIds.length > 0) {
+        try {
+          // Bulk fetch card_variants to get variant IDs and ygoprodeck_id for images
+          const { data: variants, error: variantError } = await supabase
+            .from('card_variants')
+            .select('id, tcgcsv_product_id, ygoprodeck_id')
+            .in('tcgcsv_product_id', productIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id)));
+
+          if (!variantError && variants) {
+            variants.forEach(v => {
+              variantLookup.set(String(v.tcgcsv_product_id), {
+                id: v.id,
+                ygoprodeckId: v.ygoprodeck_id
+              });
+            });
+            console.log(`[CollectionManager] Mapped ${variantLookup.size} card variants`);
+
+            // Get all variant IDs for price lookups
+            const variantIds = variants.map(v => v.id);
+
+            if (variantIds.length > 0) {
+              // Fetch latest prices from card_prices table
+              // Using distinct on card_variant_id, ordered by price_date desc
+              const { data: prices, error: priceError } = await supabase
+                .from('card_prices')
+                .select('card_variant_id, price, price_market, price_low, price_mid, price_high, price_date')
+                .in('card_variant_id', variantIds)
+                .order('price_date', { ascending: false });
+
+              if (!priceError && prices) {
+                // Group by variant_id and take the latest (first) for each
+                prices.forEach(p => {
+                  if (!priceLookup.has(p.card_variant_id)) {
+                    priceLookup.set(p.card_variant_id, {
+                      price: parseFloat(p.price) || 0,
+                      marketPrice: parseFloat(p.price_market) || 0,
+                      lowPrice: parseFloat(p.price_low) || 0,
+                      midPrice: parseFloat(p.price_mid) || 0,
+                      highPrice: parseFloat(p.price_high) || 0,
+                      priceDate: p.price_date
+                    });
+                  }
+                });
+                console.log(`[CollectionManager] Fetched prices for ${priceLookup.size} variants`);
+              }
+
+              // Fetch pack prices from pack_price_snapshots
+              const { data: packPrices, error: packError } = await supabase
+                .from('pack_price_snapshots')
+                .select('card_variant_id, price_at_pack, packed_at')
+                .in('card_variant_id', variantIds)
+                .order('packed_at', { ascending: false });
+
+              if (packError) {
+                console.warn('[CollectionManager] Error fetching pack prices:', packError);
+              } else if (packPrices && packPrices.length > 0) {
+                // Group by variant_id and take the latest (first) for each
+                packPrices.forEach(p => {
+                  if (!packPriceLookup.has(p.card_variant_id)) {
+                    packPriceLookup.set(p.card_variant_id, {
+                      priceAtPack: parseFloat(p.price_at_pack) || 0,
+                      packedAt: p.packed_at
+                    });
+                  }
+                });
+                console.log(`[CollectionManager] Fetched pack prices for ${packPriceLookup.size} variants from pack_price_snapshots`);
+              } else {
+                console.log('[CollectionManager] No pack price snapshots found for these cards');
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[CollectionManager] Failed to fetch card data:', err);
+        }
+      }
+
       // Map to standardized format matching CollectionPage expectations
       const mappedCards = cards.map(card => {
         const collection = collections.find(c => c.id === card.collection_id);
+        const variantData = variantLookup.get(String(card.card_id));
+        const cardVariantId = variantData?.id || null;
+        const priceData = cardVariantId ? priceLookup.get(cardVariantId) : null;
+        const packPriceData = cardVariantId ? packPriceLookup.get(cardVariantId) : null;
+
+        // Use lowPrice as currentPrice (TCGPlayer low), marketPrice for market
+        const currentPrice = priceData?.lowPrice || priceData?.price || 0;
+        const marketPrice = priceData?.marketPrice || 0;
+        const quantity = card.quantity || 1;
+
+        // Construct image URL from TCGPlayer CDN using product ID
+        const productId = card.card_id;
+        const imageUrl = productId
+          ? `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_200w.jpg`
+          : null;
+
         return {
           id: card.id,
-          collectionId: card.collection_id, // Add collectionId for filtering
-          quantity: card.quantity || 1,
+          collectionId: card.collection_id,
+          quantity: quantity,
           createdAt: card.added_at || new Date().toISOString(),
           card: {
             name: card.name,
-            number: card.card_number || card.set_code, // Prefer card_number if available
+            number: card.card_number || card.set_code,
+            productId: productId,
           },
-          // Ensure image properties are passed through
-          image_url: card.image_url || card.image_small,
-          image_small: card.image_small || card.image_url,
+          // Image URLs from TCGPlayer CDN
+          image_url: imageUrl,
+          image_small: imageUrl,
 
           // Flat properties for filtering/sorting compatibility
           cardName: card.name,
@@ -249,88 +348,34 @@ export class CollectionManager {
           cardNumber: card.card_number || card.set_code,
           addedAt: card.added_at || new Date().toISOString(),
 
+          // IDs for modal functionality
+          productId: productId,
+          cardVariantId: cardVariantId,
+
           set: {
             code: card.set_code,
-            name: card.set_code // Fallback
+            name: card.set_code
           },
           rarity: {
             name: card.rarity,
             key: card.rarity
           },
           pricing: {
-            currentPrice: 0,
-            totalValue: 0
+            currentPrice: currentPrice,
+            marketPrice: marketPrice,
+            midPrice: priceData?.midPrice || 0,
+            highPrice: priceData?.highPrice || 0,
+            totalValue: currentPrice * quantity,
+            priceDate: priceData?.priceDate || null,
+            // Pack price data
+            priceAtPack: packPriceData?.priceAtPack || null,
+            packedAt: packPriceData?.packedAt || null
           },
+          // Legacy flat property
+          tcgLow: currentPrice,
           collectionName: collection?.name
         };
       });
-
-      // Fetch prices for unique cards
-      // Create unique keys based on set code and rarity
-      const uniqueKeys = new Set();
-      const uniqueCardsToFetch = [];
-
-      mappedCards.forEach(card => {
-        // Clean card name: remove rarity in parentheses if present
-        let cleanName = card.card.name;
-        if (cleanName.includes('(')) {
-          cleanName = cleanName.replace(/\s*\([^)]+\)\s*$/, '').trim();
-        }
-
-        // Handle set codes disguised as card numbers (match fetchPricesForCards logic)
-        let cleanCardNumber = card.card.number;
-        if (cleanCardNumber === card.set.code && !/\d/.test(cleanCardNumber)) {
-          cleanCardNumber = null;
-        }
-
-        // Synchronous cache check
-        const cacheKey = this.priceChecker.generateCacheKey({
-          cardNumber: cleanCardNumber || 'unknown',
-          rarity: card.rarity.name,
-          cardName: cleanName, // Use clean name
-          condition: 'near-mint', // Match PriceChecker default (lowercase)
-          artVariant: '' // Explicitly include artVariant as empty string
-        });
-        const cached = this.priceChecker.getCachedPrice(cacheKey);
-
-        if (cached) {
-          // Update pricing if available
-          if (cached.aggregated) {
-            const price = cached.aggregated.averagePrice || 0;
-            card.pricing.currentPrice = price;
-            card.pricing.totalValue = price * card.quantity;
-            card.tcgLow = price;
-          }
-
-          // Update image if missing and available in cache
-          // PriceChecker returns { data: { image_url: ... }, aggregated: ... }
-          const cachedImage = cached.data?.image_url || cached.image_url;
-          if ((!card.image_url || card.image_url.includes('back.jpg')) && cachedImage) {
-            card.image_url = cachedImage;
-            card.image_small = cachedImage;
-          }
-        } else {
-          // Only fetch if NOT in cache
-          const key = `${card.set.code}|${card.rarity.name}`;
-          if (!uniqueKeys.has(key)) {
-            uniqueKeys.add(key);
-            uniqueCardsToFetch.push(card);
-          }
-        }
-      });
-
-      console.log(`[CollectionManager] Fetching prices for ${uniqueCardsToFetch.length} unique cards`);
-
-      // Fetch prices in parallel (with simple batching/concurrency limit if needed, but PriceChecker handles some caching)
-      // We'll use a simple Promise.all for now as the number of unique cards shouldn't be huge for a single user yet
-      const priceMap = new Map();
-
-      // Fetch prices in background (non-blocking)
-      if (uniqueCardsToFetch.length > 0) {
-        this.fetchPricesForCards(uniqueCardsToFetch).catch(err =>
-          console.warn('[CollectionManager] Background price fetch failed:', err)
-        );
-      }
 
       return mappedCards;
     } catch (error) {

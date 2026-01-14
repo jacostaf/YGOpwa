@@ -2306,6 +2306,421 @@ export class UIManager {
     }
 
     /**
+     * Show card selection modal with low-confidence warning banner
+     * Used when voice recognition confidence is below threshold but we still found potential matches
+     * @param {Array} cards - Array of potential card matches
+     * @param {Object} voiceResult - Voice recognition result with confidence info
+     * @param {Function} onSelect - Callback when user selects a card
+     */
+    showLowConfidenceCardSelectionModal(cards, voiceResult, onSelect) {
+        const content = document.createElement('div');
+        content.className = 'card-selection-content low-confidence-selection';
+
+        // Warning banner showing low confidence info
+        const warningBanner = document.createElement('div');
+        warningBanner.className = 'low-confidence-warning';
+        warningBanner.innerHTML = `
+            <div class="warning-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                    <path d="M12 9v4"></path>
+                    <path d="M12 17h.01"></path>
+                </svg>
+            </div>
+            <div class="warning-text">
+                <strong>Low confidence match</strong>
+                <span>Recognition: ${(voiceResult.confidence * 100).toFixed(0)}% (threshold: ${((voiceResult.confidenceThreshold || 0.5) * 100).toFixed(0)}%)</span>
+            </div>
+        `;
+        content.appendChild(warningBanner);
+
+        // Intro text with what was heard
+        const intro = document.createElement('p');
+        intro.className = 'selection-intro';
+        intro.innerHTML = `I heard <strong>"${voiceResult.transcript}"</strong>. Did you mean one of these?`;
+        content.appendChild(intro);
+
+        // Card selection grid (same as showCardSelectionModal)
+        const grid = document.createElement('div');
+        grid.className = 'selection-grid';
+
+        cards.forEach(card => {
+            const cardBtn = document.createElement('button');
+            cardBtn.className = 'selection-card-btn';
+
+            const cardName = card.name || card.card_name || 'Unknown';
+            const rarity = card.rarity || card.card_rarity || 'Common';
+            const setCode = card.set_code || card.setInfo?.setCode || '';
+            const price = card.price || card.tcg_market_price || 0;
+            const imageUrl = card.image_url || card.image_url_small;
+
+            cardBtn.innerHTML = `
+                <div class="selection-card-image">
+                    ${imageUrl ? `<img src="${imageUrl}" alt="${cardName}" loading="lazy">` : '<div class="placeholder-icon">🃏</div>'}
+                </div>
+                <div class="selection-card-info">
+                    <div class="selection-name">${cardName}</div>
+                    <div class="selection-details">
+                        <span class="selection-rarity">${rarity}</span>
+                        ${setCode ? `<span class="selection-set">${setCode}</span>` : ''}
+                    </div>
+                    ${price > 0 ? `<div class="selection-price">$${Number(price).toFixed(2)}</div>` : ''}
+                </div>
+            `;
+
+            cardBtn.addEventListener('click', () => {
+                this.closeModal();
+                onSelect(card);
+            });
+
+            grid.appendChild(cardBtn);
+        });
+
+        content.appendChild(grid);
+
+        // "None of these" button - more prominent for low confidence
+        const noneBtn = document.createElement('button');
+        noneBtn.className = 'btn btn-secondary btn-block mt-4';
+        noneBtn.textContent = "None of these - I'll type it manually";
+        noneBtn.addEventListener('click', () => {
+            this.closeModal();
+            onSelect(null);
+        });
+        content.appendChild(noneBtn);
+
+        const modal = this.createModal('Select Card', '');
+        modal.querySelector('.modal-content').appendChild(content);
+        modal.classList.add('card-selection-modal', 'low-confidence-modal');
+
+        this.showModal(modal);
+    }
+
+    /**
+     * Show card detail modal with enlarged view and pricing
+     * @param {Object} card - Card data object
+     * @param {Object} options - Modal options
+     * @param {Function} options.onToggleFavorite - Callback for favorite toggle
+     */
+    showCardDetailModal(card, options = {}) {
+        console.log('[UIManager] showCardDetailModal called with card:', card);
+        this.ensureDomReferences(['modalOverlay']);
+
+        const cardName = card.card?.name || card.name || card.cardName || 'Unknown Card';
+        const cardImage = card.image_url || card.image_small || card.imageUrl || card.image_url_small || this.getDefaultCardImage();
+        const setName = card.set?.name || card.setName || 'Unknown Set';
+        const setCode = card.set?.code || card.setCode || '';
+        const rarityName = card.rarity?.name || card.rarity || '';
+        const quantity = card.quantity || 1;
+        const productId = card.card?.productId || card.productId;
+        const notes = card.notes || '';
+        const addedAt = card.addedAt || card.createdAt;
+        const cardVariantId = card.cardVariantId || card.card_variant_id;
+
+        // Pricing data
+        const currentPrice = card.pricing?.currentPrice || card.tcgLow || 0;
+        const marketPrice = card.pricing?.marketPrice || card.tcgMarket || 0;
+        const midPrice = card.pricing?.midPrice || 0;
+        const highPrice = card.pricing?.highPrice || 0;
+        const totalValue = card.pricing?.totalValue || (currentPrice * quantity);
+        const priceAtPack = card.pricing?.priceAtPack;
+        const packedAt = card.pricing?.packedAt;
+
+        // TCGPlayer link
+        const tcgPlayerLink = productId
+            ? `https://www.tcgplayer.com/product/${productId}`
+            : null;
+
+        const modal = document.createElement('div');
+        modal.className = 'modal card-detail-modal';
+
+        // Get rarity class
+        const rarityClass = this.getModalRarityClass(rarityName);
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                <h3>${this.escapeHtmlText(cardName)}</h3>
+                <button class="modal-close" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal-content card-detail-content">
+                <div class="card-detail-layout">
+                    <div class="card-detail-image-section">
+                        <img src="${cardImage}" alt="${this.escapeHtmlText(cardName)}" class="card-detail-image" />
+                        <button class="card-detail-favorite-btn ${card.isFavorite ? 'is-favorite' : ''}"
+                                aria-label="${card.isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
+                            ${card.isFavorite
+                                ? '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>'
+                                : '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>'
+                            }
+                            <span>${card.isFavorite ? 'Favorited' : 'Add to Favorites'}</span>
+                        </button>
+                    </div>
+
+                    <div class="card-detail-info-section">
+                        <div class="card-detail-meta">
+                            <div class="detail-row">
+                                <span class="detail-label">Set</span>
+                                <span class="detail-value">${this.escapeHtmlText(setName)} ${setCode ? `(${setCode})` : ''}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Rarity</span>
+                                <span class="detail-value ${rarityClass}">${this.escapeHtmlText(rarityName) || 'Unknown'}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Quantity</span>
+                                <span class="detail-value">${quantity}</span>
+                            </div>
+                            ${addedAt ? `
+                                <div class="detail-row">
+                                    <span class="detail-label">Date Added</span>
+                                    <span class="detail-value">${new Date(addedAt).toLocaleDateString()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <div class="card-detail-pricing">
+                            <h4>Current Pricing</h4>
+                            <div class="pricing-grid">
+                                <div class="price-item">
+                                    <span class="price-label">TCG Low</span>
+                                    <span class="price-value">$${Number(currentPrice).toFixed(2)}</span>
+                                </div>
+                                <div class="price-item">
+                                    <span class="price-label">Market</span>
+                                    <span class="price-value">$${Number(marketPrice).toFixed(2)}</span>
+                                </div>
+                                <div class="price-item">
+                                    <span class="price-label">Mid</span>
+                                    <span class="price-value">$${Number(midPrice).toFixed(2)}</span>
+                                </div>
+                            </div>
+                            <div class="pricing-total">
+                                <span class="price-label">Total Value (${quantity}×)</span>
+                                <span class="price-value">$${Number(totalValue).toFixed(2)}</span>
+                            </div>
+                            <div class="price-at-pack ${priceAtPack !== null && priceAtPack !== undefined ? '' : 'no-data'}">
+                                <div class="pack-price-header">
+                                    <span class="price-label">Price When Packed</span>
+                                    ${packedAt ? `<span class="pack-date">${new Date(packedAt).toLocaleDateString()}</span>` : ''}
+                                </div>
+                                ${priceAtPack !== null && priceAtPack !== undefined ? `
+                                    <div class="pack-price-row">
+                                        <span class="price-value pack-value">$${Number(priceAtPack).toFixed(2)}</span>
+                                        ${currentPrice > 0 && priceAtPack > 0 ? `
+                                            <span class="price-change ${currentPrice >= priceAtPack ? 'positive' : 'negative'}">
+                                                ${currentPrice >= priceAtPack ? '↑' : '↓'}
+                                                ${Math.abs(((currentPrice - priceAtPack) / priceAtPack) * 100).toFixed(1)}%
+                                            </span>
+                                        ` : ''}
+                                    </div>
+                                ` : `
+                                    <div class="pack-price-row">
+                                        <span class="pack-price-na">Not available</span>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+
+                        <div class="card-detail-price-history">
+                            <h4>Price History</h4>
+                            <div class="price-history-container" data-card-variant-id="${cardVariantId || ''}">
+                                <div class="price-history-loading">
+                                    <span class="loading-spinner"></span>
+                                    <span>Loading price history...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${notes ? `
+                            <div class="card-detail-notes">
+                                <h4>Notes</h4>
+                                <p>${this.escapeHtmlText(notes)}</p>
+                            </div>
+                        ` : ''}
+
+                        ${tcgPlayerLink ? `
+                            <a href="${tcgPlayerLink}" target="_blank" rel="noopener noreferrer" class="tcgplayer-link">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                View on TCGPlayer
+                            </a>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Event listeners
+        const closeBtn = modal.querySelector('.modal-close');
+        closeBtn.addEventListener('click', () => this.closeModal());
+
+        const favoriteBtn = modal.querySelector('.card-detail-favorite-btn');
+        if (favoriteBtn && options.onToggleFavorite) {
+            favoriteBtn.addEventListener('click', () => {
+                card.isFavorite = !card.isFavorite;
+                favoriteBtn.classList.toggle('is-favorite');
+                favoriteBtn.innerHTML = card.isFavorite
+                    ? '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg><span>Favorited</span>'
+                    : '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg><span>Add to Favorites</span>';
+                options.onToggleFavorite(card);
+            });
+        }
+
+        this.showModal(modal);
+
+        // Async load price history
+        if (cardVariantId) {
+            this.loadPriceHistory(modal, cardVariantId);
+        } else {
+            // No variant ID, show no data message
+            const container = modal.querySelector('.price-history-container');
+            if (container) {
+                container.innerHTML = '<div class="price-history-empty">No price history available</div>';
+            }
+        }
+    }
+
+    /**
+     * Load and render price history for a card
+     * @param {HTMLElement} modal - The modal element
+     * @param {string} cardVariantId - The card variant ID
+     */
+    async loadPriceHistory(modal, cardVariantId) {
+        const container = modal.querySelector('.price-history-container');
+        if (!container) return;
+
+        try {
+            // Dynamic import to avoid circular dependencies
+            const { fetchCardPriceHistory } = await import('../../services/collectionsService.js');
+            const { history, error } = await fetchCardPriceHistory({ cardVariantId, limit: 30 });
+
+            if (error || !history || history.length === 0) {
+                container.innerHTML = '<div class="price-history-empty">No price history available</div>';
+                return;
+            }
+
+            // Render the price history chart
+            this.renderPriceHistoryChart(container, history);
+        } catch (err) {
+            console.error('[UIManager] Error loading price history:', err);
+            container.innerHTML = '<div class="price-history-empty">Failed to load price history</div>';
+        }
+    }
+
+    /**
+     * Render a simple price history chart using SVG
+     * @param {HTMLElement} container - The container element
+     * @param {Array} history - Array of price history entries
+     */
+    renderPriceHistoryChart(container, history) {
+        if (!history || history.length === 0) {
+            container.innerHTML = '<div class="price-history-empty">No price history available</div>';
+            return;
+        }
+
+        const prices = history.map(h => h.price || h.marketPrice || h.lowPrice || 0);
+        const dates = history.map(h => h.date);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        const priceRange = maxPrice - minPrice || 1;
+
+        // Calculate price change
+        const firstPrice = prices[0] || 0;
+        const lastPrice = prices[prices.length - 1] || 0;
+        const priceChange = lastPrice - firstPrice;
+        const percentChange = firstPrice > 0 ? ((priceChange / firstPrice) * 100).toFixed(1) : 0;
+        const trendClass = priceChange >= 0 ? 'trend-up' : 'trend-down';
+        const trendIcon = priceChange >= 0 ? '↑' : '↓';
+
+        // SVG dimensions
+        const width = 280;
+        const height = 80;
+        const padding = 8;
+        const chartWidth = width - (padding * 2);
+        const chartHeight = height - (padding * 2);
+
+        // Generate path points
+        const points = prices.map((price, i) => {
+            const x = padding + (i / (prices.length - 1 || 1)) * chartWidth;
+            const y = padding + chartHeight - ((price - minPrice) / priceRange) * chartHeight;
+            return `${x},${y}`;
+        });
+
+        const pathD = `M ${points.join(' L ')}`;
+        const areaD = `M ${padding},${height - padding} L ${points.join(' L ')} L ${width - padding},${height - padding} Z`;
+
+        // Format dates for display
+        const startDate = dates[0] ? new Date(dates[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        const endDate = dates[dates.length - 1] ? new Date(dates[dates.length - 1]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+
+        container.innerHTML = `
+            <div class="price-history-chart">
+                <div class="price-history-summary">
+                    <div class="price-history-range">
+                        <span class="price-history-min">$${minPrice.toFixed(2)}</span>
+                        <span class="price-history-separator">—</span>
+                        <span class="price-history-max">$${maxPrice.toFixed(2)}</span>
+                    </div>
+                    <div class="price-history-change ${trendClass}">
+                        <span>${trendIcon} ${priceChange >= 0 ? '+' : ''}$${priceChange.toFixed(2)}</span>
+                        <span class="percent-change">(${priceChange >= 0 ? '+' : ''}${percentChange}%)</span>
+                    </div>
+                </div>
+                <svg class="price-sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="priceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color: ${priceChange >= 0 ? '#22c55e' : '#ef4444'}; stop-opacity: 0.3" />
+                            <stop offset="100%" style="stop-color: ${priceChange >= 0 ? '#22c55e' : '#ef4444'}; stop-opacity: 0" />
+                        </linearGradient>
+                    </defs>
+                    <path class="sparkline-area" d="${areaD}" fill="url(#priceGradient)" />
+                    <path class="sparkline-line ${trendClass}" d="${pathD}" fill="none" stroke-width="2" />
+                </svg>
+                <div class="price-history-dates">
+                    <span>${startDate}</span>
+                    <span>${endDate}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Get rarity CSS class for modal display
+     * @param {string} rarity - Rarity name
+     * @returns {string} CSS class
+     */
+    getModalRarityClass(rarity) {
+        const rarityLower = (rarity || '').toLowerCase();
+        if (rarityLower.includes('secret') || rarityLower.includes('starlight') || rarityLower.includes('ghost')) {
+            return 'rarity-secret';
+        } else if (rarityLower.includes('ultra') || rarityLower.includes('ultimate')) {
+            return 'rarity-ultra';
+        } else if (rarityLower.includes('super')) {
+            return 'rarity-super';
+        } else if (rarityLower.includes('rare')) {
+            return 'rarity-rare';
+        }
+        return '';
+    }
+
+    /**
+     * Get default card image for modal
+     * @returns {string} Default SVG image
+     */
+    getDefaultCardImage() {
+        return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 420" fill="none"><rect width="300" height="420" rx="16" fill="%231f2937"/></svg>';
+    }
+
+    /**
+     * Escape HTML text to prevent XSS
+     * @param {string} text - Text to escape
+     * @returns {string} Escaped text
+     */
+    escapeHtmlText(text) {
+        const div = document.createElement('div');
+        div.textContent = text || '';
+        return div.innerHTML;
+    }
+
+    /**
      * Close modal
      */
     closeModal() {

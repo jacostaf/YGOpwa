@@ -273,13 +273,13 @@ export default class DashboardPage {
             </div>
           </section>
 
-          <!-- Quick Stats (2x2 grid) -->
+          <!-- Quick Stats (asymmetric: featured + secondary list) -->
           <section class="dashboard-quick-stats" role="region" aria-label="Quick statistics">
             <div class="section-header flex items-center justify-between mb-4">
               <h2 class="text-xs font-medium text-neutral-500 uppercase tracking-wider">Quick Stats</h2>
             </div>
-            <div class="quick-stats-grid grid grid-cols-2 gap-3" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
-              <!-- 4 equal stat boxes -->
+            <div class="quick-stats-asymmetric" id="quick-stats-grid" role="list" aria-label="Quick statistics list">
+              <!-- Featured stat + secondary stats rendered dynamically -->
             </div>
           </section>
 
@@ -385,7 +385,8 @@ export default class DashboardPage {
   }
 
   /**
-   * Render quick stats in symmetrical 2x2 grid
+   * Render quick stats with asymmetric layout
+   * First stat is featured (larger), remaining stats are in a dense list
    * @private
    */
   renderQuickStats() {
@@ -399,18 +400,35 @@ export default class DashboardPage {
       const quickStats = this.dashboardService.getQuickStats();
 
       // Ensure quickStats is an array
-      if (!Array.isArray(quickStats)) {
-        console.error('quickStats is not an array:', quickStats);
+      if (!Array.isArray(quickStats) || quickStats.length === 0) {
+        console.error('quickStats is not an array or empty:', quickStats);
         return;
       }
 
-      // Render all 4 stats equally in a 2x2 grid
-      container.innerHTML = quickStats.map(stat => `
-        <div class="quick-stat-item p-4 rounded-xl bg-neutral-900/50 border border-neutral-800/50 hover:border-neutral-700/50 transition-colors" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
-          <div class="text-xl font-bold text-white tabular-nums mb-1" aria-hidden="true">${this.escapeHtml(stat.value || '0')}</div>
-          <div class="text-xs text-neutral-500 font-medium uppercase tracking-wide" aria-hidden="true">${this.escapeHtml(stat.label || 'N/A')}</div>
+      // First stat gets featured treatment (larger, prominent)
+      const [featured, ...secondary] = quickStats;
+
+      // Build featured stat - hero styling for visual hierarchy
+      const featuredHtml = `
+        <div class="quick-stat-featured p-5 rounded-xl bg-neutral-900/60 border border-neutral-800/50" role="listitem" aria-label="${this.escapeHtml(featured.label || 'N/A')}: ${this.escapeHtml(featured.value || '0')}">
+          <div class="text-label-dense mb-2" aria-hidden="true">${this.escapeHtml(featured.label || 'N/A')}</div>
+          <div class="text-hero" aria-hidden="true">${this.escapeHtml(featured.value || '0')}</div>
         </div>
-      `).join('');
+      `;
+
+      // Secondary stats - dense flat list (no card background per item)
+      const secondaryHtml = secondary.length > 0 ? `
+        <div class="quick-stats-secondary mt-3">
+          ${secondary.map((stat, idx) => `
+            <div class="quick-stat-row section-flat-bordered ${idx === secondary.length - 1 ? 'border-0 mb-0 pb-0' : ''}" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
+              <span class="text-label-subtle">${this.escapeHtml(stat.label || 'N/A')}</span>
+              <span class="text-value-sm">${this.escapeHtml(stat.value || '0')}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : '';
+
+      container.innerHTML = featuredHtml + secondaryHtml;
     } catch (error) {
       console.error('Error rendering quick stats:', error);
     }

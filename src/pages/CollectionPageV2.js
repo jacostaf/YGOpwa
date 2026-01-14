@@ -111,7 +111,9 @@ export class CollectionPage {
       handlePackRefresh: this.handlePackRefresh.bind(this),
       handleTabChange: this.handleTabChange.bind(this),
       handleCreateCollection: this.handleCreateCollection.bind(this),
-      handleCondensedToggle: this.handleCondensedToggle.bind(this)
+      handleCondensedToggle: this.handleCondensedToggle.bind(this),
+      handleToggleFavorite: this.handleToggleFavorite.bind(this),
+      handleCardClick: this.handleCardClick.bind(this)
     };
 
     this.optimisticRollbacks = [];
@@ -169,6 +171,85 @@ export class CollectionPage {
   handleCondensedToggle(e) {
     this.state.consolidated = e.target.checked;
     this.updateGridView();
+  }
+
+  /**
+   * Handle favorite toggle
+   * @param {Object} card - Card object
+   * @param {number} index - Card index
+   */
+  handleToggleFavorite(card, index) {
+    try {
+      const newFavoriteState = !card.isFavorite;
+
+      // Update card state
+      card.isFavorite = newFavoriteState;
+
+      // Update the card in state arrays
+      const cardId = card.id || card.cardVariantId;
+      this.state.cards.forEach(c => {
+        if ((c.id || c.cardVariantId) === cardId) {
+          c.isFavorite = newFavoriteState;
+        }
+      });
+
+      // Persist to localStorage
+      const favoritesKey = 'voxrip_favorites';
+      const favorites = JSON.parse(localStorage.getItem(favoritesKey) || '{}');
+      if (newFavoriteState) {
+        favorites[cardId] = true;
+      } else {
+        delete favorites[cardId];
+      }
+      localStorage.setItem(favoritesKey, JSON.stringify(favorites));
+
+      // Update CardGrid
+      if (this.cardGrid) {
+        this.cardGrid.update(this.state.sortedCards);
+      }
+
+      // Update sidebar favorites count
+      const favoritesCount = this.state.cards.filter(c => c.isFavorite).length;
+      const sidebar = this.app?.sidebar || window.sidebar;
+      if (sidebar) {
+        sidebar.setContext('collection', {
+          ...sidebar.contextData,
+          favoritesCount
+        });
+      }
+
+      // Show toast
+      if (this.app?.showToast) {
+        this.app.showToast(
+          newFavoriteState ? 'Added to favorites' : 'Removed from favorites',
+          'success'
+        );
+      }
+
+    } catch (error) {
+      console.error('[CollectionPage] Error toggling favorite:', error);
+    }
+  }
+
+  /**
+   * Handle card click (open detail modal)
+   * @param {Object} card - Card object
+   * @param {number} index - Card index
+   */
+  handleCardClick(card, index) {
+    try {
+      // Access UIManager from window.app (Router passes itself as 'app', not the actual app)
+      const uiManager = window.app?.uiManager;
+      if (uiManager && typeof uiManager.showCardDetailModal === 'function') {
+        uiManager.showCardDetailModal(card, {
+          onToggleFavorite: () => this.handleToggleFavorite(card, index)
+        });
+      } else {
+        console.warn('[CollectionPage] UIManager.showCardDetailModal not available. window.app:', !!window.app, 'uiManager:', !!window.app?.uiManager);
+      }
+    } catch (error) {
+      console.error('[CollectionPage] Error opening card detail:', error);
+    }
   }
 
   /**
@@ -436,7 +517,7 @@ export class CollectionPage {
 
             <!-- Collection Display -->
             <div class="collection-display">
-              <div id="cardGrid" class="card-grid"></div>
+              <div id="cardGrid"></div>
               <div id="emptyState" class="empty-state hidden">
                 <i data-lucide="search-x"></i>
                 <h3>No cards found</h3>
@@ -626,6 +707,15 @@ export class CollectionPage {
         console.log('CollectionPage: Guest mode');
         // Guest mode: use local session cards only
         this.state.cards = this.collectionManager.getAllCards();
+
+        // Load favorites from localStorage
+        const favoritesKey = 'voxrip_favorites';
+        const favorites = JSON.parse(localStorage.getItem(favoritesKey) || '{}');
+        this.state.cards = this.state.cards.map(card => ({
+          ...card,
+          isFavorite: favorites[card.id || card.cardVariantId] || false
+        }));
+
         console.log('CollectionPage: Got cards', this.state.cards?.length);
         this.recalculateDerivedState();
         console.log('CollectionPage: Recalculated state');
@@ -638,6 +728,19 @@ export class CollectionPage {
         }
 
         this.updateDisplay();
+
+        // Update Sidebar with counts (guest mode)
+        const sidebar = this.app?.sidebar || window.sidebar;
+        if (sidebar) {
+          const favoritesCount = this.state.cards.filter(c => c.isFavorite).length;
+          sidebar.setContext('collection', {
+            collections: [],
+            activeCollection: 'all',
+            totalCards: this.state.cards.length,
+            favoritesCount: favoritesCount
+          });
+        }
+
         this.state.isLoading = false;
         if (!silent) this.toggleLoadingIndicator(false);
         return;
@@ -657,8 +760,15 @@ export class CollectionPage {
       // But we might need to filter boolean
       const validCards = cards.filter(Boolean);
 
-      this.state.cards = validCards;
-      this.collectionManager.setExternalCards(validCards, { ttl: Number.MAX_SAFE_INTEGER });
+      // Load favorites from localStorage
+      const favoritesKey = 'voxrip_favorites';
+      const favorites = JSON.parse(localStorage.getItem(favoritesKey) || '{}');
+      this.state.cards = validCards.map(card => ({
+        ...card,
+        isFavorite: favorites[card.id || card.cardVariantId] || false
+      }));
+
+      this.collectionManager.setExternalCards(this.state.cards, { ttl: Number.MAX_SAFE_INTEGER });
 
       if (!summaryResult.error) {
         this.state.summary = summaryResult.summary;
@@ -704,9 +814,10 @@ export class CollectionPage {
       this.updatePlanControls();
 
       // Update Sidebar with counts
-      if (this.app?.sidebar) {
+      const sidebar = this.app?.sidebar || window.sidebar;
+      if (sidebar) {
         const favoritesCount = this.state.cards.filter(c => c.isFavorite).length;
-        this.app.sidebar.setContext('collection', {
+        sidebar.setContext('collection', {
           collections: [], // TODO: Pass actual user collections here if available
           activeCollection: 'all',
           totalCards: this.state.cards.length,
@@ -1479,6 +1590,8 @@ export class CollectionPage {
         cards: this.state.sortedCards,
         cardSize: this.state.cardSize,
         onRemoveCard: this.boundHandlers.handleCardRemove,
+        onToggleFavorite: this.boundHandlers.handleToggleFavorite,
+        onCardClick: this.boundHandlers.handleCardClick,
         showRemoveButton: true,
         viewMode: 'grid'
       });

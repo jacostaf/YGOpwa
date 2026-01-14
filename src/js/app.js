@@ -410,6 +410,14 @@ class YGORipperApp {
                 return;
             }
 
+            // Handle low-confidence results differently - always show manual selection
+            // This catches results where VoiceEngine flagged confidence below threshold
+            if (result.isLowConfidence) {
+                this.logger.info(`Low confidence result (${(result.confidence * 100).toFixed(1)}%), showing manual selection`);
+                await this.handleLowConfidenceResult(result);
+                return;
+            }
+
             // Throttle voice processing to prevent UI lag and batching issues
             if (this.isProcessingVoice) {
                 this.logger.debug('Voice processing in progress, queuing result');
@@ -534,6 +542,68 @@ class YGORipperApp {
 
             // Fallback to manual selection
             this.showCardSelectionDialog(sortedCards, transcript);
+        }
+    }
+
+    /**
+     * Handle low-confidence voice recognition results
+     * Shows a selection dialog with warning UI indicating the match confidence was low
+     * @param {Object} result - Voice recognition result with isLowConfidence flag
+     */
+    async handleLowConfidenceResult(result) {
+        try {
+            // Process the voice input to find potential card matches
+            const enhancedResults = result.alternatives || null;
+            const cards = await this.safeProcessVoiceInput(result.transcript, enhancedResults);
+
+            if (cards && cards.length > 0) {
+                // Sort by confidence and show selection dialog with low-confidence warning
+                const sortedCards = cards.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+                this.logger.info(`Low confidence: found ${cards.length} potential matches for "${result.transcript}"`);
+
+                // Show the low-confidence selection dialog (never auto-confirm)
+                this.showLowConfidenceSelectionDialog(sortedCards, result);
+            } else {
+                // No matches found - show helpful feedback
+                this.logger.info(`Low confidence: no matches for "${result.transcript}"`);
+                this.showToast(
+                    `Could not match: "${result.transcript}" (${(result.confidence * 100).toFixed(0)}% confidence)`,
+                    'warning'
+                );
+                // Offer manual input as fallback
+                this.offerManualCardInput(result.transcript);
+            }
+        } catch (error) {
+            this.logger.error('Failed to handle low-confidence result:', error);
+            this.showToast('Error processing voice input. Please try typing manually.', 'error');
+            this.offerManualCardInput(result.transcript);
+        }
+    }
+
+    /**
+     * Show card selection dialog with low-confidence warning banner
+     * @param {Array} cards - Matched cards to choose from
+     * @param {Object} voiceResult - Original voice result with confidence info
+     */
+    showLowConfidenceSelectionDialog(cards, voiceResult) {
+        if (typeof this.uiManager?.showLowConfidenceCardSelectionModal === 'function') {
+            this.uiManager.showLowConfidenceCardSelectionModal(cards, voiceResult, (selectedCard) => {
+                if (selectedCard) {
+                    this.safeAddCard({ ...selectedCard, quantity: 1 });
+
+                    // Record for learning (user corrected a low-confidence match)
+                    if (this.voiceEngine) {
+                        this.voiceEngine.recordUserInteraction(voiceResult.transcript, selectedCard.name, true, {
+                            lowConfidence: true,
+                            originalConfidence: voiceResult.confidence,
+                            currentSet: this.sessionManager.currentSet
+                        });
+                    }
+                }
+            });
+        } else {
+            // Fallback to regular selection dialog if modal not available
+            this.showCardSelectionDialog(cards, voiceResult.transcript);
         }
     }
 

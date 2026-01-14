@@ -29,6 +29,8 @@ export default class CardGrid {
   constructor(options = {}) {
     this.cards = options.cards || [];
     this.onRemoveCard = options.onRemoveCard || null;
+    this.onToggleFavorite = options.onToggleFavorite || null;
+    this.onCardClick = options.onCardClick || null;
     // Treat only explicit true as consolidated; avoids truthy strings accidentally enabling grid view
     this.consolidated = options.consolidated === true;
     this.cardSize = options.cardSize || 120;
@@ -181,7 +183,28 @@ export default class CardGrid {
       imgWrapper.appendChild(priceOverlay);
     }
 
+    // Favorite Heart Icon
+    const heartIcon = document.createElement('button');
+    heartIcon.className = `card-favorite-btn ${card.isFavorite ? 'is-favorite' : ''}`;
+    heartIcon.setAttribute('aria-label', card.isFavorite ? 'Remove from favorites' : 'Add to favorites');
+    heartIcon.innerHTML = card.isFavorite
+      ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
+    heartIcon.dataset.cardIndex = index;
+    heartIcon.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handleToggleFavorite(index);
+    });
+    imgWrapper.appendChild(heartIcon);
+
     cardEl.appendChild(imgWrapper);
+
+    // Card click handler (for detail modal)
+    cardEl.addEventListener('click', (e) => {
+      // Don't trigger if clicking on buttons
+      if (e.target.closest('button')) return;
+      this.handleCardClick(index);
+    });
 
     // Info
     const infoDiv = document.createElement('div');
@@ -347,6 +370,28 @@ export default class CardGrid {
     if (this.onRemoveCard && typeof this.onRemoveCard === 'function') {
       const card = this.cards[index];
       this.onRemoveCard(card, index);
+    }
+  }
+
+  /**
+   * Handle favorite toggle click
+   * @param {number} index - Card index
+   */
+  handleToggleFavorite(index) {
+    if (this.onToggleFavorite && typeof this.onToggleFavorite === 'function') {
+      const card = this.cards[index];
+      this.onToggleFavorite(card, index);
+    }
+  }
+
+  /**
+   * Handle card click (for detail modal)
+   * @param {number} index - Card index
+   */
+  handleCardClick(index) {
+    if (this.onCardClick && typeof this.onCardClick === 'function') {
+      const card = this.cards[index];
+      this.onCardClick(card, index);
     }
   }
 

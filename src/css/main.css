@@ -6057,6 +6057,42 @@ body {
   gap: var(--spacing-sm, 0.75rem);
 }
 
+/* ================================================
+   ASYMMETRIC QUICK STATS LAYOUT
+   Featured stat (hero) + secondary stats (dense list)
+   Reduces uniform grid pattern for more visual interest
+   ================================================ */
+
+.quick-stats-asymmetric {
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-stat-featured {
+  /* Featured stat - large, prominent, single card */
+}
+
+.quick-stats-secondary {
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm, 0.5rem) 0;
+}
+
+.quick-stat-row .text-label-subtle {
+  color: var(--text-tertiary, #78716c);
+}
+
+.quick-stat-row .text-value-sm {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Mobile: Stats above collection */
 @media (max-width: 767px) {
   .dashboard-top-row {

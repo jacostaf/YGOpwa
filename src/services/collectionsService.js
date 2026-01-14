@@ -650,6 +650,73 @@ function extractPlanKey(message) {
   return fallback ? fallback[1] : null;
 }
 
+/**
+ * @typedef {Object} PriceHistoryEntry
+ * @property {string} date - The price date (YYYY-MM-DD)
+ * @property {number} price - The price value
+ * @property {number|null} marketPrice - TCGPlayer market price
+ * @property {number|null} lowPrice - TCGPlayer low price
+ * @property {string} source - Price source (e.g., 'tcgplayer')
+ */
+
+/**
+ * Fetch price history for a card variant.
+ * Returns historical price data from the card_prices table.
+ *
+ * @param {Object} options
+ * @param {string} options.cardVariantId - The card variant UUID
+ * @param {number} [options.limit=30] - Maximum number of history entries to return
+ * @param {import('@supabase/supabase-js').SupabaseClient} [options.client]
+ * @returns {Promise<{ history: PriceHistoryEntry[], error: CollectionsServiceError|null }>}
+ */
+export async function fetchCardPriceHistory(options = {}) {
+  const { cardVariantId, limit = 30, client: overrideClient } = options;
+  const client = resolveClient(overrideClient);
+
+  if (!cardVariantId) {
+    return {
+      history: [],
+      error: new CollectionsServiceError('cardVariantId is required', 'INVALID_ARGUMENT'),
+    };
+  }
+
+  try {
+    const { data, error } = await client
+      .from('card_prices')
+      .select('price_date, price, price_market, price_low, source')
+      .eq('card_variant_id', cardVariantId)
+      .order('price_date', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw handleSupabaseError(error, 'Failed to fetch price history', 'FETCH_PRICE_HISTORY_FAILED');
+    }
+
+    const history = (data || []).map(row => ({
+      date: row.price_date,
+      price: normalizeNumber(row.price),
+      marketPrice: normalizeNullableNumber(row.price_market),
+      lowPrice: normalizeNullableNumber(row.price_low),
+      source: normalizeString(row.source) || 'unknown',
+    }));
+
+    // Reverse to chronological order for charts
+    return {
+      history: history.reverse(),
+      error: null,
+    };
+  } catch (error) {
+    if (error instanceof CollectionsServiceError) {
+      return { history: [], error };
+    }
+
+    return {
+      history: [],
+      error: new CollectionsServiceError('Failed to fetch price history', 'FETCH_PRICE_HISTORY_ERROR', error),
+    };
+  }
+}
+
 export default {
   fetchCollectionItems,
   fetchCollectionItemById,
@@ -658,4 +725,5 @@ export default {
   upsertCollectionItem,
   removeCollectionQuantity,
   batchUpsertCollectionItems,
+  fetchCardPriceHistory,
 };

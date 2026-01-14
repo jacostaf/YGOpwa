@@ -225,9 +225,9 @@ describe('VoiceEngine', () => {
       expect(capturedResult.isFinal).toBe(true);
     });
 
-    it('should filter results below confidence threshold', () => {
+    it('should flag results below confidence threshold with isLowConfidence', () => {
       voiceEngine.config.confidenceThreshold = 0.8;
-      
+
       const mockEvent = {
         results: [{
           0: { transcript: 'unclear speech', confidence: 0.3 },
@@ -244,7 +244,13 @@ describe('VoiceEngine', () => {
 
       voiceEngine.handleRecognitionResult(mockEvent, 'webspeech');
 
-      expect(capturedResult).toBeUndefined();
+      // Low-confidence results should still be emitted but flagged
+      // This allows downstream handlers (app.js) to show manual selection UI
+      expect(capturedResult).toBeDefined();
+      expect(capturedResult.transcript).toBe('unclear speech');
+      expect(capturedResult.confidence).toBe(0.3);
+      expect(capturedResult.isLowConfidence).toBe(true);
+      expect(capturedResult.confidenceThreshold).toBe(0.8);
     });
 
     it('should ignore interim results when configured', () => {
