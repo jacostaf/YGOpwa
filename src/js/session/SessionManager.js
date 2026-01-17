@@ -239,21 +239,27 @@ export class SessionManager {
                 // Try to load full set list from storage first (for performance)
                 const cachedSets = await this.storage?.get('cardSets');
                 const cacheTimestamp = await this.storage?.get('cardSetsTimestamp');
+                const cacheVersion = await this.storage?.get('cardSetsCacheVersion');
                 const now = Date.now();
                 const cacheMaxAge = 24 * 60 * 60 * 1000; // 24 hours
+                const CURRENT_CACHE_VERSION = 2; // Bump this when backend data structure changes
 
-                // Use cache if it exists and is recent
+                // Use cache if it exists, is recent, and matches current version
                 if (cachedSets &&
                     Array.isArray(cachedSets) &&
                     cachedSets.length > 100 && // Should have many sets
                     cacheTimestamp &&
+                    cacheVersion === CURRENT_CACHE_VERSION &&
                     (now - cacheTimestamp) < cacheMaxAge) {
 
-                    this.logger.info(`Using cached card sets (${cachedSets.length} sets, cached ${Math.round((now - cacheTimestamp) / (60 * 1000))} minutes ago)`);
+                    this.logger.info(`Using cached card sets (${cachedSets.length} sets, cached ${Math.round((now - cacheTimestamp) / (60 * 1000))} minutes ago, v${cacheVersion})`);
                     sets = cachedSets;
                 } else {
                     // Fetch fresh data from API
-                    this.logger.info('Fetching fresh card sets from API...');
+                    const reason = !cachedSets ? 'no cache' :
+                                   cacheVersion !== CURRENT_CACHE_VERSION ? `version mismatch (${cacheVersion} vs ${CURRENT_CACHE_VERSION})` :
+                                   'cache expired';
+                    this.logger.info(`Fetching fresh card sets from API (${reason})...`);
                     sets = await this.fetchCardSets();
 
                     // Cache the fresh data
@@ -261,7 +267,8 @@ export class SessionManager {
                         try {
                             await this.storage.set('cardSets', sets);
                             await this.storage.set('cardSetsTimestamp', now);
-                            this.logger.info(`Cached ${sets.length} card sets for future use`);
+                            await this.storage.set('cardSetsCacheVersion', CURRENT_CACHE_VERSION);
+                            this.logger.info(`Cached ${sets.length} card sets for future use (v${CURRENT_CACHE_VERSION})`);
                         } catch (cacheError) {
                             this.logger.warn('Failed to cache card sets:', cacheError);
                         }

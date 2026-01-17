@@ -727,6 +727,33 @@
   flex-shrink: 0;
 }
 
+.ebay-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background-color: var(--surface-secondary, #1a1a1a);
+  border: 1px solid var(--border-default, #404040);
+  border-radius: var(--radius-md, 8px);
+  color: var(--text-primary, #fff);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all var(--transition-fast, 0.15s ease);
+  width: fit-content;
+  margin-top: 8px;
+}
+
+.ebay-link:hover {
+  background-color: var(--surface-hover, #262626);
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.ebay-link svg {
+  flex-shrink: 0;
+}
+
 /* ========================================
    Price History Section
    ======================================== */

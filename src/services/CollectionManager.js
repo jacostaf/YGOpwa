@@ -151,7 +151,7 @@ export class CollectionManager {
       .from('collection_cards')
       .insert({
         collection_id: collectionId,
-        card_id: card.id || card.cardId, // Handle different ID formats
+        card_id: card.productId || card.card?.productId || card.tcgcsv_product_id || card.product_id || card.id, // TCGcsv product ID
         name: card.name || card.cardName,
         set_code: card.setCode || card.set_code,
         rarity: card.rarity,
@@ -168,6 +168,293 @@ export class CollectionManager {
     console.log('[CollectionManager] Card added successfully:', data);
     this.invalidateCache();
     return data;
+  }
+
+  /**
+   * Create a pack event with price snapshots for cards being added
+   * This captures the price at the moment cards are packed for ROI tracking
+   * @param {string} userId - User's ID
+   * @param {string|number} setId - Set ID from card_sets table (can be null)
+   * @param {Array} cards - Array of card objects being added
+   * @param {string} setCode - Set code for the pack (e.g., 'SUDA')
+   * @returns {Promise<Object>} The created pack event
+   */
+  async createPackEventWithPrices(userId, setId, cards, setCode = null) {
+    console.log('[CollectionManager] createPackEventWithPrices CALLED with:', {
+      userId,
+      setId,
+      setCode,
+      cardsCount: cards?.length,
+      supabaseAvailable: !!supabase
+    });
+
+    if (!userId || !supabase || !cards || cards.length === 0) {
+      console.warn('[CollectionManager] createPackEventWithPrices: Missing required params', {
+        hasUserId: !!userId,
+        hasSupabase: !!supabase,
+        hasCards: !!cards,
+        cardsLength: cards?.length || 0
+      });
+      return null;
+    }
+
+    try {
+      console.log(`[CollectionManager] Creating pack event for ${cards.length} cards`);
+
+      // Resolve set_id: look up from card_sets to ensure it's valid
+      let resolvedSetId = null;
+      const lookupValue = setCode || setId;
+
+      // Also get set name from cards if available
+      const setName = cards[0]?.setName || cards[0]?.set_name || cards[0]?.setInfo?.setName;
+
+      if (lookupValue || setName) {
+        let setData = null;
+
+        // First try by set_code (e.g., 'RA04', 'SUDA')
+        if (lookupValue && !/^\d+$/.test(String(lookupValue))) {
+          const { data, error } = await supabase
+            .from('card_sets')
+            .select('id, set_code, name')
+            .eq('set_code', lookupValue)
+            .limit(1);
+          if (!error && data && data.length > 0) {
+            setData = data[0];
+            console.log(`[CollectionManager] Found set by code "${lookupValue}": ${setData.name} (id: ${setData.id})`);
+          }
+        }
+
+        // If not found and we have a set name, try by exact name match first
+        if (!setData && setName) {
+          const { data, error } = await supabase
+            .from('card_sets')
+            .select('id, set_code, name')
+            .eq('name', setName)
+            .limit(1);
+          if (!error && data && data.length > 0) {
+            setData = data[0];
+            console.log(`[CollectionManager] Found set by exact name "${setName}": ${setData.set_code} (id: ${setData.id})`);
+          }
+        }
+
+        // If still not found, try fuzzy name match
+        if (!setData && setName) {
+          const { data, error } = await supabase
+            .from('card_sets')
+            .select('id, set_code, name')
+            .ilike('name', `%${setName}%`)
+            .limit(1);
+          if (!error && data && data.length > 0) {
+            setData = data[0];
+            console.log(`[CollectionManager] Found set by fuzzy name "${setName}": ${setData.set_code} (id: ${setData.id})`);
+          } else {
+            console.log(`[CollectionManager] Set not found in database: "${setName}" (code: ${lookupValue})`);
+          }
+        }
+
+        // Last resort: try by numeric id
+        if (!setData && lookupValue && /^\d+$/.test(String(lookupValue))) {
+          const { data, error } = await supabase
+            .from('card_sets')
+            .select('id, set_code, name')
+            .eq('id', parseInt(lookupValue, 10))
+            .limit(1);
+          if (!error && data && data.length > 0) {
+            setData = data[0];
+          }
+        }
+
+        resolvedSetId = setData?.id || null;
+        console.log(`[CollectionManager] Resolved set to id: ${resolvedSetId} (lookup: "${lookupValue}", name: "${setName}")`);
+      }
+
+      // Calculate total pack value from card prices
+      const packTotalValue = cards.reduce((total, c) => {
+        const price = parseFloat(c.price) || parseFloat(c.tcg_price) || parseFloat(c.tcg_market_price) || 0;
+        return total + price;
+      }, 0);
+
+      console.log(`[CollectionManager] Pack total value: $${packTotalValue.toFixed(2)}`);
+
+      // 1. Create pack_events entry
+      const { data: packEvent, error: packError } = await supabase
+        .from('pack_events')
+        .insert({
+          user_id: userId,
+          set_id: resolvedSetId,
+          pack_source: 'pack',
+          pack_price_at_purchase: packTotalValue > 0 ? packTotalValue : null,
+          packed_at: new Date().toISOString(),
+          cards_opened: cards.map(c => ({
+            name: c.name || c.cardName,
+            rarity: c.rarity,
+            set_code: c.setCode || c.set_code || setCode,
+            card_id: c.productId || c.card?.productId || c.tcgcsv_product_id || c.product_id,
+            price: parseFloat(c.price) || parseFloat(c.tcg_price) || parseFloat(c.tcg_market_price) || 0
+          })),
+          metadata: { set_code: setCode }
+        })
+        .select()
+        .single();
+
+      if (packError) {
+        console.error('[CollectionManager] Error creating pack_event:', packError);
+        throw packError;
+      }
+
+      console.log('[CollectionManager] Created pack_event:', packEvent.id);
+
+      // 2. Get card variant IDs and current prices for all cards
+      // Use productId (TCGcsv product ID), not the session-generated id
+      // Also check tcgcsv_product_id which may come from API response
+      const productIds = cards
+        .map(c => parseInt(c.productId || c.card?.productId || c.tcgcsv_product_id || c.product_id, 10))
+        .filter(id => !isNaN(id));
+
+      console.log('[CollectionManager] Product IDs for variant lookup:', productIds);
+
+      let variants = [];
+      const variantMap = new Map(); // Maps either productId or card name to variant data
+
+      // Strategy 1: Lookup by product ID if we have them
+      if (productIds.length > 0) {
+        const { data: productVariants, error: variantError } = await supabase
+          .from('card_variants')
+          .select('id, tcgcsv_product_id, card_slug, card_name')
+          .in('tcgcsv_product_id', productIds);
+
+        if (!variantError && productVariants && productVariants.length > 0) {
+          variants = productVariants;
+          productVariants.forEach(v => {
+            variantMap.set(String(v.tcgcsv_product_id), {
+              id: v.id,
+              slug: v.card_slug,
+              name: v.card_name
+            });
+          });
+          console.log(`[CollectionManager] Found ${productVariants.length} variants by product ID`);
+        }
+      }
+
+      // Strategy 2: If no product IDs or no matches, try lookup by card name + set code
+      if (variantMap.size === 0) {
+        console.log('[CollectionManager] No product IDs available, trying card name + set code lookup');
+        console.log('[CollectionManager] First card sample:', cards[0] ? {
+          name: cards[0].name || cards[0].cardName,
+          setCode: cards[0].setCode || cards[0].set_code || setCode,
+          rarity: cards[0].rarity || cards[0].displayRarity,
+          setInfo: cards[0].setInfo
+        } : 'empty');
+
+        // Build list of card names for lookup
+        const cardNames = cards
+          .map(c => c.name || c.cardName)
+          .filter(Boolean)
+          .map(name => name.toLowerCase().trim());
+
+        if (cardNames.length > 0) {
+          // Get the set code pattern to filter variants
+          const setCodePattern = setCode ? setCode.toLowerCase() : null;
+
+          const { data: nameVariants, error: nameError } = await supabase
+            .from('card_variants')
+            .select('id, tcgcsv_product_id, card_slug, card_name')
+            .ilike('card_slug', setCodePattern ? `%-${setCodePattern}-%` : '%');
+
+          if (!nameError && nameVariants && nameVariants.length > 0) {
+            // Match variants to cards by card name
+            nameVariants.forEach(v => {
+              const variantName = (v.card_name || '').toLowerCase().trim();
+              // Store by card name for matching
+              if (!variantMap.has(variantName)) {
+                variantMap.set(variantName, {
+                  id: v.id,
+                  slug: v.card_slug,
+                  productId: v.tcgcsv_product_id,
+                  name: v.card_name
+                });
+              }
+            });
+            variants = nameVariants;
+            console.log(`[CollectionManager] Found ${nameVariants.length} variants by set code pattern`);
+          }
+        }
+      }
+
+      if (variants.length === 0) {
+        console.warn('[CollectionManager] No card variants found for this pack');
+        return packEvent;
+      }
+
+      // Fetch latest prices for these variants
+      const variantIds = variants.map(v => v.id);
+      const { data: prices, error: priceError } = await supabase
+        .from('card_prices')
+        .select('card_variant_id, price, price_low, price_market')
+        .in('card_variant_id', variantIds)
+        .order('price_date', { ascending: false });
+
+      // Create map of variant_id -> latest price
+      const priceMap = new Map();
+      if (!priceError && prices) {
+        prices.forEach(p => {
+          if (!priceMap.has(p.card_variant_id)) {
+            priceMap.set(p.card_variant_id, parseFloat(p.price_low) || parseFloat(p.price) || 0);
+          }
+        });
+      }
+
+      // 3. Create pack_price_snapshots for each card
+      const snapshots = [];
+      const now = new Date().toISOString();
+
+      for (const card of cards) {
+        // Try to find variant data by product ID first
+        const productId = String(card.productId || card.card?.productId || card.tcgcsv_product_id || card.product_id || '');
+        let variantData = variantMap.get(productId);
+
+        // If not found by product ID, try by card name (lowercase)
+        if (!variantData) {
+          const cardName = (card.name || card.cardName || '').toLowerCase().trim();
+          variantData = variantMap.get(cardName);
+        }
+
+        if (variantData) {
+          const priceAtPack = priceMap.get(variantData.id) || 0;
+
+          snapshots.push({
+            pack_event_id: packEvent.id,
+            card_variant_id: variantData.id,
+            card_slug: variantData.slug,
+            price_at_pack: priceAtPack,
+            currency: 'USD',
+            packed_at: now
+          });
+        } else {
+          console.log(`[CollectionManager] Could not find variant for card: ${card.name || card.cardName}`);
+        }
+      }
+
+      if (snapshots.length > 0) {
+        const { error: snapshotError } = await supabase
+          .from('pack_price_snapshots')
+          .insert(snapshots);
+
+        if (snapshotError) {
+          console.error('[CollectionManager] Error creating price snapshots:', snapshotError);
+        } else {
+          console.log(`[CollectionManager] Created ${snapshots.length} price snapshots for ${cards.length} cards`);
+        }
+      } else {
+        console.warn(`[CollectionManager] No price snapshots created - no matching variants found for ${cards.length} cards`);
+      }
+
+      console.log(`[CollectionManager] Pack event complete: ${packEvent.id}, snapshots: ${snapshots.length}/${cards.length}`);
+      return packEvent;
+    } catch (error) {
+      console.error('[CollectionManager] Error in createPackEventWithPrices:', error);
+      return null;
+    }
   }
 
   /**

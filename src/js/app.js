@@ -23,6 +23,7 @@ import { Logger } from './utils/Logger.js';
 import { Storage } from './utils/Storage.js';
 import { AchievementManager } from '../services/AchievementManager.js';
 import { CollectionManager } from '../services/CollectionManager.js';
+import { authService } from '../services/authService.js';
 
 /**
  * Main Application Class
@@ -1388,6 +1389,35 @@ class YGORipperApp {
                         for (const card of cardsToAdd) {
                             await this.collectionManager.addCardToCollection(collectionId, card);
                             addedCount++;
+                        }
+
+                        // Create pack event with price snapshots for ROI tracking
+                        try {
+                            const user = authService.getUser();
+                            console.log('[App] Creating pack event - user:', user?.id, 'cards:', cardsToAdd.length);
+
+                            if (user && cardsToAdd.length > 0) {
+                                // Note: session.setId often contains the set CODE (e.g., 'SUDA'), not the numeric ID
+                                const setCode = session.setCode || session.set?.code || session.setId;
+                                const setId = session.set?.id || session.setId;
+
+                                console.log('[App] Calling createPackEventWithPrices with:', {
+                                    userId: user.id,
+                                    setId,
+                                    setCode,
+                                    cardsCount: cardsToAdd.length
+                                });
+
+                                const packResult = await this.collectionManager.createPackEventWithPrices(
+                                    user.id,
+                                    setId,
+                                    cardsToAdd,
+                                    setCode
+                                );
+                                console.log('[App] Pack event result:', packResult);
+                            }
+                        } catch (packErr) {
+                            console.error('[App] Failed to create pack event:', packErr);
                         }
 
                         this.uiManager.showToast(`Successfully added ${addedCount} cards to "${collectionName}"`, 'success');

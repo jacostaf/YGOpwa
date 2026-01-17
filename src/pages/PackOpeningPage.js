@@ -15,6 +15,7 @@
 import CardGrid from '../components/CardGrid.js';
 import IconLoader from '../utils/IconLoader.js';
 import CollectionManager from '../services/CollectionManager.js';
+import { authService } from '../services/authService.js';
 
 export default class PackOpeningPage {
   constructor(router) {
@@ -434,8 +435,8 @@ export default class PackOpeningPage {
       this.filteredSets = [...this.cardSets];
     } else {
       this.filteredSets = this.cardSets.filter(set => {
-        const name = (set.name || '').toLowerCase();
-        const code = (set.code || set.id || '').toLowerCase();
+        const name = (set.name || set.set_name || '').toLowerCase();
+        const code = (set.code || set.set_code || set.id || '').toLowerCase();
         return name.includes(term) || code.includes(term);
       });
     }
@@ -1587,6 +1588,44 @@ export default class PackOpeningPage {
         for (const card of this.currentSession.cards) {
           await this.collectionManager.addCardToCollection(selectedCollectionId, card);
           addedCount++;
+        }
+
+        // Create pack event with price snapshots for ROI tracking
+        try {
+          const user = authService.getUser();
+          console.log('[PackOpeningPage] Creating pack event - user:', user?.id, 'cards:', this.currentSession?.cards?.length);
+
+          if (user && this.currentSession?.cards?.length > 0) {
+            const setCode = this.currentSession.setCode || this.currentSession.set?.code;
+            const setId = this.currentSession.setId || this.currentSession.set?.id;
+
+            console.log('[PackOpeningPage] Calling createPackEventWithPrices with:', {
+              userId: user.id,
+              setId,
+              setCode,
+              cardsCount: this.currentSession.cards.length,
+              firstCard: this.currentSession.cards[0] ? {
+                name: this.currentSession.cards[0].name,
+                keys: Object.keys(this.currentSession.cards[0])
+              } : null
+            });
+
+            const result = await this.collectionManager.createPackEventWithPrices(
+              user.id,
+              setId,
+              this.currentSession.cards,
+              setCode
+            );
+            console.log('[PackOpeningPage] Pack event result:', result);
+          } else {
+            console.warn('[PackOpeningPage] Skipping pack event - no user or no cards', {
+              hasUser: !!user,
+              cardsLength: this.currentSession?.cards?.length
+            });
+          }
+        } catch (packErr) {
+          // Don't fail the whole operation if pack event creation fails
+          console.error('[PackOpeningPage] Failed to create pack event:', packErr);
         }
 
         closeModal();
