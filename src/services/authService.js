@@ -457,6 +457,7 @@ export const authService = new AuthService();
 export default authService;
 
 // Export bound methods for convenience
+export const signIn = authService.signIn.bind(authService);
 export const signUp = authService.signUp.bind(authService);
 export const signInWithMagicLink = authService.signInWithMagicLink.bind(authService);
 export const signInWithOAuth = authService.signInWithOAuth.bind(authService);
