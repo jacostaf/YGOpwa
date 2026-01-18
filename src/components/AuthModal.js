@@ -111,6 +111,7 @@ export default class AuthModal {
    * @param {Event} event
    */
   async handleSubmit(event) {
+    console.log('[AuthModal] handleSubmit called', event);
     event.preventDefault();
 
     if (!this.isAuthEnabled()) {
@@ -385,6 +386,7 @@ export default class AuthModal {
    * @returns {HTMLElement}
    */
   render() {
+    console.log('[AuthModal] render() called, mode:', this.mode, 'authEnabled:', this.isAuthEnabled());
     // Remove existing element if present
     if (this.element) {
       this.element.remove();
@@ -435,8 +437,27 @@ export default class AuthModal {
 
     // Form submission
     const form = this.element.querySelector('[data-auth-form]');
+    console.log('[AuthModal] Form element found:', form);
     if (form) {
-      form.addEventListener('submit', (e) => this.handleSubmit(e));
+      form.addEventListener('submit', (e) => {
+        console.log('[AuthModal] Form submit event fired');
+        this.handleSubmit(e);
+      });
+      console.log('[AuthModal] Submit event listener attached to form');
+
+      // Also add click listener to submit button for debugging
+      const submitBtn = form.querySelector('[data-auth-submit]');
+      console.log('[AuthModal] Submit button found:', submitBtn);
+      if (submitBtn) {
+        submitBtn.addEventListener('click', (e) => {
+          console.log('[AuthModal] Submit button clicked', e);
+          console.log('[AuthModal] Form validity:', form.checkValidity());
+          if (!form.checkValidity()) {
+            console.log('[AuthModal] Form is invalid, reporting validity');
+            form.reportValidity();
+          }
+        });
+      }
     }
 
     // Toggle mode
