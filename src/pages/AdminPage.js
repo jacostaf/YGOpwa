@@ -11,6 +11,21 @@ export default class AdminPage {
     this.syncProgressInterval = null;
   }
 
+  /**
+   * Get authorization headers for admin API calls
+   */
+  getAuthHeaders() {
+    const token = authService.session?.access_token;
+    if (!token) {
+      this.logger.warn('No access token available for admin request');
+      return {};
+    }
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+  }
+
   async mount(container) {
     this.container = container;
     this.checkAdminStatus();
@@ -185,7 +200,9 @@ export default class AdminPage {
     const cacheInfoEl = this.container.querySelector('#db-cache-info');
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/admin/catalog-status');
+      const response = await fetch('http://localhost:8080/api/v1/admin/catalog-status', {
+        headers: this.getAuthHeaders()
+      });
       const data = await response.json();
 
       if (data.success && data.data) {
@@ -221,7 +238,10 @@ export default class AdminPage {
       const apiUrl = 'http://localhost:8080/api/v1/admin/refresh-catalog';
       this.log(`POST ${apiUrl}`);
 
-      const response = await fetch(apiUrl, { method: 'POST' });
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders()
+      });
       const data = await response.json();
 
       if (data.success) {
@@ -273,7 +293,10 @@ export default class AdminPage {
 
       this.log(`POST ${apiUrl}`);
 
-      const response = await fetch(apiUrl, { method: 'POST' });
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders()
+      });
       const data = await response.json();
 
       if (data.success) {
@@ -307,7 +330,9 @@ export default class AdminPage {
 
     const pollProgress = async () => {
       try {
-        const response = await fetch('http://localhost:8080/api/v1/admin/sync-progress');
+        const response = await fetch('http://localhost:8080/api/v1/admin/sync-progress', {
+          headers: this.getAuthHeaders()
+        });
         const data = await response.json();
 
         if (data.success && data.data) {
@@ -410,7 +435,10 @@ export default class AdminPage {
 
       this.log(`POST ${apiUrl}`);
 
-      const response = await fetch(apiUrl, { method: 'POST' });
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders()
+      });
       const data = await response.json();
 
       if (data.success) {
@@ -452,7 +480,10 @@ export default class AdminPage {
 
       this.log(`POST ${apiUrl}`);
 
-      const response = await fetch(apiUrl, { method: 'POST' });
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders()
+      });
       const data = await response.json();
 
       if (data.success && data.data) {
