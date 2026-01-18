@@ -115,6 +115,7 @@ export default class AuthModal {
     event.preventDefault();
 
     if (!this.isAuthEnabled()) {
+      console.log('[AuthModal] Auth not enabled, returning');
       this.setError('Authentication is not enabled. Please configure Supabase.');
       return;
     }
@@ -122,35 +123,46 @@ export default class AuthModal {
     const formData = new FormData(event.target);
     const email = formData.get('email');
     const password = formData.get('password');
+    console.log('[AuthModal] Form data - email:', email, 'password length:', password?.length);
 
     if (!email || !password) {
+      console.log('[AuthModal] Missing email or password');
       this.setError('Email and password are required');
       return;
     }
 
+    console.log('[AuthModal] Setting loading state');
     this.setLoading(true);
     this.setError(null);
 
     try {
       let result;
       if (this.mode === 'signin') {
+        console.log('[AuthModal] Calling authService.signIn...');
         result = await authService.signIn(email, password);
+        console.log('[AuthModal] signIn result:', result);
       } else {
         const displayName = formData.get('displayName');
+        console.log('[AuthModal] Calling authService.signUp...');
         result = await authService.signUp(email, password, {
           display_name: displayName || email.split('@')[0],
         });
+        console.log('[AuthModal] signUp result:', result);
       }
 
       if (result.error) {
+        console.log('[AuthModal] Auth error:', result.error);
         this.setError(result.error.message);
       } else {
+        console.log('[AuthModal] Auth success, calling onSuccess and close');
         this.onSuccess(result);
         this.close();
       }
     } catch (error) {
+      console.error('[AuthModal] Exception caught:', error);
       this.setError(error.message || 'Authentication failed');
     } finally {
+      console.log('[AuthModal] Setting loading false');
       this.setLoading(false);
     }
   }
