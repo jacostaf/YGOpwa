@@ -1,5 +1,6 @@
 import { Logger } from '../js/utils/Logger.js';
 import { authService } from '../services/authService.js';
+import { config } from '../js/utils/config.js';
 
 
 export default class AdminPage {
@@ -200,7 +201,7 @@ export default class AdminPage {
     const cacheInfoEl = this.container.querySelector('#db-cache-info');
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/admin/catalog-status', {
+      const response = await fetch(`${config.API_URL}/admin/catalog-status`, {
         headers: this.getAuthHeaders()
       });
       const data = await response.json();
@@ -235,7 +236,7 @@ export default class AdminPage {
     status.className = 'mt-4 text-sm text-secondary';
 
     try {
-      const apiUrl = 'http://localhost:8080/api/v1/admin/refresh-catalog';
+      const apiUrl = `${config.API_URL}/admin/refresh-catalog`;
       this.log(`POST ${apiUrl}`);
 
       const response = await fetch(apiUrl, {
@@ -289,7 +290,7 @@ export default class AdminPage {
     status.innerText = 'Requesting sync...';
 
     try {
-      const apiUrl = 'http://localhost:8080/api/v1/admin/sync-prices';
+      const apiUrl = `${config.API_URL}/admin/sync-prices`;
 
       this.log(`POST ${apiUrl}`);
 
@@ -330,7 +331,7 @@ export default class AdminPage {
 
     const pollProgress = async () => {
       try {
-        const response = await fetch('http://localhost:8080/api/v1/admin/sync-progress', {
+        const response = await fetch(`${config.API_URL}/admin/sync-progress`, {
           headers: this.getAuthHeaders()
         });
         const data = await response.json();
@@ -431,7 +432,7 @@ export default class AdminPage {
     status.innerText = 'Requesting refresh...';
 
     try {
-      const apiUrl = 'http://localhost:8080/api/v1/admin/refresh-leaderboards';
+      const apiUrl = `${config.API_URL}/admin/refresh-leaderboards`;
 
       this.log(`POST ${apiUrl}`);
 
@@ -476,7 +477,7 @@ export default class AdminPage {
     status.innerText = 'Forcing materialized view refresh...';
 
     try {
-      const apiUrl = 'http://localhost:8080/api/v1/admin/force-refresh-leaderboards';
+      const apiUrl = `${config.API_URL}/admin/force-refresh-leaderboards`;
 
       this.log(`POST ${apiUrl}`);
 

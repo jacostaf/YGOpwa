@@ -1,6 +1,6 @@
 import { getEnv } from '../../lib/config.js';
 
-const DEFAULT_CARD_API = 'http://127.0.0.1:8080/api/v1';
+const DEFAULT_CARD_API = 'https://https://ygopwa.onrender.com//api/v1';
 const resolvedApiUrl = (getEnv('VITE_CARD_API_BASE_URL', DEFAULT_CARD_API) || DEFAULT_CARD_API).replace(/\/$/, '');
 
 // Configuration for YGO Ripper UI
