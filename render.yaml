@@ -1,0 +1,53 @@
+services:
+  - type: static
+    name: ygopwa
+    staticPublishPath: .
+    buildCommand: |
+      echo "Building runtime-env.js..."
+      echo "VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}"
+      echo "VITE_CARD_API_BASE_URL: ${VITE_CARD_API_BASE_URL:-https://ygopyguy.onrender.com/api/v1}"
+      cat > runtime-env.js << RUNTIME_EOF
+      const runtimeEnv = {
+        VITE_SUPABASE_URL: '${VITE_SUPABASE_URL:-}',
+        VITE_SUPABASE_ANON_KEY: '${VITE_SUPABASE_ANON_KEY:-}',
+        VITE_FEATURE_AUTH_ENABLED: true,
+        VITE_FEATURE_COLLECTIONS_ENABLED: true,
+        VITE_FEATURE_LEADERBOARDS_ENABLED: false,
+        VITE_FEATURE_PACK_TRACKING_ENABLED: false,
+        VITE_CARD_API_BASE_URL: '${VITE_CARD_API_BASE_URL:-https://ygopyguy.onrender.com/api/v1}',
+        VITE_ENVIRONMENT: 'production',
+      };
+      export default runtimeEnv;
+      RUNTIME_EOF
+      echo "Generated runtime-env.js:"
+      cat runtime-env.js
+      ls -la runtime-env.js
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+      - path: /sw.js
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+      - path: /manifest.json
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+      - path: /runtime-env.js
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+      - path: /src/js/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /src/css/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
