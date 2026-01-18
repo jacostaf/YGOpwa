@@ -202,17 +202,20 @@ export class CollectionManager {
       console.log(`[CollectionManager] Creating pack event for ${cards.length} cards`);
 
       // Resolve set_id: look up from card_sets to ensure it's valid
+      // OPTIMIZATION: Use a single query with OR conditions instead of multiple sequential queries
       let resolvedSetId = null;
       const lookupValue = setCode || setId;
-
-      // Also get set name from cards if available
       const setName = cards[0]?.setName || cards[0]?.set_name || cards[0]?.setInfo?.setName;
 
       if (lookupValue || setName) {
         let setData = null;
 
-        // First try by set_code (e.g., 'RA04', 'SUDA')
-        if (lookupValue && !/^\d+$/.test(String(lookupValue))) {
+        // Build a single optimized query that checks multiple conditions
+        // Priority: set_code > exact name > numeric id
+        const isNumericId = lookupValue && /^\d+$/.test(String(lookupValue));
+
+        if (!isNumericId && lookupValue) {
+          // Try set_code first (most common case)
           const { data, error } = await supabase
             .from('card_sets')
             .select('id, set_code, name')
@@ -224,36 +227,28 @@ export class CollectionManager {
           }
         }
 
-        // If not found and we have a set name, try by exact name match first
+        // If not found by code, try name-based lookups in a single query with OR
         if (!setData && setName) {
+          // Use a single query with or() for both exact and fuzzy match
+          // Exact match is checked first in result processing
           const { data, error } = await supabase
             .from('card_sets')
             .select('id, set_code, name')
-            .eq('name', setName)
-            .limit(1);
-          if (!error && data && data.length > 0) {
-            setData = data[0];
-            console.log(`[CollectionManager] Found set by exact name "${setName}": ${setData.set_code} (id: ${setData.id})`);
-          }
-        }
+            .or(`name.eq.${setName},name.ilike.%${setName}%`)
+            .limit(5);
 
-        // If still not found, try fuzzy name match
-        if (!setData && setName) {
-          const { data, error } = await supabase
-            .from('card_sets')
-            .select('id, set_code, name')
-            .ilike('name', `%${setName}%`)
-            .limit(1);
           if (!error && data && data.length > 0) {
-            setData = data[0];
-            console.log(`[CollectionManager] Found set by fuzzy name "${setName}": ${setData.set_code} (id: ${setData.id})`);
+            // Prefer exact match
+            setData = data.find(s => s.name === setName) || data[0];
+            const matchType = setData.name === setName ? 'exact' : 'fuzzy';
+            console.log(`[CollectionManager] Found set by ${matchType} name "${setName}": ${setData.set_code} (id: ${setData.id})`);
           } else {
             console.log(`[CollectionManager] Set not found in database: "${setName}" (code: ${lookupValue})`);
           }
         }
 
         // Last resort: try by numeric id
-        if (!setData && lookupValue && /^\d+$/.test(String(lookupValue))) {
+        if (!setData && isNumericId) {
           const { data, error } = await supabase
             .from('card_sets')
             .select('id, set_code, name')
@@ -522,10 +517,11 @@ export class CollectionManager {
       if (productIds.length > 0) {
         try {
           // Bulk fetch card_variants to get variant IDs and ygoprodeck_id for images
+          const parsedProductIds = productIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
           const { data: variants, error: variantError } = await supabase
             .from('card_variants')
             .select('id, tcgcsv_product_id, ygoprodeck_id')
-            .in('tcgcsv_product_id', productIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id)));
+            .in('tcgcsv_product_id', parsedProductIds);
 
           if (!variantError && variants) {
             variants.forEach(v => {
@@ -540,14 +536,26 @@ export class CollectionManager {
             const variantIds = variants.map(v => v.id);
 
             if (variantIds.length > 0) {
-              // Fetch latest prices from card_prices table
-              // Using distinct on card_variant_id, ordered by price_date desc
-              const { data: prices, error: priceError } = await supabase
-                .from('card_prices')
-                .select('card_variant_id, price, price_market, price_low, price_mid, price_high, price_date')
-                .in('card_variant_id', variantIds)
-                .order('price_date', { ascending: false });
+              // OPTIMIZATION: Fetch prices and pack prices in parallel instead of sequentially
+              // This reduces total wait time from (priceQuery + packQuery) to max(priceQuery, packQuery)
+              const [pricesResult, packPricesResult] = await Promise.all([
+                // Fetch latest prices from card_prices table
+                supabase
+                  .from('card_prices')
+                  .select('card_variant_id, price, price_market, price_low, price_mid, price_high, price_date')
+                  .in('card_variant_id', variantIds)
+                  .order('price_date', { ascending: false }),
 
+                // Fetch pack prices from pack_price_snapshots
+                supabase
+                  .from('pack_price_snapshots')
+                  .select('card_variant_id, price_at_pack, packed_at')
+                  .in('card_variant_id', variantIds)
+                  .order('packed_at', { ascending: false })
+              ]);
+
+              // Process prices
+              const { data: prices, error: priceError } = pricesResult;
               if (!priceError && prices) {
                 // Group by variant_id and take the latest (first) for each
                 prices.forEach(p => {
@@ -565,13 +573,8 @@ export class CollectionManager {
                 console.log(`[CollectionManager] Fetched prices for ${priceLookup.size} variants`);
               }
 
-              // Fetch pack prices from pack_price_snapshots
-              const { data: packPrices, error: packError } = await supabase
-                .from('pack_price_snapshots')
-                .select('card_variant_id, price_at_pack, packed_at')
-                .in('card_variant_id', variantIds)
-                .order('packed_at', { ascending: false });
-
+              // Process pack prices
+              const { data: packPrices, error: packError } = packPricesResult;
               if (packError) {
                 console.warn('[CollectionManager] Error fetching pack prices:', packError);
               } else if (packPrices && packPrices.length > 0) {
@@ -1019,9 +1022,22 @@ export class CollectionManager {
 
       const rarityDistribution = {};
 
+      // OPTIMIZATION: Track unique cards and sets in a single pass instead of
+      // calling getUniqueCards() which iterates the entire array again
+      const uniqueCardKeys = new Set();
+      const uniqueSets = new Set();
+
       allCards.forEach(card => {
         const quantity = Number(card.quantity) && Number(card.quantity) > 0 ? Number(card.quantity) : 1;
         const unitValue = parseFloat(card.tcgLow) || 0;
+
+        // Track unique cards by key (single pass)
+        const cardKey = `${card.cardName || 'Unknown'}-${card.cardNumber || 'N/A'}`;
+        uniqueCardKeys.add(cardKey);
+
+        // Track unique sets (single pass)
+        const setId = card.setName || card.setCode;
+        if (setId) uniqueSets.add(setId);
 
         // Safely handle rarity
         let rarityKey = 'common';
@@ -1055,8 +1071,9 @@ export class CollectionManager {
         }
       });
 
-      // Unique cards
-      const uniqueCards = this.getUniqueCards().length;
+      // Use Set sizes directly (O(1) after single pass)
+      const uniqueCards = uniqueCardKeys.size;
+      const sets = uniqueSets.size;
 
       // Average value
       const avgValue = totalCards > 0 ? totalValue / totalCards : 0;
@@ -1070,10 +1087,6 @@ export class CollectionManager {
           commonestRarity = rarity;
         }
       });
-
-      // Unique sets
-      const uniqueSets = new Set(allCards.map(card => card.setName || card.setCode).filter(Boolean));
-      const sets = uniqueSets.size;
 
       return {
         totalCards,
