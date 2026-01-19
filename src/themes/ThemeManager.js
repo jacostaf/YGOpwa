@@ -15,7 +15,7 @@ const STORAGE_KEY = 'voxrip-theme';
 export class ThemeManager {
   constructor() {
     this.currentTheme = DEFAULT_THEME;
-    this.listeners = [];
+    this.listeners = new Set(); // Changed from array to Set for O(1) operations
     this.initialized = false;
   }
 
@@ -192,22 +192,49 @@ export class ThemeManager {
   /**
    * Add a listener for theme changes
    * @param {function} callback - Callback function(newTheme, oldTheme)
+   * @returns {function} Unsubscribe function - call this to remove the listener
    */
   addListener(callback) {
     if (typeof callback === 'function') {
-      this.listeners.push(callback);
+      this.listeners.add(callback);
+      // Return unsubscribe function for easy cleanup
+      return () => this.removeListener(callback);
     }
+    return () => {}; // No-op if callback wasn't valid
+  }
+
+  /**
+   * Alias for addListener - matches DOM API naming convention
+   * @param {function} callback - Callback function(newTheme, oldTheme)
+   * @returns {function} Unsubscribe function
+   */
+  addEventListener(callback) {
+    return this.addListener(callback);
   }
 
   /**
    * Remove a listener
    * @param {function} callback - Callback function to remove
+   * @returns {boolean} Whether the listener was found and removed
    */
   removeListener(callback) {
-    const index = this.listeners.indexOf(callback);
-    if (index > -1) {
-      this.listeners.splice(index, 1);
-    }
+    return this.listeners.delete(callback);
+  }
+
+  /**
+   * Alias for removeListener - matches DOM API naming convention
+   * @param {function} callback - Callback function to remove
+   * @returns {boolean} Whether removed
+   */
+  removeEventListener(callback) {
+    return this.removeListener(callback);
+  }
+
+  /**
+   * Remove all listeners - useful for cleanup
+   */
+  removeAllListeners() {
+    this.listeners.clear();
   }
 
   /**
@@ -217,13 +244,14 @@ export class ThemeManager {
    * @private
    */
   notifyListeners(newTheme, oldTheme) {
-    this.listeners.forEach(callback => {
+    // Iterate over a copy to allow listeners to remove themselves safely
+    for (const callback of [...this.listeners]) {
       try {
         callback(newTheme, oldTheme);
       } catch (error) {
         console.error('Error in theme change listener:', error);
       }
-    });
+    }
   }
 
   /**

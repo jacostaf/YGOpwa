@@ -30,6 +30,10 @@ export default class AuthModal {
     this.element = null;
     this.loading = false;
     this.error = null;
+    // Email verification state
+    this.emailSent = false;
+    this.pendingEmail = null;
+    this.resendCooldown = false;
   }
 
   /**
@@ -96,6 +100,10 @@ export default class AuthModal {
 
     this.mode = mode;
     this.error = null;
+    // Reset email verification state
+    this.emailSent = false;
+    this.pendingEmail = null;
+    this.resendCooldown = false;
     this.render();
   }
 
@@ -154,6 +162,15 @@ export default class AuthModal {
         console.log('[AuthModal] Auth error:', result.error);
         this.setError(result.error.message);
       } else {
+        // For signup, check if email confirmation is pending (no session = needs verification)
+        if (this.mode === 'signup' && result.user && !result.session) {
+          console.log('[AuthModal] Signup success, showing email verification view');
+          this.emailSent = true;
+          this.pendingEmail = email;
+          this.render();
+          return;
+        }
+        // Sign in success or auto-confirmed signup
         console.log('[AuthModal] Auth success, calling onSuccess and close');
         this.onSuccess(result);
         this.close();
@@ -215,10 +232,104 @@ export default class AuthModal {
   }
 
   /**
+   * Handle resend verification email
+   */
+  async handleResendEmail() {
+    if (!this.pendingEmail || this.resendCooldown) return;
+
+    this.setLoading(true);
+
+    try {
+      const { error } = await authService.resendConfirmationEmail(this.pendingEmail);
+
+      if (error) {
+        this.setError(error.message);
+      } else {
+        // Set cooldown for 60 seconds
+        this.resendCooldown = true;
+        this.render();
+        setTimeout(() => {
+          this.resendCooldown = false;
+          if (this.element) this.render();
+        }, 60000);
+      }
+    } catch (error) {
+      this.setError(error.message || 'Failed to resend email');
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  /**
+   * Go back to signup form (for "wrong email" flow)
+   */
+  handleBackToSignup() {
+    this.emailSent = false;
+    this.pendingEmail = null;
+    this.resendCooldown = false;
+    this.error = null;
+    this.render();
+  }
+
+  /**
+   * Render the email verification success HTML
+   * @returns {string} HTML string
+   */
+  getEmailSentHtml() {
+    return `
+      <div class="auth-modal-overlay" data-auth-overlay>
+        <div class="auth-modal-card card auth-modal-card--success" role="dialog" aria-modal="true" aria-labelledby="auth-success-title">
+          <button type="button" class="auth-modal-close" data-auth-close aria-label="Close">
+            <i data-lucide="x"></i>
+          </button>
+
+          <div class="auth-success-brand">
+            <span class="auth-success-brand-text">VoxRip</span>
+            <span class="auth-success-brand-dot"></span>
+          </div>
+
+          <div class="auth-success-status">
+            <span class="auth-success-status-label">Email sent</span>
+          </div>
+
+          <div class="auth-success-email-container">
+            <p class="auth-success-title" id="auth-success-title">Check your inbox</p>
+            <div class="auth-success-email">
+              <span class="auth-success-email-text">${this.pendingEmail}</span>
+            </div>
+          </div>
+
+          <p class="auth-success-instructions">
+            Click the verification link to activate your account. The link expires in 24 hours.
+          </p>
+
+          <div class="auth-success-actions">
+            <button type="button" class="btn btn-primary auth-success-primary" data-auth-close>
+              Got it
+            </button>
+            <button type="button" class="auth-success-resend" data-auth-resend ${this.resendCooldown ? 'disabled' : ''}>
+              Didn't receive it? <span>${this.resendCooldown ? 'Email sent' : 'Resend'}</span>
+            </button>
+          </div>
+
+          <p class="auth-success-footer">
+            Wrong email? <button type="button" class="auth-modal-switch" data-auth-back>Try again</button>
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
    * Render the auth modal HTML
    * @returns {string} HTML string
    */
   getHtml() {
+    // Show email sent success state
+    if (this.emailSent) {
+      return this.getEmailSentHtml();
+    }
+
     if (!this.isAuthEnabled()) {
       return `
         <div class="auth-modal-overlay" data-auth-overlay>
@@ -434,11 +545,11 @@ export default class AuthModal {
   attachEventListeners() {
     if (!this.element) return;
 
-    // Close button
-    const closeBtn = this.element.querySelector('[data-auth-close]');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => this.close());
-    }
+    // Close buttons (X button and "Got it" button)
+    const closeBtns = this.element.querySelectorAll('[data-auth-close]');
+    closeBtns.forEach(btn => {
+      btn.addEventListener('click', () => this.close());
+    });
 
     // Close on overlay click
     if (this.element.hasAttribute('data-auth-overlay')) {
@@ -507,6 +618,18 @@ export default class AuthModal {
         }
       });
     });
+
+    // Resend verification email
+    const resendBtn = this.element.querySelector('[data-auth-resend]');
+    if (resendBtn) {
+      resendBtn.addEventListener('click', () => this.handleResendEmail());
+    }
+
+    // Back to signup form (wrong email flow)
+    const backBtn = this.element.querySelector('[data-auth-back]');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => this.handleBackToSignup());
+    }
 
     // ESC key to close
     const handleEsc = (e) => {

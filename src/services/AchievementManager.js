@@ -18,6 +18,9 @@ export class AchievementManager {
     this.storageKey = 'voxrip_achievements';
     this.statsKey = 'voxrip_achievement_stats';
 
+    // Store cleanup functions for external subscriptions
+    this._cleanupFunctions = [];
+
     this.init();
   }
 
@@ -256,15 +259,36 @@ export class AchievementManager {
    * Set up event listeners for automatic tracking
    */
   setupTracking() {
-    // Track theme usage
-    if (this.app.themeManager) {
-      this.app.themeManager.addEventListener((theme) => {
+    // Track theme usage - store unsubscribe function for cleanup
+    if (this.app && this.app.themeManager) {
+      // Create a bound method reference so it can be removed later
+      this._handleThemeChange = (theme) => {
         this.trackThemeUsage(theme);
-      });
+      };
+      const unsubscribe = this.app.themeManager.addEventListener(this._handleThemeChange);
+      this._cleanupFunctions.push(unsubscribe);
     }
 
     // Track daily usage (check once per session)
     this.trackDailyUsage();
+  }
+
+  /**
+   * Clean up all external subscriptions - call this when destroying AchievementManager
+   */
+  destroy() {
+    // Clean up all external subscriptions
+    this._cleanupFunctions.forEach(cleanup => {
+      try {
+        cleanup();
+      } catch (err) {
+        console.warn('[AchievementManager] Error during cleanup:', err);
+      }
+    });
+    this._cleanupFunctions = [];
+
+    // Clear internal listeners
+    this.listeners.clear();
   }
 
   /**
@@ -546,13 +570,14 @@ export class AchievementManager {
    * @param {Object} achievement - Achievement data
    */
   notifyListeners(event, achievement) {
-    this.listeners.forEach(callback => {
+    // Iterate over a copy to allow listeners to safely remove themselves during iteration
+    for (const callback of [...this.listeners]) {
       try {
         callback(event, achievement);
       } catch (error) {
         console.error('Achievement listener error:', error);
       }
-    });
+    }
   }
 
   /**

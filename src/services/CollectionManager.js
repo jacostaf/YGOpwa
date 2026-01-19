@@ -9,6 +9,7 @@ import { authService } from './authService.js';
 import { PriceChecker } from '../js/price/PriceChecker.js';
 import { Storage } from '../js/utils/Storage.js';
 import { getRarityRankSync, getRarityWeightSync, getAllRarities } from './rarityService.js';
+import { cacheCoordinator } from './CacheCoordinator.js';
 
 export class CollectionManager {
   constructor(sessionManager) {
@@ -16,8 +17,9 @@ export class CollectionManager {
     // Initialize PriceChecker with storage for persistent caching
     this.storage = new Storage();
     this.priceChecker = new PriceChecker(this.storage);
-    // Start initialization asynchronously
-    this.priceChecker.initialize().catch(err => console.warn('[CollectionManager] PriceChecker init failed:', err));
+
+    // Store initialization promise - allows awaiting before price operations
+    this._priceCheckerReady = this._initializePriceChecker();
 
     this.cache = {
       allCards: null,
@@ -32,6 +34,75 @@ export class CollectionManager {
     this.listeners = {
       priceUpdate: []
     };
+
+    // Register with CacheCoordinator for cross-service cache invalidation
+    this._registerWithCacheCoordinator();
+  }
+
+  /**
+   * Register this service's cache with the CacheCoordinator
+   * @private
+   */
+  _registerWithCacheCoordinator() {
+    cacheCoordinator.registerCache('collection', {
+      invalidate: () => this.invalidateCache(),
+      clear: () => {
+        this.invalidateCache();
+        this.cache.allCards = null;
+        this.cache.stats = null;
+        this.cache.lastUpdate = null;
+      }
+    });
+  }
+
+  /**
+   * Initialize PriceChecker with proper error handling
+   * @returns {Promise<boolean>} Whether initialization succeeded
+   * @private
+   */
+  async _initializePriceChecker() {
+    try {
+      await this.priceChecker.initialize();
+      console.log('[CollectionManager] PriceChecker initialized successfully');
+      return true;
+    } catch (err) {
+      console.warn('[CollectionManager] PriceChecker init failed:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Ensure PriceChecker is ready before performing price operations
+   * @param {Object} options
+   * @param {number} options.timeout - Max wait time in ms (default: 10000)
+   * @returns {Promise<boolean>} Whether PriceChecker is ready
+   */
+  async ensurePriceCheckerReady({ timeout = 10000 } = {}) {
+    // Race between init promise and timeout with proper cleanup
+    let timeoutId;
+    const timeoutPromise = new Promise((resolve) => {
+      timeoutId = setTimeout(() => resolve(false), timeout);
+    });
+
+    try {
+      const ready = await Promise.race([this._priceCheckerReady, timeoutPromise]);
+      return ready;
+    } catch (err) {
+      console.warn('[CollectionManager] ensurePriceCheckerReady error:', err.message);
+      return false;
+    } finally {
+      // Clean up timeout to prevent memory leaks
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * Force re-initialization of PriceChecker (useful after network recovery)
+   * @returns {Promise<boolean>} Whether re-initialization succeeded
+   */
+  async reinitializePriceChecker() {
+    this._priceCheckerReady = this._initializePriceChecker();
+    return this.ensurePriceCheckerReady();
   }
 
   subscribe(event, callback) {
@@ -679,6 +750,13 @@ export class CollectionManager {
    * @param {Array} cards 
    */
   async fetchPricesForCards(cards) {
+    // Ensure PriceChecker is initialized before attempting price lookups
+    const ready = await this.ensurePriceCheckerReady();
+    if (!ready) {
+      console.warn('[CollectionManager] PriceChecker not ready, skipping price fetch');
+      return;
+    }
+
     console.log(`[CollectionManager] Background fetching prices for ${cards.length} unique cards`);
 
     // Process in chunks to avoid overwhelming the API

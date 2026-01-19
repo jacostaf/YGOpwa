@@ -10,6 +10,8 @@
  * - Provides formatted data for dashboard display
  */
 
+import { cacheCoordinator } from './CacheCoordinator.js';
+
 export default class DashboardService {
   constructor(options = {}) {
     this.sessionManager = options.sessionManager || null;
@@ -30,6 +32,31 @@ export default class DashboardService {
 
     // Initialize
     this.loadActivityHistory();
+
+    // Register with CacheCoordinator for cross-service cache invalidation
+    this._registerWithCacheCoordinator();
+  }
+
+  /**
+   * Register this service's cache with the CacheCoordinator
+   * @private
+   */
+  _registerWithCacheCoordinator() {
+    cacheCoordinator.registerCache('dashboard', {
+      invalidate: () => this.clearCache(),
+      clear: () => this.clearCache()
+    });
+  }
+
+  /**
+   * Clear the stats cache
+   */
+  clearCache() {
+    this.statsCache = {
+      mainStats: null,
+      quickStats: null,
+      lastUpdate: null
+    };
   }
 
   /**
@@ -573,17 +600,6 @@ export default class DashboardService {
     const elapsed = now - this.statsCache.lastUpdate;
 
     return elapsed < this.cacheTimeout;
-  }
-
-  /**
-   * Clear stats cache to force refresh
-   */
-  clearCache() {
-    this.statsCache = {
-      mainStats: null,
-      quickStats: null,
-      lastUpdate: null
-    };
   }
 
   /**

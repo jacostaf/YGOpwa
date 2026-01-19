@@ -141,13 +141,28 @@ class AuthService {
 
   /**
    * Sign in with magic link
-   * @param {string} email 
+   * @param {string} email
    */
   async signInWithMagicLink(email) {
     if (!supabase) throw new Error('Supabase not configured');
 
     const { error } = await supabase.auth.signInWithOtp({
       email
+    });
+
+    return { error };
+  }
+
+  /**
+   * Resend confirmation email for signup
+   * @param {string} email
+   */
+  async resendConfirmationEmail(email) {
+    if (!supabase) throw new Error('Supabase not configured');
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
     });
 
     return { error };
@@ -467,3 +482,4 @@ export const getUser = authService.getUser.bind(authService);
 export const getCurrentUser = authService.getCurrentUser.bind(authService);
 export const onAuthStateChange = authService.onAuthStateChange.bind(authService);
 export const updateProfile = authService.updateProfile.bind(authService);
+export const resendConfirmationEmail = authService.resendConfirmationEmail.bind(authService);
