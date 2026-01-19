@@ -61,7 +61,7 @@
 }
 
 .btn-secondary {
-  background-color: var(--bg-secondary, #262626);
+  background-color: transparent;
   color: var(--text-primary, #e5e5e5);
   border: 1px solid var(--border-primary, #404040);
   padding: 8px 16px;
@@ -73,7 +73,8 @@
 }
 
 .btn-secondary:hover {
-  background-color: var(--bg-hover, #404040);
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--accent-primary);
 }
 
 /* Stats Ribbon */

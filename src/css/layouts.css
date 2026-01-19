@@ -400,6 +400,11 @@ body.sidebar-collapsed .main-content {
   gap: var(--spacing-xs, 0.25rem);
 }
 
+/* Status bar when sidebar is collapsed */
+body.sidebar-collapsed .status-bar {
+  left: 64px;
+}
+
 /* Mobile status bar */
 @media (max-width: 767px) {
   .status-bar {
