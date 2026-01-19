@@ -36,6 +36,7 @@ export default class CardGrid {
     this.cardSize = options.cardSize || 120;
     this.showRemoveButton = options.showRemoveButton !== false;
     this.viewMode = options.viewMode || 'grid'; // 'grid' or 'list'
+    this.sessionManager = options.sessionManager || null; // For image fallback
     this.element = null;
   }
 
@@ -147,7 +148,7 @@ export default class CardGrid {
 
     const quantity = card.quantity > 1 ? `x${card.quantity}` : '';
     const rarityClass = this.getRarityClass(cardRarity);
-    const cardImage = this.getSafeImage(card.image_url || card.image_small || card.imageUrl || card.image_url_small);
+    const cardImage = this.getSafeImage(card); // Pass full card object for fallback support
 
     const cardEl = document.createElement('div');
     cardEl.className = `card-item card-stagger-${(index % 8) + 1}`;
@@ -333,18 +334,38 @@ export default class CardGrid {
 
   /**
    * Ensure we never request a missing local asset; fallback to placeholder for bad URLs
+   * @param {Object|string} cardOrUrl - Card object or image URL string
+   * @returns {string} Safe image URL or default placeholder
    */
-  getSafeImage(imageUrl) {
-    if (!imageUrl) {
-      return this.getDefaultCardImage();
+  getSafeImage(cardOrUrl) {
+    // Handle legacy string parameter
+    let imageUrl;
+    let card = null;
+
+    if (typeof cardOrUrl === 'string') {
+      imageUrl = cardOrUrl;
+    } else if (cardOrUrl && typeof cardOrUrl === 'object') {
+      card = cardOrUrl;
+      imageUrl = card.image_url || card.image_small || card.imageUrl || card.image_url_small;
     }
 
-    const lower = String(imageUrl).toLowerCase();
-    if (lower.includes('card-back.jpg') || lower.startsWith('/src/assets')) {
-      return this.getDefaultCardImage();
+    // Check if direct URL is valid
+    if (imageUrl) {
+      const lower = String(imageUrl).toLowerCase();
+      if (!lower.includes('card-back.jpg') && !lower.startsWith('/src/assets')) {
+        return imageUrl;
+      }
     }
 
-    return imageUrl;
+    // Try fallback via SessionManager if card object is available
+    if (this.sessionManager && card) {
+      const fallback = this.sessionManager.getCardImageWithFallback(card);
+      if (fallback) {
+        return fallback;
+      }
+    }
+
+    return this.getDefaultCardImage();
   }
 
   /**

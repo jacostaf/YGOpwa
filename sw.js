@@ -9,7 +9,7 @@
  * - Performance optimizations
  */
 
-const CACHE_NAME = 'voxrip-v2.0.5';
+const CACHE_NAME = 'voxrip-v2.1.0';
 const RUNTIME_CACHE = 'voxrip-runtime';
 
 // Resources to cache for offline use

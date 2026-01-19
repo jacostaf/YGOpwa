@@ -349,9 +349,9 @@ export default class AdminPage {
       }
     };
 
-    // Poll immediately, then every 2 seconds
+    // Poll immediately, then every 4 seconds (rate limit is 20/min, so 4s = 15/min max)
     pollProgress();
-    this.syncProgressInterval = setInterval(pollProgress, 2000);
+    this.syncProgressInterval = setInterval(pollProgress, 4000);
   }
 
   stopProgressPolling() {

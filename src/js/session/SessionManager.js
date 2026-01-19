@@ -43,6 +43,10 @@ export class SessionManager {
         this.setCards = new Map(); // Cache for set-specific card data
         this.searchTerm = '';
 
+        // Multi-set session support
+        this.currentSetIds = [];    // Array of set IDs for multi-set sessions
+        this.mergedCardPool = [];   // Combined cards from all selected sets
+
         // Pricing data loading tracking
         this.loadingPriceData = new Set(); // Track cards with pending price requests
 
@@ -774,6 +778,117 @@ export class SessionManager {
     }
 
     /**
+     * Start a new multi-set session
+     * @param {Array<string>} setIds - Array of set IDs to include in the session
+     */
+    async startMultiSetSession(setIds) {
+        try {
+            this.logger.info(`Starting multi-set session with ${setIds.length} sets:`, setIds);
+
+            // Validate all sets exist
+            const sets = setIds.map(id => {
+                const set = this.cardSets.find(s => s.id === id || s.code === id);
+                if (!set) {
+                    throw new Error(`Card set not found: ${id}`);
+                }
+                return set;
+            });
+
+            // Stop any existing session
+            if (this.sessionActive) {
+                await this.stopSession();
+            }
+
+            // Create display name from set codes
+            const setDisplayName = sets.map(s => s.code || s.set_code || s.name).join(' + ');
+
+            // Create new multi-set session
+            this.currentSession = {
+                id: this.generateSessionId(),
+                isMultiSet: true,
+                setIds: setIds,
+                setNames: sets.map(s => s.name || s.set_name),
+                setName: setDisplayName,  // For display/compatibility
+                cards: [],
+                startTime: new Date().toISOString(),
+                endTime: null,
+                statistics: {
+                    totalCards: 0,
+                    tcgLowTotal: 0,
+                    tcgMarketTotal: 0,
+                    rarityBreakdown: {},
+                    setBreakdown: {},  // Track cards per set
+                    sessionDuration: 0
+                }
+            };
+
+            this.currentSetIds = setIds;
+            this.currentSet = sets[0];  // Primary set for compatibility
+            this.sessionActive = true;
+
+            // Load cards for all sets and merge
+            await this.loadMultiSetCards(setIds);
+
+            // Start auto-save if enabled
+            if (this.config.autoSave) {
+                this.startAutoSave();
+            }
+
+            // Emit event
+            this.emitSessionStart(this.currentSession);
+
+            this.logger.info(`Multi-set session started with ${this.mergedCardPool.length} total cards from ${setIds.length} sets`);
+            return this.currentSession;
+
+        } catch (error) {
+            this.logger.error('Failed to start multi-set session:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Load and merge cards from multiple sets
+     * @param {Array<string>} setIds - Array of set IDs to load
+     */
+    async loadMultiSetCards(setIds) {
+        this.logger.info(`Loading cards for ${setIds.length} sets...`);
+
+        const allCards = [];
+
+        // Load cards for each set in parallel
+        const loadPromises = setIds.map(async (setId) => {
+            // Use existing loadSetCards which caches results
+            const cards = await this.loadSetCards(setId);
+
+            // Get set info for tagging
+            const set = this.cardSets.find(s => s.id === setId || s.code === setId);
+            const setCode = set?.code || set?.set_code || setId;
+            const setName = set?.name || set?.set_name || setId;
+
+            // Tag each card with its source set for later reference
+            return cards.map(card => ({
+                ...card,
+                sourceSetId: setId,
+                sourceSetCode: setCode,
+                sourceSetName: setName
+            }));
+        });
+
+        const cardArrays = await Promise.all(loadPromises);
+
+        // Merge all card arrays
+        for (const cards of cardArrays) {
+            allCards.push(...cards);
+        }
+
+        this.mergedCardPool = allCards;
+
+        this.logger.info(`Merged card pool: ${this.mergedCardPool.length} cards from ${setIds.length} sets`);
+
+        return this.mergedCardPool;
+    }
+
+    /**
      * Stop the current session
      */
     async stopSession() {
@@ -815,6 +930,9 @@ export class SessionManager {
             this.currentSession = null;
             this.currentSet = null;
 
+            // Reset multi-set state
+            this.currentSetIds = [];
+            this.mergedCardPool = [];
 
             this.logger.info('Session stopped successfully');
             return stoppedSession;
@@ -1595,15 +1713,25 @@ export class SessionManager {
 
     /**
      * Find cards in current set with enhanced rarity variant handling
+     * Supports both single-set and multi-set sessions
      */
     async findCardsInCurrentSet(transcript, extractedRarity = null) {
-        if (!this.currentSet) {
+        // Determine which card pool to search
+        let setCards;
+
+        if (this.currentSession?.isMultiSet && this.mergedCardPool.length > 0) {
+            // Multi-set mode: use merged pool
+            setCards = this.mergedCardPool;
+            this.logger.debug(`[CARD SEARCH] Using merged card pool (${setCards.length} cards from ${this.currentSetIds.length} sets)`);
+        } else if (this.currentSet) {
+            // Single-set mode: use cached set cards
+            setCards = this.setCards.get(this.currentSet.id) || [];
+        } else {
             return [];
         }
 
         this.logger.debug(`[CARD SEARCH] Processing transcript: "${transcript}", extractedRarity: "${extractedRarity}"`);
 
-        const setCards = this.setCards.get(this.currentSet.id) || [];
         const initialMatches = [];
 
         // Normalize the transcript for better matching
@@ -1690,7 +1818,9 @@ export class SessionManager {
 
                 // In TCGcsv structure, each card already has its rarity and set info directly
                 const rarity = card.rarity || 'Common'; // Default to Common if no rarity
-                const setCode = card.set_code || this.currentSet?.abbreviation || this.currentSet?.code || 'Unknown';
+                // For multi-set mode, use sourceSetCode if available; otherwise fall back to card/currentSet
+                const setCode = card.sourceSetCode || card.set_code || this.currentSet?.abbreviation || this.currentSet?.code || 'Unknown';
+                const setName = card.sourceSetName || this.currentSet?.name || 'Unknown Set';
 
                 // Filter out cards with invalid rarity
                 if (!rarity ||
@@ -1745,8 +1875,12 @@ export class SessionManager {
                         displayRarity: rarity,
                         setInfo: {
                             setCode: setCode,
-                            setName: this.currentSet?.name || 'Unknown Set'
-                        }
+                            setName: setName
+                        },
+                        // Preserve source set info for multi-set sessions
+                        sourceSetId: card.sourceSetId,
+                        sourceSetCode: card.sourceSetCode,
+                        sourceSetName: card.sourceSetName
                     };
 
                     this.logger.debug(`[VARIANT] Variant object displayRarity: "${newVariant.displayRarity}", setInfo:`, newVariant.setInfo);
@@ -1848,20 +1982,9 @@ export class SessionManager {
 
         this.logger.debug(`[VARIANT SEARCH] Looking for all variants of base name: "${baseCardName}"`);
 
-        // Helper function to extract base name from full card name (same logic as TrainingUI)
-        const extractBaseCardName = (fullCardName) => {
-            return fullCardName
-                .replace(/\s*\([^)]*\)$/, '') // Remove parenthetical at end
-                .replace(/\s*-\s*(Secret Rare|Ultra Rare|Super Rare|Rare|Common|Quarter Century Secret Rare|Starlight Rare|Ghost Rare|Collector's Rare|Prismatic Secret Rare|Ultimate Rare|Gold Rare|Platinum Rare|Silver Rare).*$/i, '')
-                .replace(/\s*\[\w+\]$/, '') // Remove bracketed info at end
-                .replace(/\s*#\d+.*$/, '') // Remove card numbers
-                .replace(/\s*\d+st\s+Edition.*$/i, '') // Remove "1st Edition" etc
-                .trim();
-        };
-
         // Find all cards whose base name matches
         for (const card of setCards) {
-            const cardBaseName = extractBaseCardName(card.name);
+            const cardBaseName = this._extractBaseCardName(card.name);
 
             if (cardBaseName.toLowerCase() === baseCardName.toLowerCase()) {
                 // This card matches the base name - add it as a variant
@@ -2129,6 +2252,80 @@ export class SessionManager {
         }
 
         return normalized;
+    }
+
+
+    /**
+     * Extract base card name from full card name (removes rarity, edition, etc.)
+     * @param {string} fullCardName - Full card name with potential rarity/edition suffixes
+     * @returns {string} Base card name
+     */
+    _extractBaseCardName(fullCardName) {
+        if (!fullCardName) return '';
+        return fullCardName
+            .replace(/\s*\([^)]*\)$/, '') // Remove parenthetical at end e.g., "(Ultra Rare)"
+            .replace(/\s*-\s*(Secret Rare|Ultra Rare|Super Rare|Rare|Common|Quarter Century Secret Rare|Starlight Rare|Ghost Rare|Collector's Rare|Prismatic Secret Rare|Ultimate Rare|Gold Rare|Platinum Rare|Silver Rare|ESR|QCR|UR|SR|CR).*$/i, '')
+            .replace(/\s*\[\w+\]$/, '') // Remove bracketed info at end
+            .replace(/\s*#\d+.*$/, '') // Remove card numbers
+            .replace(/\s*\d+st\s+Edition.*$/i, '') // Remove "1st Edition" etc
+            .trim();
+    }
+
+    /**
+     * Find a fallback image from another variant of the same base card
+     * @param {string} cardName - Card name to find fallback for
+     * @param {string|null} setId - Optional set ID to search in
+     * @returns {string|null} Image URL or null if not found
+     */
+    findFallbackImage(cardName, setId = null) {
+        const targetSetId = setId || this.currentSet?.id;
+        let setCards = this.setCards.get(targetSetId) || [];
+
+        // Also check merged pool for multi-set mode
+        if (this.currentSession?.isMultiSet && this.mergedCardPool && this.mergedCardPool.length > 0) {
+            setCards = this.mergedCardPool;
+        }
+
+        if (!setCards.length || !cardName) {
+            return null;
+        }
+
+        const baseCardName = this._extractBaseCardName(cardName).toLowerCase();
+
+        for (const card of setCards) {
+            const cardBaseName = this._extractBaseCardName(card.name).toLowerCase();
+            if (cardBaseName === baseCardName) {
+                const imageUrl = card.image_url || card.imageUrl || card.image_url_small;
+                if (imageUrl && imageUrl.trim()) {
+                    return imageUrl;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get image URL with automatic fallback to other variants of the same card
+     * @param {Object} card - Card object
+     * @returns {string|null} Image URL or null if not found
+     */
+    getCardImageWithFallback(card) {
+        if (!card) return null;
+
+        // Try direct image first
+        const directImage = card.image_url || card.imageUrl || card.image_url_small;
+        if (directImage && directImage.trim()) {
+            return directImage;
+        }
+
+        // Try fallback from other variants
+        const cardName = card.name || card.card_name;
+        if (cardName) {
+            return this.findFallbackImage(cardName);
+        }
+
+        return null;
     }
 
 

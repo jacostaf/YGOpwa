@@ -2260,7 +2260,12 @@ export class UIManager {
             const rarity = card.rarity || card.card_rarity || 'Common';
             const setCode = card.set_code || card.setInfo?.setCode || '';
             const price = card.price || card.tcg_market_price || 0;
-            const imageUrl = card.image_url || card.image_url_small;
+            let imageUrl = card.image_url || card.image_url_small;
+
+            // Fallback to another variant's image if missing
+            if (!imageUrl && this.app?.sessionManager?.getCardImageWithFallback) {
+                imageUrl = this.app.sessionManager.getCardImageWithFallback(card);
+            }
 
             cardBtn.innerHTML = `
                 <div class="selection-card-image">
@@ -2352,7 +2357,12 @@ export class UIManager {
             const rarity = card.rarity || card.card_rarity || 'Common';
             const setCode = card.set_code || card.setInfo?.setCode || '';
             const price = card.price || card.tcg_market_price || 0;
-            const imageUrl = card.image_url || card.image_url_small;
+            let imageUrl = card.image_url || card.image_url_small;
+
+            // Fallback to another variant's image if missing
+            if (!imageUrl && this.app?.sessionManager?.getCardImageWithFallback) {
+                imageUrl = this.app.sessionManager.getCardImageWithFallback(card);
+            }
 
             cardBtn.innerHTML = `
                 <div class="selection-card-image">

@@ -39,8 +39,9 @@ export default class PackOpeningPage {
     this.isVoiceListening = false;
     this.consolidatedView = false;
     this.cardSize = 120;
-    this.selectedSetId = null;
-    this.isStartingSession = false;
+    this.selectedSetId = null;  // Legacy - kept for single-set compatibility
+    this.selectedSetIds = [];   // Multi-set: array of selected set IDs
+    this.selectedSets = [];     // Multi-set: array of selected set objects
 
     // Event listeners
     this.boundHandlers = {
@@ -127,25 +128,31 @@ export default class PackOpeningPage {
 
         <!-- Left: Controls Panel -->
         <aside class="pack-sidebar">
-          <!-- Set Search -->
+          <!-- Set Search (Multi-Select) -->
           <div class="sidebar-section">
-            <div class="set-autocomplete">
-              <div class="set-input">
-                <i data-lucide="Search" class="field-icon"></i>
-                <input
-                  type="text"
-                  id="set-search"
-                  class="set-input-field"
-                  placeholder="Search sets..."
-                  autocomplete="off"
-                  aria-label="Search card sets"
-                >
-                <button type="button" class="set-input-clear" id="clear-set-search" aria-label="Clear">
-                  <i data-lucide="X"></i>
-                </button>
+            <div class="set-multi-select">
+              <!-- Selected Sets as Chips -->
+              <div id="selected-sets-chips" class="set-chips-container"></div>
+
+              <!-- Search Input -->
+              <div class="set-autocomplete">
+                <div class="set-input">
+                  <i data-lucide="Search" class="field-icon"></i>
+                  <input
+                    type="text"
+                    id="set-search"
+                    class="set-input-field"
+                    placeholder="Add sets..."
+                    autocomplete="off"
+                    aria-label="Search and add card sets"
+                  >
+                  <button type="button" class="set-input-clear" id="clear-set-search" aria-label="Clear search">
+                    <i data-lucide="X"></i>
+                  </button>
+                </div>
+                <div id="set-suggestions" class="set-suggestions" role="listbox"></div>
+                <select id="set-select" class="visually-hidden" aria-hidden="true" tabindex="-1"></select>
               </div>
-              <div id="set-suggestions" class="set-suggestions" role="listbox"></div>
-              <select id="set-select" class="visually-hidden" aria-hidden="true" tabindex="-1"></select>
             </div>
             <div class="set-meta-inline">
               <span class="text-xs text-neutral-500"><span id="sets-count">0</span>/<span id="total-sets-count">0</span></span>
@@ -410,6 +417,114 @@ export default class PackOpeningPage {
     this.hideSuggestions();
   }
 
+  // ========================================
+  // Multi-Set Selection Methods
+  // ========================================
+
+  /**
+   * Render selected set chips
+   * @private
+   */
+  renderSelectedSetChips() {
+    const container = this.container?.querySelector('#selected-sets-chips');
+    if (!container) return;
+
+    if (this.selectedSets.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = this.selectedSets.map(set => {
+      const code = set.code || set.set_code || set.id;
+      const name = set.name || set.set_name || code;
+      return `
+        <div class="set-chip" data-set-id="${set.id}">
+          <span class="chip-text" title="${this.escapeHtml(name)}">${this.escapeHtml(code)}</span>
+          <button type="button" class="chip-remove" data-set-id="${set.id}" aria-label="Remove ${this.escapeHtml(name)}">
+            <i data-lucide="X"></i>
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    IconLoader.refreshIcons();
+  }
+
+  /**
+   * Add a set to the multi-selection
+   * @param {string} setId - Set ID to add
+   */
+  addSetToSelection(setId) {
+    // Prevent duplicates
+    if (this.selectedSetIds.includes(setId)) {
+      console.log(`Set ${setId} already selected`);
+      return;
+    }
+
+    const set = this.cardSets.find(s => s.id === setId);
+    if (!set) {
+      console.warn(`Set ${setId} not found in cardSets`);
+      return;
+    }
+
+    // Add to arrays
+    this.selectedSetIds.push(setId);
+    this.selectedSets.push(set);
+
+    // Keep legacy selectedSetId in sync (use first selected)
+    if (this.selectedSetIds.length === 1) {
+      this.selectedSetId = setId;
+    }
+
+    // Update UI
+    this.renderSelectedSetChips();
+    this.updateButtons();
+
+    // Clear search input after selection
+    const searchInput = this.container?.querySelector('#set-search');
+    if (searchInput) {
+      searchInput.value = '';
+      this.filterCardSets('');
+    }
+    this.hideSuggestions();
+
+    console.log(`Added set to selection: ${set.code || set.name}`, { totalSelected: this.selectedSetIds.length });
+  }
+
+  /**
+   * Remove a set from the multi-selection
+   * @param {string} setId - Set ID to remove
+   */
+  removeSetFromSelection(setId) {
+    const index = this.selectedSetIds.indexOf(setId);
+    if (index === -1) return;
+
+    // Remove from arrays
+    this.selectedSetIds.splice(index, 1);
+    this.selectedSets.splice(index, 1);
+
+    // Update legacy selectedSetId
+    this.selectedSetId = this.selectedSetIds[0] || null;
+
+    // Update UI
+    this.renderSelectedSetChips();
+    this.updateButtons();
+
+    console.log(`Removed set from selection: ${setId}`, { remaining: this.selectedSetIds.length });
+  }
+
+  /**
+   * Clear all selected sets
+   */
+  clearAllSelectedSets() {
+    this.selectedSetIds = [];
+    this.selectedSets = [];
+    this.selectedSetId = null;
+
+    this.renderSelectedSetChips();
+    this.updateButtons();
+  }
+
   /**
    * Update set counts
    * @private
@@ -475,10 +590,9 @@ export default class PackOpeningPage {
         return;
       }
 
-      const selectedSetId = this.selectedSetId;
-
-      if (!selectedSetId) {
-        this.showError('Please select a card set');
+      // Multi-set support: check selectedSetIds array
+      if (this.selectedSetIds.length === 0) {
+        this.showError('Please select at least one card set');
         return;
       }
 
@@ -487,37 +601,50 @@ export default class PackOpeningPage {
         return;
       }
 
-      // Find selected set
-      const selectedSet = this.cardSets.find(set => set.id === selectedSetId);
-      if (!selectedSet) {
-        this.showError('Selected set not found');
-        return;
-      }
-
       this.isStartingSession = true;
       this.updateButtons();
 
-      const sessionSetId = selectedSet.id || selectedSet.code || selectedSet.set_code;
-      const sessionSetName = selectedSet.set_name || selectedSet.name || sessionSetId;
-
-      console.info('[PackOpeningPage] Starting session', {
-        setId: sessionSetId,
-        setName: sessionSetName,
-        setCode: selectedSet.code || selectedSet.set_code,
-      });
-
-      if (this.sessionManager?.apiUrl) {
-        const expectedUrl = `${this.sessionManager.apiUrl}/card-sets/${encodeURIComponent(sessionSetName)}/cards`;
-        console.info('[PackOpeningPage] loadSetCards() will request:', expectedUrl);
-      }
-
-      // Start session with a hard timeout to avoid UI lockups
       const START_TIMEOUT_MS = 15000;
-      const startPromise = this.sessionManager.startSession(sessionSetId);
-      await Promise.race([
-        startPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Session start timed out')), START_TIMEOUT_MS))
-      ]);
+
+      // Multi-set vs single-set session start
+      if (this.selectedSetIds.length === 1) {
+        // Single set - use existing flow
+        const selectedSetId = this.selectedSetIds[0];
+        const selectedSet = this.cardSets.find(set => set.id === selectedSetId);
+
+        if (!selectedSet) {
+          this.showError('Selected set not found');
+          this.isStartingSession = false;
+          this.updateButtons();
+          return;
+        }
+
+        const sessionSetId = selectedSet.id || selectedSet.code || selectedSet.set_code;
+        const sessionSetName = selectedSet.set_name || selectedSet.name || sessionSetId;
+
+        console.info('[PackOpeningPage] Starting single-set session', {
+          setId: sessionSetId,
+          setName: sessionSetName,
+        });
+
+        const startPromise = this.sessionManager.startSession(sessionSetId);
+        await Promise.race([
+          startPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Session start timed out')), START_TIMEOUT_MS))
+        ]);
+      } else {
+        // Multi-set - use new flow
+        console.info('[PackOpeningPage] Starting multi-set session', {
+          setIds: this.selectedSetIds,
+          setNames: this.selectedSets.map(s => s.code || s.name),
+        });
+
+        const startPromise = this.sessionManager.startMultiSetSession(this.selectedSetIds);
+        await Promise.race([
+          startPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Multi-set session start timed out')), START_TIMEOUT_MS))
+        ]);
+      }
 
       this.isSessionActive = true;
       this.currentSession = this.sessionManager.currentSession;
@@ -525,12 +652,16 @@ export default class PackOpeningPage {
       // Update UI
       this.updateSessionUI();
       this.updateButtons();
-      this.setSelectedSet(selectedSet.id, { updateInput: true, hideSuggestions: true });
 
-      console.info('[PackOpeningPage] Session ready with live data', {
+      const totalCards = this.currentSession?.isMultiSet
+        ? this.sessionManager?.mergedCardPool?.length
+        : this.sessionManager?.setCards?.get?.(this.selectedSetIds[0])?.length;
+
+      console.info('[PackOpeningPage] Session ready', {
         sessionId: this.currentSession?.id,
-        setId: sessionSetId,
-        cardsLoaded: this.sessionManager?.setCards?.get?.(sessionSetId)?.length,
+        isMultiSet: this.currentSession?.isMultiSet || false,
+        setsCount: this.selectedSetIds.length,
+        cardsLoaded: totalCards,
       });
     } catch (error) {
       console.error('Error starting session:', error);
@@ -838,8 +969,12 @@ export default class PackOpeningPage {
       tcgMarketEl.textContent = `$${total.toFixed(2)}`;
     }
 
-    if (this.isSessionActive && this.currentSession?.setId && this.selectedSetId !== this.currentSession.setId) {
-      this.setSelectedSet(this.currentSession.setId, { updateInput: true, hideSuggestions: true });
+    // Sync selected sets with current session (for legacy single-set compatibility)
+    // Multi-set sessions don't need this sync as the chips already show the selection
+    if (this.isSessionActive && !this.currentSession?.isMultiSet && this.currentSession?.setId) {
+      if (this.selectedSetId !== this.currentSession.setId) {
+        this.setSelectedSet(this.currentSession.setId, { updateInput: true, hideSuggestions: true });
+      }
     }
   }
 
@@ -883,8 +1018,11 @@ export default class PackOpeningPage {
     const stopSessionBtn = this.container?.querySelector('#stop-session-btn');
     const swapSetBtn = this.container?.querySelector('#swap-set-btn');
 
+    // Multi-set support: check selectedSetIds.length
+    const hasSelectedSets = this.selectedSetIds.length > 0;
+
     if (startSessionBtn) {
-      startSessionBtn.disabled = !this.selectedSetId || this.isSessionActive || this.isStartingSession;
+      startSessionBtn.disabled = !hasSelectedSets || this.isSessionActive || this.isStartingSession;
       if (this.isSessionActive) {
         startSessionBtn.classList.add('hidden');
       } else {
@@ -902,10 +1040,18 @@ export default class PackOpeningPage {
 
     if (swapSetBtn) {
       if (this.isSessionActive) {
-        const currentSetId = this.currentSession?.setId || null;
-        const canSwap = Boolean(this.selectedSetId && this.selectedSetId !== currentSetId);
-        swapSetBtn.classList.remove('hidden');
-        swapSetBtn.disabled = !canSwap;
+        // For multi-set, swap is more complex - hide for now if multi-set is active
+        const isMultiSet = this.currentSession?.isMultiSet;
+        if (isMultiSet) {
+          // Could implement "modify sets" functionality later
+          swapSetBtn.classList.add('hidden');
+          swapSetBtn.disabled = true;
+        } else {
+          const currentSetId = this.currentSession?.setId || null;
+          const canSwap = Boolean(this.selectedSetIds.length > 0 && this.selectedSetIds[0] !== currentSetId);
+          swapSetBtn.classList.remove('hidden');
+          swapSetBtn.disabled = !canSwap;
+        }
       } else {
         swapSetBtn.classList.add('hidden');
         swapSetBtn.disabled = true;
@@ -980,7 +1126,8 @@ export default class PackOpeningPage {
       onRemoveCard: (card, index) => this.removeCard(card?.id ?? index),
       consolidated: this.consolidatedView,
       cardSize: this.cardSize,
-      showRemoveButton: true
+      showRemoveButton: true,
+      sessionManager: this.sessionManager // For image fallback support
     });
 
     // Clear container and append new grid
@@ -1050,7 +1197,8 @@ export default class PackOpeningPage {
           const firstSuggestion = this.filteredSets[0];
           if (firstSuggestion) {
             e.preventDefault();
-            this.setSelectedSet(firstSuggestion.id);
+            // Multi-set: add to selection instead of replacing
+            this.addSetToSelection(firstSuggestion.id);
           }
         } else if (e.key === 'Escape') {
           this.hideSuggestions();
@@ -1065,7 +1213,7 @@ export default class PackOpeningPage {
           setSearch.value = '';
           setSearch.focus();
         }
-        this.clearSelectedSet({ updateInput: false });
+        // Only clear search text, not the selected set chips
         this.filterCardSets('');
         this.hideSuggestions();
         clearSetSearch.classList.remove('is-visible');
@@ -1078,9 +1226,23 @@ export default class PackOpeningPage {
         const target = e.target.closest('[data-set-id]');
         if (!target) return;
         e.preventDefault();
-        this.setSelectedSet(target.dataset.setId);
+        // Multi-set: add to selection instead of replacing
+        this.addSetToSelection(target.dataset.setId);
       };
       setSuggestions.addEventListener('mousedown', this.boundHandlers.suggestionClick);
+    }
+
+    // Chip remove buttons
+    const chipsContainer = this.container?.querySelector('#selected-sets-chips');
+    if (chipsContainer) {
+      this.boundHandlers.chipRemove = (e) => {
+        const removeBtn = e.target.closest('.chip-remove');
+        if (!removeBtn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.removeSetFromSelection(removeBtn.dataset.setId);
+      };
+      chipsContainer.addEventListener('click', this.boundHandlers.chipRemove);
     }
 
     this.boundHandlers.documentClick = (e) => {
