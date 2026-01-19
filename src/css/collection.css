@@ -42,9 +42,9 @@
 }
 
 .btn-primary {
-  background-color: var(--accent-primary);
-  color: #0a0a0a;
-  border: none;
+  background-color: var(--surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
   padding: 8px 16px;
   border-radius: var(--radius-md);
   font-weight: 600;
@@ -53,11 +53,12 @@
   gap: 8px;
   font-size: 14px;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .btn-primary:hover {
-  background-color: var(--accent-hover);
+  background-color: var(--surface-hover);
+  border-color: var(--border-focus);
 }
 
 .btn-secondary {
@@ -108,11 +109,15 @@
 
 .stat-trend {
   font-size: 12px;
-  color: #10b981;
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   gap: 4px;
   margin-top: 4px;
+}
+
+.stat-trend.positive {
+  color: var(--feedback-success);
 }
 
 /* Toolbar */
@@ -258,7 +263,7 @@
   justify-content: space-between;
   align-items: center;
   font-size: 11px;
-  color: #737373;
+  color: var(--text-tertiary);
 }
 
 .card-rarity {

@@ -52,11 +52,11 @@ export default class RarityAdminPage {
 
   renderAccessDenied() {
     this.container.innerHTML = `
-      <div class="rarity-admin-error" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0a0b0d; color: #ff6b6b;">
+      <div class="rarity-admin-error" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--surface-primary); color: var(--feedback-error);">
         <i data-lucide="lock" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
         <h2 style="font-family: 'Instrument Serif', Georgia, serif; font-size: 1.5rem; margin-bottom: 0.5rem;">Access Denied</h2>
-        <p style="color: #8b8d94; font-size: 0.9rem; margin-bottom: 1.5rem;">Admin privileges required to access the Rarity Vault.</p>
-        <button class="btn btn-primary" style="padding: 0.75rem 1.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; cursor: pointer;" onclick="window.router?.navigate('dashboard')">
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">Admin privileges required to access the Rarity Vault.</p>
+        <button class="btn btn-primary" onclick="window.router?.navigate('dashboard')">
           Return to Dashboard
         </button>
       </div>

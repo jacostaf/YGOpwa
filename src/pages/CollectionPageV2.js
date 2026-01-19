@@ -464,7 +464,7 @@ export class CollectionPage {
             <div class="stat-item">
                 <div class="stat-label">Total Cards</div>
                 <div class="stat-value" id="statTotalCards">0</div>
-                <div class="stat-trend" id="statCardsTrend" style="color: #737373;">
+                <div class="stat-trend" id="statCardsTrend">
                     +0 this week
                 </div>
             </div>
@@ -577,16 +577,25 @@ export class CollectionPage {
           activeCollection: this.state.filters.collectionId || 'all'
         });
 
-        // Listen for collection selection from sidebar
-        this.container.addEventListener('collection:select', (e) => {
+        // Listen for sidebar events on sidebar.container (not this.container - they're siblings in DOM)
+        this.boundHandlers.handleSidebarSelect = (e) => {
           const { collectionId } = e.detail;
           console.log('[CollectionPage] Sidebar collection selected:', collectionId);
           this.state.filters.collectionId = collectionId === 'all' ? null : collectionId;
           this.applyFiltersAndSort();
           this.updateDisplay();
-        });
+        };
 
-        // Styles are now handled by CSS variables - no inline overrides needed
+        this.boundHandlers.handleSidebarCreate = () => {
+          console.log('[CollectionPage] Sidebar create collection clicked');
+          this.handleCreateCollection();
+        };
+
+        sidebar.container.addEventListener('collection:select', this.boundHandlers.handleSidebarSelect);
+        sidebar.container.addEventListener('collection:create', this.boundHandlers.handleSidebarCreate);
+
+        // Store sidebar reference for cleanup
+        this._sidebarRef = sidebar;
       } else {
         console.warn('CollectionPage: Sidebar not found');
       }
@@ -663,16 +672,23 @@ export class CollectionPage {
       // Unmount header actions
       this.unmountHeaderActions();
 
-      // Reset Sidebar Context
-      const sidebar = this.app?.sidebar || window.sidebar;
-      if (sidebar) {
+      // Clean up sidebar event listeners and reset context
+      const sidebar = this._sidebarRef || this.app?.sidebar || window.sidebar;
+      if (sidebar && sidebar.container) {
+        // Remove event listeners
+        if (this.boundHandlers.handleSidebarSelect) {
+          sidebar.container.removeEventListener('collection:select', this.boundHandlers.handleSidebarSelect);
+        }
+        if (this.boundHandlers.handleSidebarCreate) {
+          sidebar.container.removeEventListener('collection:create', this.boundHandlers.handleSidebarCreate);
+        }
+
         sidebar.setContext('default');
         // Reset forced styles
-        if (sidebar.container) {
-          sidebar.container.style.backgroundColor = '';
-          sidebar.container.style.borderRightColor = '';
-        }
+        sidebar.container.style.backgroundColor = '';
+        sidebar.container.style.borderRightColor = '';
       }
+      this._sidebarRef = null;
 
       // Reset Full Width Layout
       document.body.classList.remove('full-width-layout');
