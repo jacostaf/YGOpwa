@@ -185,18 +185,30 @@ export default class CardGrid {
     cardEl.className = `card-item card-stagger-${(index % 8) + 1}`;
     cardEl.dataset.cardIndex = index;
     // card-size is handled by grid layout CSS, but we can keep it if needed
-    // cardEl.style.setProperty('--card-size', `${this.cardSize}px`); 
+    // cardEl.style.setProperty('--card-size', `${this.cardSize}px`);
 
     // Image Wrapper
     const imgWrapper = document.createElement('div');
     imgWrapper.className = 'card-image-wrapper';
+
+    // Get YGOProDeck card ID for image fallback (Konami passcode, NOT TCGPlayer product ID)
+    const ygoprodeckId = card.ygoprodeck_id || card.card?.id;
 
     const img = document.createElement('img');
     img.src = cardImage;
     img.alt = cardName;
     img.className = 'card-image';
     img.loading = 'lazy';
-    img.onerror = () => { img.onerror = null; img.src = this.getDefaultCardImage(); };
+    img.onerror = () => {
+      // Try YGOProDeck fallback first if we have the Konami passcode
+      if (!img.dataset.fallbackTried && ygoprodeckId) {
+        img.dataset.fallbackTried = 'true';
+        img.src = `https://images.ygoprodeck.com/images/cards_small/${ygoprodeckId}.jpg`;
+      } else {
+        img.onerror = null;
+        img.src = this.getDefaultCardImage();
+      }
+    };
     imgWrapper.appendChild(img);
 
     // Track image for cleanup

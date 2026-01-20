@@ -699,6 +699,9 @@ export class CollectionManager {
           ? `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_200w.jpg`
           : null;
 
+        // Get YGOProDeck ID for image fallback
+        const ygoprodeckId = variantData?.ygoprodeckId || null;
+
         return {
           id: card.id,
           collectionId: card.collection_id,
@@ -709,7 +712,10 @@ export class CollectionManager {
             name: card.name,
             number: card.card_number || card.set_code,
             productId: productId,
+            id: ygoprodeckId, // YGOProDeck card ID for image fallback
           },
+          // YGOProDeck ID for image fallback when TCGPlayer CDN fails
+          ygoprodeck_id: ygoprodeckId,
           // Image URLs from TCGPlayer CDN
           image_url: imageUrl,
           image_small: imageUrl,

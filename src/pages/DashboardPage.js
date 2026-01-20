@@ -528,6 +528,9 @@ export default class DashboardPage {
       const imageUrl = card.image_url || card.image_small || card.card?.image_url ||
         'https://images.ygoprodeck.com/images/cards_small/back.jpg';
       const cardName = card.card?.name || card.cardName || card.name || 'Unknown Card';
+      // Get YGOProDeck card ID for image fallback (Konami passcode, NOT TCGPlayer product ID)
+      const ygoprodeckId = card.ygoprodeck_id || card.card?.id || '';
+      const ygoprodeckFallback = ygoprodeckId ? `https://images.ygoprodeck.com/images/cards_small/${ygoprodeckId}.jpg` : '';
 
       return `
         <div class="collection-preview-card aspect-[59/86] rounded-lg overflow-hidden bg-neutral-800/30 border border-neutral-700/30" title="${this.escapeHtml(cardName)}">
@@ -537,7 +540,8 @@ export default class DashboardPage {
               alt="${this.escapeHtml(cardName)}"
               class="w-full h-full object-cover"
               loading="lazy"
-              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+              data-fallback="${ygoprodeckFallback}"
+              onerror="if(this.dataset.fallbackTried!=='true' && this.dataset.fallback){this.dataset.fallbackTried='true';this.src=this.dataset.fallback;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"
             />
             <div class="w-full h-full items-center justify-center text-neutral-600 text-xs text-center p-2" style="display: none;">
               <span>${this.escapeHtml(cardName)}</span>

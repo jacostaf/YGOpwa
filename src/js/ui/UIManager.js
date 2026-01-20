@@ -2267,9 +2267,18 @@ export class UIManager {
                 imageUrl = this.app.sessionManager.getCardImageWithFallback(card);
             }
 
+            // Get YGOProDeck card ID for image fallback (Konami passcode, NOT TCGPlayer product ID)
+            // ygoprodeck_id comes from the API, which looks it up from Supabase
+            const ygoprodeckId = card.ygoprodeck_id || card.card?.id;
+            const ygoprodeckFallback = ygoprodeckId ? `https://images.ygoprodeck.com/images/cards_small/${ygoprodeckId}.jpg` : '';
+
             cardBtn.innerHTML = `
                 <div class="selection-card-image">
-                    ${imageUrl ? `<img src="${imageUrl}" alt="${cardName}" loading="lazy">` : '<div class="placeholder-icon">🃏</div>'}
+                    ${imageUrl
+                        ? `<img src="${imageUrl}" alt="${cardName}" loading="lazy"
+                             onerror="if(this.dataset.fallbackTried!=='true' && '${ygoprodeckFallback}'){this.dataset.fallbackTried='true';this.src='${ygoprodeckFallback}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"
+                           ><div class="placeholder-icon" style="display:none;">🃏</div>`
+                        : '<div class="placeholder-icon">🃏</div>'}
                 </div>
                 <div class="selection-card-info">
                     <div class="selection-name">${cardName}</div>
@@ -2364,9 +2373,18 @@ export class UIManager {
                 imageUrl = this.app.sessionManager.getCardImageWithFallback(card);
             }
 
+            // Get YGOProDeck card ID for image fallback (Konami passcode, NOT TCGPlayer product ID)
+            // ygoprodeck_id comes from the API, which looks it up from Supabase
+            const ygoprodeckId = card.ygoprodeck_id || card.card?.id;
+            const ygoprodeckFallback = ygoprodeckId ? `https://images.ygoprodeck.com/images/cards_small/${ygoprodeckId}.jpg` : '';
+
             cardBtn.innerHTML = `
                 <div class="selection-card-image">
-                    ${imageUrl ? `<img src="${imageUrl}" alt="${cardName}" loading="lazy">` : '<div class="placeholder-icon">🃏</div>'}
+                    ${imageUrl
+                        ? `<img src="${imageUrl}" alt="${cardName}" loading="lazy"
+                             onerror="if(this.dataset.fallbackTried!=='true' && '${ygoprodeckFallback}'){this.dataset.fallbackTried='true';this.src='${ygoprodeckFallback}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"
+                           ><div class="placeholder-icon" style="display:none;">🃏</div>`
+                        : '<div class="placeholder-icon">🃏</div>'}
                 </div>
                 <div class="selection-card-info">
                     <div class="selection-name">${cardName}</div>
