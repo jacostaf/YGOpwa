@@ -24,6 +24,7 @@ import {
   fetchActivePlan,
   evaluateCollectionQuota,
 } from '../services/subscriptionService.js';
+import { filterByCardType } from '../config/FilterSettings.js';
 
 export class CollectionPage {
   constructor(app) {
@@ -45,6 +46,7 @@ export class CollectionPage {
       filters: {
         set: 'all',
         rarity: 'all',
+        cardType: 'all', // Monster/Spell/Trap filter
         search: '',
         dateFrom: null,
         dateTo: null
@@ -106,10 +108,7 @@ export class CollectionPage {
       handleAddCard: this.handleAddCard.bind(this),
       handlePackProfitToggle: this.handlePackProfitToggle.bind(this),
       handlePackSourceChange: this.handlePackSourceChange.bind(this),
-      handlePackProfitToggle: this.handlePackProfitToggle.bind(this),
-      handlePackSourceChange: this.handlePackSourceChange.bind(this),
       handlePackRefresh: this.handlePackRefresh.bind(this),
-      handleTabChange: this.handleTabChange.bind(this),
       handleCreateCollection: this.handleCreateCollection.bind(this),
       handleCondensedToggle: this.handleCondensedToggle.bind(this),
       handleToggleFavorite: this.handleToggleFavorite.bind(this),
@@ -128,41 +127,6 @@ export class CollectionPage {
     console.log('[CollectionPage] Received price update:', data);
     // Reload data silently to update prices
     await this.loadData({ silent: true });
-  }
-
-  /**
-   * Handle tab switching
-   */
-  async handleTabChange(tabId) {
-    if (typeof tabId === 'object' && tabId.target) {
-      tabId = tabId.target.dataset.tab;
-    }
-
-    console.log('[CollectionPage] Tab change:', tabId);
-
-    // Update buttons
-    this.container.querySelectorAll('.tab-btn').forEach(btn => {
-      const isActive = btn.dataset.tab === tabId;
-      btn.classList.toggle('active', isActive);
-    });
-
-    // Update Views
-    const allCardsView = document.getElementById('all-cards-view');
-    const myCollectionsView = document.getElementById('my-collections-view');
-
-    if (tabId === 'all-cards') {
-      if (allCardsView) allCardsView.style.display = 'block';
-      if (myCollectionsView) myCollectionsView.style.display = 'none';
-
-      // Clear collection filter
-      this.state.filters.collectionId = null;
-      this.applyFiltersAndSort();
-      this.updateDisplay();
-    } else {
-      if (allCardsView) allCardsView.style.display = 'none';
-      if (myCollectionsView) myCollectionsView.style.display = 'block';
-      await this.loadUserCollections();
-    }
   }
 
   /**
@@ -253,125 +217,52 @@ export class CollectionPage {
   }
 
   /**
-   * Load and render user collections
+   * Load user collections and update sidebar
    */
   async loadUserCollections() {
-    const listContainer = this.container.querySelector('#userCollectionsList');
-    listContainer.innerHTML = '<div class="loading-state">Loading collections...</div>';
-
     try {
-      const collections = await this.collectionManager.getUserCollections();
-
-      if (collections.length === 0) {
-        listContainer.innerHTML = `
-                <div class="empty-collections">
-                    <i class="lucide-icon" data-lucide="folder-plus"></i>
-                    <p>You haven't created any collections yet.</p>
-                    <button class="btn-secondary" onclick="document.getElementById('createCollectionBtn').click()">Create One</button>
-                </div>
-            `;
-      } else {
-        listContainer.innerHTML = collections.map(col => {
-          // Get cards for this collection
-          // We need to match by collectionId. 
-          // Note: this.state.cards contains all user cards flattened
-          const collectionCards = this.state.cards.filter(c => c.collectionId === col.id);
-
-          // Sort by price (highest first) for preview
-          const sortedPreviewCards = [...collectionCards].sort((a, b) => {
-            const priceA = a.pricing?.currentPrice || 0;
-            const priceB = b.pricing?.currentPrice || 0;
-            return priceB - priceA;
-          });
-
-          // Get top 3 cards for preview
-          const previewCards = sortedPreviewCards.slice(0, 3);
-
-          // Calculate total value
-          const totalValue = collectionCards.reduce((sum, card) => sum + (card.pricing?.totalValue || 0), 0);
-
-          // Calculate card count (sum of quantities)
-          const cardCount = collectionCards.reduce((sum, card) => sum + (Number(card.quantity) || 1), 0);
-
-          console.log('[CollectionPage] Collection:', col.name, 'Cards:', collectionCards.length, 'Value:', totalValue);
-
-          const previewStackHtml = `
-                <div class="collection-preview-stack">
-                    ${previewCards.length > 0 ? previewCards.map((card, i) => {
-            // Resolve image URL
-            const imageUrl = card.image_url || card.image_small || card.card_images?.[0]?.image_url_small || 'https://images.ygoprodeck.com/images/cards_small/back.jpg';
-            console.log('[CollectionPage] Image URL for card:', card.card?.name, imageUrl);
-            return `<div class="preview-card" style="background-image: url('${imageUrl}')"></div>`;
-          }).join('') : `
-                        <div class="empty-preview">
-                            <i class="lucide-icon" data-lucide="image"></i>
-                        </div>
-                    `}
-                </div>
-            `;
-
-          return `
-                <div class="collection-card glass-card">
-                    ${previewStackHtml}
-                    <div class="collection-card-header">
-                        <h3>${col.name}</h3>
-                        <span class="card-count">${cardCount} cards</span>
-                    </div>
-                    <p class="collection-desc">${col.description || 'No description'}</p>
-                    <div class="collection-stats-row">
-                        <span class="collection-value">${this.formatCurrency(totalValue)}</span>
-                    </div>
-                    <div class="collection-actions">
-                        <button class="btn-sm btn-secondary view-collection-btn" data-id="${col.id}">View</button>
-                        <button class="btn-sm btn-danger delete-collection-btn" data-id="${col.id}">Delete</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        // Re-initialize icons
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-
-        // Add event delegation for buttons
-        listContainer.onclick = (e) => {
-          const viewBtn = e.target.closest('.view-collection-btn');
-          const deleteBtn = e.target.closest('.delete-collection-btn');
-
-          if (viewBtn) {
-            const id = viewBtn.dataset.id;
-            console.log('View collection:', id);
-
-            // Update filter state
-            this.state.filters.collectionId = id;
-
-            // Manually switch to All Cards tab UI without triggering click event
-            // This prevents handleTabChange from clearing our filter
-            const allCardsTab = this.container.querySelector('[data-tab="all-cards"]');
-            const myCollectionsTab = this.container.querySelector('[data-tab="my-collections"]');
-
-            if (allCardsTab && myCollectionsTab) {
-              allCardsTab.classList.add('active');
-              myCollectionsTab.classList.remove('active');
-            }
-
-            this.container.querySelector('#all-cards-view').style.display = 'block';
-            this.container.querySelector('#my-collections-view').style.display = 'none';
-
-            // Apply filters immediately
-            this.applyFiltersAndSort();
-            this.updateDisplay();
-
-            this.app.showToast(`Viewing collection`, 'info');
-          } else if (deleteBtn) {
-            const id = deleteBtn.dataset.id;
-            const name = deleteBtn.closest('.collection-card').querySelector('h3').textContent;
-            this.handleDeleteCollection(id, name);
-          }
-        };
+      // Force cache invalidation to ensure fresh data
+      if (this.collectionManager) {
+        this.collectionManager.invalidateCache();
       }
+
+      const collections = await this.collectionManager.getUserCollections();
+      console.log('[CollectionPage] Loaded collections:', collections.length, collections.map(c => c.name));
+
+      // Enrich collections with card counts from current state
+      const enrichedCollections = collections.map(col => {
+        const collectionCards = this.state.cards.filter(c =>
+          String(c.collectionId) === String(col.id)
+        );
+        const cardCount = collectionCards.reduce((sum, card) => sum + (Number(card.quantity) || 1), 0);
+        return { ...col, count: cardCount };
+      });
+
+      // Update sidebar with collections data - try multiple references
+      const sidebar = this._sidebarRef || this.app?.sidebar || window.sidebar;
+      console.log('[CollectionPage] Sidebar reference:', {
+        _sidebarRef: !!this._sidebarRef,
+        appSidebar: !!this.app?.sidebar,
+        windowSidebar: !!window.sidebar,
+        resolved: !!sidebar
+      });
+
+      if (sidebar) {
+        console.log('[CollectionPage] Updating sidebar with', enrichedCollections.length, 'collections');
+        sidebar.setContext('collection', {
+          collections: enrichedCollections,
+          activeCollection: this.state.filters.collectionId || 'all',
+          totalCards: this.state.cards.length,
+          favoritesCount: this.state.cards.filter(c => c.isFavorite).length
+        });
+      } else {
+        console.error('[CollectionPage] No sidebar reference found! Cannot update sidebar.');
+      }
+
+      return collections;
     } catch (error) {
       console.error('Error loading collections:', error);
-      listContainer.innerHTML = '<div class="error-state">Failed to load collections</div>';
+      return [];
     }
   }
 
@@ -380,50 +271,74 @@ export class CollectionPage {
    */
   async handleCreateCollection() {
     try {
+      console.log('[CollectionPage] handleCreateCollection START');
       const name = prompt('Enter collection name:');
-      if (!name) return;
+      if (!name?.trim()) {
+        console.log('[CollectionPage] handleCreateCollection cancelled - no name');
+        return;
+      }
 
       const description = prompt('Enter description (optional):');
 
       this.toggleLoadingIndicator(true);
-      const newCollection = await this.collectionManager.createCollection(name, description);
+      console.log('[CollectionPage] Creating collection:', name);
+      const newCollection = await this.collectionManager.createCollection(name.trim(), description?.trim() || '');
+      console.log('[CollectionPage] createCollection result:', newCollection);
 
       if (newCollection) {
-        this.app.showToast(`Collection "${name}" created!`, 'success');
+        this.app?.showToast?.(`Collection "${name}" created!`, 'success');
+        // Update sidebar with new collection (don't need full loadData for empty collection)
+        console.log('[CollectionPage] Calling loadUserCollections...');
         await this.loadUserCollections();
+        console.log('[CollectionPage] loadUserCollections completed, sidebar should be updated');
       }
     } catch (error) {
       console.error('[CollectionPage] Error creating collection:', error);
-      this.app.showToast('Failed to create collection', 'error');
+      this.app?.showToast?.('Failed to create collection', 'error');
     } finally {
       this.toggleLoadingIndicator(false);
+      console.log('[CollectionPage] handleCreateCollection END');
     }
   }
 
   /**
    * Handle delete collection
+   * @param {string} collectionId - Collection ID to delete
+   * @param {string} name - Collection name for display
+   * @param {boolean} skipConfirm - Skip confirmation dialog (already confirmed by caller)
    */
-  async handleDeleteCollection(collectionId, name) {
+  async handleDeleteCollection(collectionId, name, skipConfirm = false) {
     try {
-      if (!confirm(`Are you sure you want to delete the collection "${name}"? This will also remove all cards inside it.`)) {
+      console.log('[CollectionPage] handleDeleteCollection START:', collectionId, name);
+      // Skip confirmation if caller already confirmed (e.g., sidebar)
+      if (!skipConfirm && !confirm(`Are you sure you want to delete the collection "${name}"? This will also remove all cards inside it.`)) {
+        console.log('[CollectionPage] handleDeleteCollection cancelled by user');
         return;
       }
 
       this.toggleLoadingIndicator(true);
+      console.log('[CollectionPage] Calling collectionManager.deleteCollection...');
       await this.collectionManager.deleteCollection(collectionId);
+      console.log('[CollectionPage] deleteCollection completed successfully');
 
-      this.app.showToast(`Collection "${name}" deleted`, 'success');
-      await this.loadUserCollections();
+      this.app?.showToast?.(`Collection "${name}" deleted`, 'success');
 
       // If we were viewing this collection, switch back to all cards
       if (this.state.filters.collectionId === collectionId) {
-        this.handleTabChange('all-cards');
+        this.state.filters.collectionId = null;
       }
+
+      // Reload cards (to remove deleted collection's cards) and update sidebar
+      console.log('[CollectionPage] Calling loadData({ silent: true })...');
+      await this.loadData({ silent: true });
+      console.log('[CollectionPage] loadData completed, sidebar should be updated');
+
     } catch (error) {
       console.error('[CollectionPage] Error deleting collection:', error);
-      this.app.showToast('Failed to delete collection', 'error');
+      this.app?.showToast?.('Failed to delete collection', 'error');
     } finally {
       this.toggleLoadingIndicator(false);
+      console.log('[CollectionPage] handleDeleteCollection END');
     }
   }
 
@@ -478,17 +393,7 @@ export class CollectionPage {
             </div>
         </div>
 
-        <!-- Tabs -->
-        <div class="collection-tabs-container">
-            <div class="collection-tabs">
-                <button class="tab-btn active" data-tab="all-cards">All Cards</button>
-                <button class="tab-btn" data-tab="my-collections">My Collections</button>
-            </div>
-        </div>
-
-        <!-- All Cards View -->
-        <div id="all-cards-view">
-            <!-- Toolbar -->
+        <!-- Toolbar -->
             <div class="toolbar">
                 <div class="search-wrapper">
                     <i data-lucide="search"></i>
@@ -527,21 +432,6 @@ export class CollectionPage {
                 <div class="loading-spinner"></div>
               </div>
             </div>
-        </div>
-
-        <!-- My Collections View -->
-        <div id="my-collections-view" style="display: none; padding: 32px;">
-            <div class="collections-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                <h2>My Collections</h2>
-                <button class="btn-primary" id="createCollectionBtn">
-                    <i data-lucide="folder-plus" style="width: 18px;"></i>
-                    New Collection
-                </button>
-            </div>
-            <div id="userCollectionsList" class="collections-grid">
-                <!-- Collections will be rendered here -->
-            </div>
-        </div>
       </div>
     `;
   }
@@ -581,9 +471,28 @@ export class CollectionPage {
         this.boundHandlers.handleSidebarSelect = (e) => {
           const { collectionId } = e.detail;
           console.log('[CollectionPage] Sidebar collection selected:', collectionId);
-          this.state.filters.collectionId = collectionId === 'all' ? null : collectionId;
+          const newFilterValue = (collectionId === 'all' || !collectionId) ? null : collectionId;
+          console.log('[CollectionPage] Setting filter collectionId to:', newFilterValue);
+          this.state.filters.collectionId = newFilterValue;
           this.applyFiltersAndSort();
+          console.log('[CollectionPage] After applyFiltersAndSort, sortedCards:', this.state.sortedCards.length);
           this.updateDisplay();
+          console.log('[CollectionPage] updateDisplay complete');
+
+          // Update page title based on selection
+          const titleEl = this.container.querySelector('#collectionTitle');
+          if (titleEl) {
+            if (collectionId === 'all' || !collectionId) {
+              titleEl.textContent = 'All Cards';
+            } else if (collectionId === 'favorites') {
+              titleEl.textContent = 'Favorites';
+            } else {
+              // Find collection name from sidebar context (use stored ref)
+              const sidebarRef = this._sidebarRef || this.app?.sidebar;
+              const collection = sidebarRef?.contextData?.collections?.find(c => String(c.id) === String(collectionId));
+              titleEl.textContent = collection?.name || 'Collection';
+            }
+          }
         };
 
         this.boundHandlers.handleSidebarCreate = () => {
@@ -591,8 +500,16 @@ export class CollectionPage {
           this.handleCreateCollection();
         };
 
+        this.boundHandlers.handleSidebarDelete = async (e) => {
+          const { collectionId, collectionName } = e.detail;
+          console.log('[CollectionPage] Sidebar delete collection:', collectionId, collectionName);
+          // Skip confirmation since sidebar already confirmed
+          await this.handleDeleteCollection(collectionId, collectionName, true);
+        };
+
         sidebar.container.addEventListener('collection:select', this.boundHandlers.handleSidebarSelect);
         sidebar.container.addEventListener('collection:create', this.boundHandlers.handleSidebarCreate);
+        sidebar.container.addEventListener('collection:delete', this.boundHandlers.handleSidebarDelete);
 
         // Store sidebar reference for cleanup
         this._sidebarRef = sidebar;
@@ -681,6 +598,9 @@ export class CollectionPage {
         }
         if (this.boundHandlers.handleSidebarCreate) {
           sidebar.container.removeEventListener('collection:create', this.boundHandlers.handleSidebarCreate);
+        }
+        if (this.boundHandlers.handleSidebarDelete) {
+          sidebar.container.removeEventListener('collection:delete', this.boundHandlers.handleSidebarDelete);
         }
 
         sidebar.setContext('default');
@@ -829,17 +749,8 @@ export class CollectionPage {
       this.updateDisplay();
       this.updatePlanControls();
 
-      // Update Sidebar with counts
-      const sidebar = this.app?.sidebar || window.sidebar;
-      if (sidebar) {
-        const favoritesCount = this.state.cards.filter(c => c.isFavorite).length;
-        sidebar.setContext('collection', {
-          collections: [], // TODO: Pass actual user collections here if available
-          activeCollection: 'all',
-          totalCards: this.state.cards.length,
-          favoritesCount: favoritesCount
-        });
-      }
+      // Update Sidebar with collections and counts
+      await this.loadUserCollections();
 
       this.state.error = null;
 
@@ -864,6 +775,13 @@ export class CollectionPage {
         this.app.showToast('Failed to refresh collection', 'error');
       }
       this.updatePlanControls();
+
+      // Still try to update sidebar even on error
+      try {
+        await this.loadUserCollections();
+      } catch (sidebarError) {
+        console.error('CollectionPage: Failed to update sidebar after error:', sidebarError);
+      }
     } finally {
       this.state.isLoading = false;
       if (!silent) {
@@ -1331,52 +1249,6 @@ export class CollectionPage {
     this.updatePackHistoryTable();
   }
 
-  async loadUserCollections() {
-    const container = document.getElementById('userCollectionsContainer');
-    const loading = document.getElementById('collectionsLoading');
-    const empty = document.getElementById('collectionsEmpty');
-
-    if (!container) return;
-
-    try {
-      if (loading) loading.classList.remove('hidden');
-      if (empty) empty.classList.add('hidden');
-      container.innerHTML = '';
-
-      const collections = await this.collectionManager.getUserCollections();
-
-      if (collections.length === 0) {
-        if (empty) empty.classList.remove('hidden');
-      } else {
-        collections.forEach(collection => {
-          const card = document.createElement('div');
-          card.className = 'collection-card';
-          card.innerHTML = `
-            <i class="lucide-icon collection-icon" data-lucide="folder"></i>
-            <div class="collection-info">
-                <div class="collection-name">${this.escapeHtml(collection.name)}</div>
-                <div class="collection-meta">${collection.cards?.length || 0} cards • Updated ${this.formatDate(collection.updated_at)}</div>
-            </div>
-            <div class="collection-actions">
-                <button class="action-btn" title="Rename"><i class="lucide-icon" data-lucide="edit-2" style="width: 16px;"></i></button>
-                <button class="action-btn delete" title="Delete"><i class="lucide-icon" data-lucide="trash-2" style="width: 16px;"></i></button>
-            </div>
-          `;
-          container.appendChild(card);
-        });
-      }
-
-      if (typeof lucide !== 'undefined') {
-        lucide.createIcons({ root: container });
-      }
-
-    } catch (error) {
-      console.error('Error loading user collections:', error);
-    } finally {
-      if (loading) loading.classList.add('hidden');
-    }
-  }
-
   async loadPackInsights(options = {}) {
     const { force = true } = options;
 
@@ -1735,27 +1607,28 @@ export class CollectionPage {
         addCardBtn.addEventListener('click', () => this.handleAddCard());
       }
 
-      // Tabs
-      const tabBtns = this.container.querySelectorAll('.tab-btn');
-      tabBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => this.handleTabChange(e));
-      });
-
       // Export
       const exportBtn = document.getElementById('exportCollectionBtn');
       if (exportBtn) {
         exportBtn.addEventListener('click', () => this.handleExport());
       }
 
-      // Filter Chips
+      // Filter Chips (Monster/Spell/Trap)
       const chips = this.container.querySelectorAll('.chip');
       chips.forEach(chip => {
         chip.addEventListener('click', (e) => {
-          const filter = e.target.dataset.filter;
+          const cardType = e.currentTarget.dataset.filter; // Use currentTarget for reliability
+
+          // Update UI
           this.container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-          e.target.classList.add('active');
-          // TODO: Implement chip filtering logic if needed
-          console.log('Chip filter:', filter);
+          e.currentTarget.classList.add('active');
+
+          // Update state and refresh display
+          this.state.filters.cardType = cardType;
+          this.applyFiltersAndSort();
+          this.updateDisplay();
+
+          console.log('[CollectionPage] Card type filter:', cardType);
         });
       });
 
@@ -1842,6 +1715,7 @@ export class CollectionPage {
       this.state.filters = {
         set: setFilter?.value || 'all',
         rarity: rarityFilter?.value || 'all',
+        cardType: this.state.filters.cardType || 'all', // Preserve chip filter
         collectionId: collectionFilter?.value && collectionFilter.value !== 'all' ? collectionFilter.value : null,
         search: searchInput?.value || ''
       };
@@ -2124,23 +1998,20 @@ export class CollectionPage {
     try {
       let filtered = [...this.state.cards];
 
-      // Filter by Collection ID (if set)
-      // Filter by Collection ID (if set)
+      // Filter by Collection ID or special collections (favorites)
       if (this.state.filters.collectionId) {
         console.log('[CollectionPage] Filtering by collectionId:', this.state.filters.collectionId);
+        console.log('[CollectionPage] Cards before filter:', filtered.length, 'Sample collectionIds:', filtered.slice(0, 3).map(c => c.collectionId));
 
-        // Debug first card to see structure
-        if (filtered.length > 0) {
-          console.log('[CollectionPage] First card structure:', filtered[0]);
-          console.log('[CollectionPage] First card collectionId:', filtered[0].collectionId, typeof filtered[0].collectionId);
+        if (this.state.filters.collectionId === 'favorites') {
+          // Special case: filter by favorites
+          filtered = filtered.filter(card => card.isFavorite === true);
+          console.log('[CollectionPage] After favorites filter:', filtered.length);
+        } else {
+          // Regular collection filter - use String comparison for UUID matching
+          filtered = filtered.filter(card => String(card.collectionId) === String(this.state.filters.collectionId));
+          console.log('[CollectionPage] After collectionId filter:', filtered.length);
         }
-
-        // We need to check if the card belongs to the collection
-        // Since we flattened the cards in getAllUserCards, we might not have the collection ID directly on the card object
-        // Let's check how we mapped it in CollectionManager.js
-        // Use loose equality to handle string/number mismatches
-        filtered = filtered.filter(card => String(card.collectionId) === String(this.state.filters.collectionId));
-        console.log('[CollectionPage] After collectionId filter:', filtered.length);
       }
 
       // Filter by Set
@@ -2155,6 +2026,12 @@ export class CollectionPage {
           const cardRarity = card.rarity?.key || card.rarity?.name || card.rarity || '';
           return cardRarity.toLowerCase() === this.state.filters.rarity.toLowerCase();
         });
+      }
+
+      // Filter by Card Type (Monster/Spell/Trap)
+      if (this.state.filters.cardType && this.state.filters.cardType !== 'all') {
+        filtered = filterByCardType(filtered, this.state.filters.cardType);
+        console.log('[CollectionPage] After cardType filter:', filtered.length);
       }
 
       // Apply filters
@@ -2196,8 +2073,9 @@ export class CollectionPage {
 
       // Show/hide empty state
       const isEmpty = this.state.sortedCards.length === 0;
+      console.log('[CollectionPage] updateDisplay - isEmpty:', isEmpty, 'sortedCards.length:', this.state.sortedCards.length);
       const emptyState = document.getElementById('emptyState');
-      const gridView = document.getElementById('collectionGridView');
+      const gridView = document.getElementById('cardGrid');
       const listView = document.getElementById('collectionListView');
 
       if (emptyState) {
@@ -2231,20 +2109,49 @@ export class CollectionPage {
   }
 
   /**
-   * Update statistics display
+   * Update statistics display based on currently filtered/sorted cards
    */
   updateStats() {
     try {
-      const stats = this.state.stats || {};
-      const summary = this.state.summary || {};
+      // Calculate stats from the currently filtered cards (not global stats)
+      const cards = this.state.sortedCards || [];
 
-      const totalCardsSource = summary.totalQuantity ?? stats.totalCards ?? 0;
-      const totalValueSource = summary.totalMarketValue ?? stats.totalValue ?? 0;
-      const uniqueCardsSource = stats.uniqueCards ?? this.getUniqueCardCount();
+      // Total cards (sum of quantities)
+      const totalCardsValue = cards.reduce((sum, card) => sum + (Number(card.quantity) || 1), 0);
 
-      const totalCardsValue = Number.isFinite(Number(totalCardsSource)) ? Number(totalCardsSource) : 0;
-      const totalValueDollars = Number.isFinite(Number(totalValueSource)) ? Number(totalValueSource) : 0;
-      const uniqueCardsValue = Number.isFinite(Number(uniqueCardsSource)) ? Number(uniqueCardsSource) : 0;
+      // Total value (sum of each card's total value, using market price as primary)
+      const totalValueDollars = cards.reduce((sum, card) => {
+        const price = card.pricing?.currentPrice || card.tcgMarket || card.pricing?.marketPrice || 0;
+        const quantity = Number(card.quantity) || 1;
+        return sum + (price * quantity);
+      }, 0);
+
+      // Unique cards (count of distinct cards)
+      const uniqueCardsValue = cards.length;
+
+      // Find top rarity card
+      const rarityWeights = {
+        'quarter century secret rare': 100,
+        'starlight rare': 95,
+        'ghost rare': 90,
+        'collector\'s rare': 85,
+        'secret rare': 80,
+        'ultra rare': 70,
+        'super rare': 60,
+        'rare': 50,
+        'common': 10
+      };
+
+      let topRarityCard = null;
+      let topRarityWeight = -1;
+      cards.forEach(card => {
+        const rarityName = (card.rarity?.name || card.rarity?.key || card.rarity || '').toLowerCase();
+        const weight = rarityWeights[rarityName] || 0;
+        if (weight > topRarityWeight) {
+          topRarityWeight = weight;
+          topRarityCard = card;
+        }
+      });
 
       const totalCards = document.getElementById('statTotalCards');
       if (totalCards) {
@@ -2263,8 +2170,8 @@ export class CollectionPage {
 
       const valueTrend = document.getElementById('statValueTrend');
       if (valueTrend) {
-        const trend = summary.valueTrend || 0;
-        const trendClass = trend >= 0 ? 'trend-up' : 'trend-down';
+        // For now, show 0% trend (would need historical data per collection)
+        const trend = 0;
         const trendIcon = trend >= 0 ? 'trending-up' : 'trending-down';
         valueTrend.innerHTML = `
         <i data-lucide="${trendIcon}" style="width: 12px;"></i>
@@ -2275,16 +2182,21 @@ export class CollectionPage {
 
       const cardsTrend = document.getElementById('statCardsTrend');
       if (cardsTrend) {
-        const weeklyCount = summary.weeklyCount || 0;
+        // Count cards added this week
+        const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const weeklyCount = cards.filter(card => {
+          const addedAt = new Date(card.addedAt || card.createdAt || 0).getTime();
+          return addedAt >= oneWeekAgo;
+        }).reduce((sum, card) => sum + (Number(card.quantity) || 1), 0);
         cardsTrend.textContent = `+${weeklyCount} this week`;
       }
 
       const topRarity = document.getElementById('statTopRarity');
       if (topRarity) {
-        if (stats.rarestCard) {
-          const rarityVal = stats.rarestCard.rarity;
+        if (topRarityCard) {
+          const rarityVal = topRarityCard.rarity;
           const rarityName = typeof rarityVal === 'object' ? (rarityVal.name || rarityVal.key || 'Unknown') : rarityVal;
-          topRarity.textContent = rarityName || 'Unknown';
+          topRarity.textContent = rarityName || '-';
         } else {
           topRarity.textContent = '-';
         }

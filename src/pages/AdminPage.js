@@ -232,7 +232,7 @@ export default class AdminPage {
     btn.disabled = true;
     btn.innerHTML = '<i data-lucide="loader" class="animate-spin"></i> Fetching from TCGcsv...';
     status.classList.remove('hidden');
-    status.innerText = 'Starting catalog refresh (this may take several minutes)...';
+    status.innerText = 'Starting catalog refresh...';
     status.className = 'mt-4 text-sm text-secondary';
 
     try {
@@ -248,10 +248,11 @@ export default class AdminPage {
       if (data.success) {
         this.log('Catalog refresh started in background.');
         status.innerHTML = `
-          <div class="text-success">Refresh started in background!</div>
+          <div class="text-success">Refresh started!</div>
           <div class="text-xs mt-1">Current cache: ${data.data?.current_sets || 0} sets, ${(data.data?.current_cards || 0).toLocaleString()} cards</div>
-          <div class="text-xs">Check logs for progress. Refresh this page when complete.</div>
         `;
+        // Start polling for progress
+        this.startCatalogProgressPolling(status, btn);
       } else {
         throw new Error(data.error?.message || 'Unknown error');
       }
@@ -261,7 +262,68 @@ export default class AdminPage {
       this.log(`Error: ${error.message}`);
       status.innerText = `Error: ${error.message}`;
       status.className = 'mt-4 text-sm text-danger';
-    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="download-cloud"></i> Refresh Card Catalog';
+      if (window.lucide) window.lucide.createIcons();
+    }
+  }
+
+  startCatalogProgressPolling(statusEl, btn) {
+    // Clear any existing poll
+    if (this.catalogPollInterval) {
+      clearInterval(this.catalogPollInterval);
+    }
+
+    this.catalogPollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${config.API_URL}/admin/catalog-progress`, {
+          headers: this.getAuthHeaders()
+        });
+        const data = await response.json();
+
+        if (data.success && data.data) {
+          const progress = data.data;
+
+          // Log progress updates
+          if (progress.message) {
+            this.log(`[Catalog] ${progress.message}`);
+          }
+
+          // Update status display
+          if (progress.status === 'running') {
+            statusEl.innerHTML = `
+              <div class="text-secondary">${progress.phase || 'Working'}...</div>
+              <div class="text-xs mt-1">${progress.message || ''}</div>
+              ${progress.current > 0 ? `<div class="text-xs">${progress.current}/${progress.total} sets processed</div>` : ''}
+            `;
+          } else if (progress.status === 'complete') {
+            statusEl.innerHTML = `
+              <div class="text-success">✓ Refresh complete!</div>
+              <div class="text-xs mt-1">${progress.message || ''}</div>
+            `;
+            this.stopCatalogProgressPolling(btn);
+            // Reload catalog status
+            this.loadCatalogStatus();
+          } else if (progress.status === 'error') {
+            statusEl.innerHTML = `
+              <div class="text-danger">✗ Refresh failed</div>
+              <div class="text-xs mt-1">${progress.message || 'Unknown error'}</div>
+            `;
+            this.stopCatalogProgressPolling(btn);
+          }
+        }
+      } catch (err) {
+        this.log(`[Catalog] Error polling progress: ${err.message}`);
+      }
+    }, 4000); // Poll every 4 seconds
+  }
+
+  stopCatalogProgressPolling(btn) {
+    if (this.catalogPollInterval) {
+      clearInterval(this.catalogPollInterval);
+      this.catalogPollInterval = null;
+    }
+    if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="download-cloud"></i> Refresh Card Catalog';
       if (window.lucide) window.lucide.createIcons();
@@ -545,10 +607,14 @@ export default class AdminPage {
   }
 
   async unmount() {
-    // Clean up polling interval
+    // Clean up polling intervals
     if (this.syncProgressInterval) {
       clearInterval(this.syncProgressInterval);
       this.syncProgressInterval = null;
+    }
+    if (this.catalogPollInterval) {
+      clearInterval(this.catalogPollInterval);
+      this.catalogPollInterval = null;
     }
     this.container.innerHTML = '';
   }

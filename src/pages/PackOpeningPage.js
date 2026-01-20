@@ -210,12 +210,12 @@ export default class PackOpeningPage {
               <span class="stat-val" id="cards-count">0</span>
             </div>
             <div class="stat-row">
-              <span class="stat-key">TCG Low</span>
-              <span class="stat-val text-green-400" id="tcg-low-total">$0.00</span>
+              <span class="stat-key">Market</span>
+              <span class="stat-val text-green-400" id="tcg-market-total">$0.00</span>
             </div>
             <div class="stat-row">
-              <span class="stat-key">Market</span>
-              <span class="stat-val" id="tcg-market-total">$0.00</span>
+              <span class="stat-key">Low</span>
+              <span class="stat-val" id="tcg-low-total">$0.00</span>
             </div>
           </div>
 
@@ -1462,6 +1462,12 @@ export default class PackOpeningPage {
         }
       });
 
+      // Cleanup any existing observer first (defensive - prevents stacking)
+      if (this.duplicateKiller) {
+        this.duplicateKiller.disconnect();
+        this.duplicateKiller = null;
+      }
+
       // Setup observer to kill any future duplicates
       this.duplicateKiller = new MutationObserver((mutations) => {
         mutations.forEach(mutation => {
@@ -1485,7 +1491,9 @@ export default class PackOpeningPage {
           });
         });
       });
-      this.duplicateKiller.observe(document.body, { childList: true, subtree: true });
+      // Observe container's parent (narrower scope than document.body)
+      const observeTarget = this.container.parentNode || document.body;
+      this.duplicateKiller.observe(observeTarget, { childList: true, subtree: true });
 
       // Initialize services and load data
       await this.initialize();

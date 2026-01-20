@@ -10,6 +10,7 @@ import { PriceChecker } from '../js/price/PriceChecker.js';
 import { Storage } from '../js/utils/Storage.js';
 import { getRarityRankSync, getRarityWeightSync, getAllRarities } from './rarityService.js';
 import { cacheCoordinator } from './CacheCoordinator.js';
+import { getCardCategory } from '../config/FilterSettings.js';
 
 export class CollectionManager {
   constructor(sessionManager) {
@@ -192,9 +193,10 @@ export class CollectionManager {
 
   /**
    * Delete a collection
-   * @param {string} id 
+   * @param {string} id
    */
   async deleteCollection(id) {
+    console.log('[CollectionManager] deleteCollection called for id:', id);
     const user = authService.getUser();
     if (!user || !supabase) throw new Error('User not authenticated');
 
@@ -203,7 +205,12 @@ export class CollectionManager {
       .delete()
       .eq('id', id);
 
-    if (error) throw error;
+    if (error) {
+      console.error('[CollectionManager] deleteCollection error:', error);
+      throw error;
+    }
+
+    console.log('[CollectionManager] deleteCollection success, invalidating cache');
     this.invalidateCache();
   }
 
@@ -218,6 +225,9 @@ export class CollectionManager {
 
     console.log('[CollectionManager] Adding card to collection:', collectionId, card);
 
+    // Determine card type (monster/spell/trap) using FilterSettings utility
+    const cardType = getCardCategory(card);
+
     const { data, error } = await supabase
       .from('collection_cards')
       .insert({
@@ -226,6 +236,7 @@ export class CollectionManager {
         name: card.name || card.cardName,
         set_code: card.setCode || card.set_code,
         rarity: card.rarity,
+        card_type: cardType, // Store card type for filtering
         quantity: card.quantity || 1
       })
       .select()
@@ -456,16 +467,16 @@ export class CollectionManager {
       const variantIds = variants.map(v => v.id);
       const { data: prices, error: priceError } = await supabase
         .from('card_prices')
-        .select('card_variant_id, price, price_low, price_market')
+        .select('card_variant_id, price, price_market')
         .in('card_variant_id', variantIds)
         .order('price_date', { ascending: false });
 
-      // Create map of variant_id -> latest price
+      // Create map of variant_id -> latest price (use market price as primary)
       const priceMap = new Map();
       if (!priceError && prices) {
         prices.forEach(p => {
           if (!priceMap.has(p.card_variant_id)) {
-            priceMap.set(p.card_variant_id, parseFloat(p.price_low) || parseFloat(p.price) || 0);
+            priceMap.set(p.card_variant_id, parseFloat(p.price_market) || parseFloat(p.price) || 0);
           }
         });
       }
@@ -677,9 +688,9 @@ export class CollectionManager {
         const priceData = cardVariantId ? priceLookup.get(cardVariantId) : null;
         const packPriceData = cardVariantId ? packPriceLookup.get(cardVariantId) : null;
 
-        // Use lowPrice as currentPrice (TCGPlayer low), marketPrice for market
-        const currentPrice = priceData?.lowPrice || priceData?.price || 0;
-        const marketPrice = priceData?.marketPrice || 0;
+        // Use marketPrice as currentPrice (TCGPlayer market price is the standard)
+        const currentPrice = priceData?.marketPrice || priceData?.price || 0;
+        const lowPrice = priceData?.lowPrice || 0;
         const quantity = card.quantity || 1;
 
         // Construct image URL from TCGPlayer CDN using product ID
@@ -691,6 +702,7 @@ export class CollectionManager {
         return {
           id: card.id,
           collectionId: card.collection_id,
+          cardType: card.card_type || null, // Card type (monster/spell/trap) for filtering
           quantity: quantity,
           createdAt: card.added_at || new Date().toISOString(),
           card: {
@@ -723,7 +735,8 @@ export class CollectionManager {
           },
           pricing: {
             currentPrice: currentPrice,
-            marketPrice: marketPrice,
+            marketPrice: currentPrice, // Same as currentPrice (market is the standard)
+            lowPrice: lowPrice,
             midPrice: priceData?.midPrice || 0,
             highPrice: priceData?.highPrice || 0,
             totalValue: currentPrice * quantity,
@@ -732,8 +745,9 @@ export class CollectionManager {
             priceAtPack: packPriceData?.priceAtPack || null,
             packedAt: packPriceData?.packedAt || null
           },
-          // Legacy flat property
-          tcgLow: currentPrice,
+          // Flat price properties for compatibility
+          tcgMarket: currentPrice,
+          tcgLow: lowPrice,
           collectionName: collection?.name
         };
       });
@@ -810,6 +824,7 @@ export class CollectionManager {
    * Invalidate collection cache
    */
   invalidateCache() {
+    console.log('[CollectionManager] invalidateCache called - clearing userCollections cache');
     this.cache.userCollections = null;
     this.cache.collectionsLastUpdate = null;
   }

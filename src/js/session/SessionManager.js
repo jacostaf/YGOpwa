@@ -72,12 +72,21 @@ export class SessionManager {
             enableFuzzyMatching: true,
             apiTimeout: 120000, // 120 second timeout for API calls
             healthCheckTimeout: 8000,
-            enableHealthCheck: true
+            enableHealthCheck: true,
+            // Memory management: archive old cards to prevent unbounded growth
+            maxActiveCards: 200,
+            archiveThreshold: 150
         };
+
+        // Archived cards storage (prevents memory bloat in long sessions)
+        this.archivedCards = [];
         this.healthCheckVerified = false;
 
         // Auto-save timer
         this.autoSaveTimer = null;
+
+        // Track active intervals for cleanup
+        this.activeIntervals = new Set();
 
         // Common card names cache for optimization
         this.commonCardNames = new Map();
@@ -900,6 +909,13 @@ export class SessionManager {
         try {
             this.logger.info('Stopping current session');
 
+            // Merge archived cards back before saving
+            if (this.archivedCards && this.archivedCards.length > 0) {
+                this.currentSession.cards = [...this.archivedCards, ...this.currentSession.cards];
+                this.logger.info(`Merged ${this.archivedCards.length} archived cards back into session`);
+                this.archivedCards = [];
+            }
+
             // Update session end time and statistics
             this.currentSession.endTime = new Date().toISOString();
             this.updateSessionStatistics();
@@ -1058,6 +1074,16 @@ export class SessionManager {
 
             // Add to session immediately
             this.currentSession.cards.push(enhancedCard);
+
+            // Memory management: archive old cards when exceeding threshold
+            if (this.currentSession.cards.length > this.config.maxActiveCards) {
+                const cardsToArchive = this.currentSession.cards.length - this.config.archiveThreshold;
+                if (cardsToArchive > 0) {
+                    const archived = this.currentSession.cards.splice(0, cardsToArchive);
+                    this.archivedCards.push(...archived);
+                    this.logger.debug(`Archived ${cardsToArchive} old cards (total archived: ${this.archivedCards.length})`);
+                }
+            }
 
             // Update statistics
             this.updateSessionStatistics();
@@ -2492,6 +2518,7 @@ export class SessionManager {
                 // Check if all pricing data has loaded
                 if (this.loadingPriceData.size === 0) {
                     clearInterval(checkInterval);
+                    this.activeIntervals.delete(checkInterval);
                     this.logger.info('All pricing data loaded successfully');
                     resolve(true);
                     return;
@@ -2500,6 +2527,7 @@ export class SessionManager {
                 // Check for timeout
                 if (elapsed >= timeout) {
                     clearInterval(checkInterval);
+                    this.activeIntervals.delete(checkInterval);
                     this.logger.warn(`Timeout waiting for pricing data (${this.loadingPriceData.size} cards still loading)`);
                     resolve(false);
                     return;
@@ -2510,6 +2538,9 @@ export class SessionManager {
                     this.logger.debug(`Still waiting for ${this.loadingPriceData.size} cards to load pricing data...`);
                 }
             }, 500); // Check every 500ms
+
+            // Track this interval for cleanup
+            this.activeIntervals.add(checkInterval);
         });
     }
 
@@ -3330,6 +3361,38 @@ export class SessionManager {
         }
 
         this.logger.debug('Auto-save stopped');
+    }
+
+    /**
+     * Destroy SessionManager and clean up all resources
+     * Call this when the page/app is unmounting to prevent memory leaks
+     */
+    destroy() {
+        // Stop auto-save
+        this.stopAutoSave();
+
+        // Clear all active intervals
+        if (this.activeIntervals) {
+            this.activeIntervals.forEach(interval => clearInterval(interval));
+            this.activeIntervals.clear();
+        }
+
+        // Clear listeners
+        if (this.listeners) {
+            Object.keys(this.listeners).forEach(key => {
+                this.listeners[key] = [];
+            });
+        }
+
+        // Clear caches
+        if (this.setCards) this.setCards.clear();
+        if (this.commonCardNames) this.commonCardNames.clear();
+        if (this.loadingPriceData) this.loadingPriceData.clear();
+
+        // Clear archived cards
+        if (this.archivedCards) this.archivedCards = [];
+
+        this.logger.info('SessionManager destroyed');
     }
 
     // Utility methods

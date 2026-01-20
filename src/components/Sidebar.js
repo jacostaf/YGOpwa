@@ -66,6 +66,7 @@ export default class Sidebar {
   }
 
   render() {
+    console.log('[Sidebar] render() called, context:', this.context, 'collections count:', this.contextData?.collections?.length || 0);
     const collapseIcon = this.isCollapsed ? 'chevron-right' : 'chevron-left';
     this.container.innerHTML = `
       <button class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" aria-label="${this.isCollapsed ? 'Expand' : 'Collapse'} sidebar">
@@ -75,6 +76,10 @@ export default class Sidebar {
       ${this.renderNavigation()}
       ${this.renderFooter()}
     `;
+
+    // Force reflow to ensure DOM updates are applied
+    void this.container.offsetHeight;
+    console.log('[Sidebar] render() complete, innerHTML length:', this.container.innerHTML.length);
 
     // Initialize Lucide icons after rendering
     setTimeout(() => {
@@ -151,15 +156,23 @@ export default class Sidebar {
   renderCollectionNavigation() {
     const collections = this.contextData?.collections || [];
     const activeCollection = this.contextData?.activeCollection || 'all';
+    console.log('[Sidebar] renderCollectionNavigation:', collections.length, 'collections:', collections.map(c => c.name));
 
-    const collectionsHtml = collections.map(col => `
-      <div class="nav-item ${activeCollection === col.id ? 'active' : ''}" 
+    const collectionsHtml = collections.length > 0 ? collections.map(col => `
+      <div class="nav-item collection-item ${activeCollection === col.id ? 'active' : ''}"
            data-collection-id="${col.id}">
           <i data-lucide="folder"></i>
           <span class="label">${col.name}</span>
           <span class="count">${col.count || 0}</span>
+          <button class="delete-collection-btn" data-collection-id="${col.id}" data-collection-name="${col.name}" title="Delete collection">
+              <i data-lucide="trash-2"></i>
+          </button>
       </div>
-    `).join('');
+    `).join('') : `
+      <div class="nav-item-empty">
+          <span>No collections yet</span>
+      </div>
+    `;
 
     return `
       <nav class="sidebar-nav" role="menu" aria-label="Collection navigation">
@@ -170,13 +183,13 @@ export default class Sidebar {
             </button>
 
             <div class="nav-label">Library</div>
-            <div class="nav-item ${activeCollection === 'all' ? 'active' : ''}" 
+            <div class="nav-item ${activeCollection === 'all' ? 'active' : ''}"
                  data-collection-id="all">
                 <i data-lucide="layers"></i>
                 <span>All Cards</span>
                 <span class="count">${this.contextData?.totalCards || 0}</span>
             </div>
-            <div class="nav-item ${activeCollection === 'favorites' ? 'active' : ''}" 
+            <div class="nav-item ${activeCollection === 'favorites' ? 'active' : ''}"
                  data-collection-id="favorites">
                 <i data-lucide="heart"></i>
                 <span>Favorites</span>
@@ -200,6 +213,8 @@ export default class Sidebar {
   }
 
   setContext(context, data = {}) {
+    console.log('[Sidebar] setContext called:', context, 'collections:', data?.collections?.length || 0, data?.collections?.map(c => c.name));
+
     this.context = context;
     this.contextData = data;
 
@@ -212,6 +227,11 @@ export default class Sidebar {
 
     this.render();
     this.attachEvents(); // Re-attach events for new elements
+
+    // Explicitly refresh icons after context change (don't rely on render's setTimeout)
+    IconLoader.refreshIcons();
+
+    console.log('[Sidebar] setContext complete, rendered', this.contextData?.collections?.length || 0, 'collections');
   }
 
   renderFooter() {
@@ -250,6 +270,11 @@ export default class Sidebar {
     if (this.context === 'collection') {
       this.container.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
+          // Don't trigger selection if clicking the delete button
+          if (e.target.closest('.delete-collection-btn')) {
+            return;
+          }
+
           const collectionId = e.currentTarget.getAttribute('data-collection-id');
 
           // Update active state visually
@@ -260,6 +285,20 @@ export default class Sidebar {
           this.dispatchEvent('collection:select', { collectionId });
 
           if (this.isMobile) this.close();
+        });
+      });
+
+      // Delete collection buttons
+      this.container.querySelectorAll('.delete-collection-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation(); // Prevent triggering nav-item click
+          const collectionId = btn.dataset.collectionId;
+          const collectionName = btn.dataset.collectionName;
+
+          // Show confirmation dialog
+          if (confirm(`Are you sure you want to delete "${collectionName}"?\n\nThis will remove the collection and all cards within it. This action cannot be undone.`)) {
+            this.dispatchEvent('collection:delete', { collectionId, collectionName });
+          }
         });
       });
 

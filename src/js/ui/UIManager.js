@@ -1661,8 +1661,8 @@ export class UIManager {
                 <div class="card-name">${cardName}</div>
                 <div class="card-rarity">${rarity}</div>
                 <div class="card-prices">
+                    ${tcgMarket > 0 ? `<div class="price tcg-market primary">Market: $${tcgMarket.toFixed(2)}</div>` : ''}
                     ${tcgLow > 0 ? `<div class="price tcg-low">Low: $${tcgLow.toFixed(2)}</div>` : ''}
-                    ${tcgMarket > 0 ? `<div class="price tcg-market">Market: $${tcgMarket.toFixed(2)}</div>` : ''}
                 </div>
             </div>
             ${quantity > 1 ? `<div class="quantity-badge">${quantity}</div>` : ''}
@@ -2426,9 +2426,10 @@ export class UIManager {
         const addedAt = card.addedAt || card.createdAt;
         const cardVariantId = card.cardVariantId || card.card_variant_id;
 
-        // Pricing data
-        const currentPrice = card.pricing?.currentPrice || card.tcgLow || 0;
-        const marketPrice = card.pricing?.marketPrice || card.tcgMarket || 0;
+        // Pricing data (currentPrice is now market price)
+        const currentPrice = card.pricing?.currentPrice || card.tcgMarket || 0;
+        const marketPrice = card.pricing?.marketPrice || card.tcgMarket || currentPrice;
+        const lowPrice = card.pricing?.lowPrice || card.tcgLow || 0;
         const midPrice = card.pricing?.midPrice || 0;
         const highPrice = card.pricing?.highPrice || 0;
         const totalValue = card.pricing?.totalValue || (currentPrice * quantity);
@@ -2495,13 +2496,13 @@ export class UIManager {
                         <div class="card-detail-pricing">
                             <h4>Current Pricing</h4>
                             <div class="pricing-grid">
-                                <div class="price-item">
-                                    <span class="price-label">TCG Low</span>
-                                    <span class="price-value">$${Number(currentPrice).toFixed(2)}</span>
-                                </div>
-                                <div class="price-item">
+                                <div class="price-item primary">
                                     <span class="price-label">Market</span>
                                     <span class="price-value">$${Number(marketPrice).toFixed(2)}</span>
+                                </div>
+                                <div class="price-item">
+                                    <span class="price-label">Low</span>
+                                    <span class="price-value">$${Number(lowPrice).toFixed(2)}</span>
                                 </div>
                                 <div class="price-item">
                                     <span class="price-label">Mid</span>

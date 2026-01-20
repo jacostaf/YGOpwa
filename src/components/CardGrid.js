@@ -6,7 +6,7 @@
  * - Two view modes: 'list' (row-style) and 'grid' (tile-style)
  * - Responsive grid layout (2-8 columns in grid mode)
  * - Card image display with hover effects
- * - Price information (TCG Low, TCG Market)
+ * - Price information (TCG Market as primary, TCG Low as secondary)
  * - Rarity badges
  * - Remove card functionality
  * - Empty state when no cards
@@ -38,6 +38,10 @@ export default class CardGrid {
     this.viewMode = options.viewMode || 'grid'; // 'grid' or 'list'
     this.sessionManager = options.sessionManager || null; // For image fallback
     this.element = null;
+
+    // Memory management: track resources for cleanup
+    this.imageElements = [];
+    this._handleContainerClick = null;
   }
 
   /**
@@ -70,6 +74,9 @@ export default class CardGrid {
     }
     container.style.setProperty('--card-width', `${this.cardSize}px`);
 
+    // Clear tracked images from previous render
+    this.imageElements = [];
+
     const fragment = document.createDocumentFragment();
     console.log('[CardGrid] Rendering view with', displayCards.length, 'cards');
     displayCards.forEach((card, index) => {
@@ -80,6 +87,29 @@ export default class CardGrid {
       }
     });
     container.appendChild(fragment);
+
+    // Event delegation: single handler for all card interactions
+    this._handleContainerClick = (e) => {
+      const cardEl = e.target.closest('.card-item');
+      if (!cardEl) return;
+
+      const index = parseInt(cardEl.dataset.cardIndex, 10);
+      if (isNaN(index)) return;
+
+      const favoriteBtn = e.target.closest('.card-favorite-btn');
+      const removeBtn = e.target.closest('[data-remove-index]');
+
+      if (favoriteBtn) {
+        e.stopPropagation();
+        this.handleToggleFavorite(index);
+      } else if (removeBtn) {
+        e.stopPropagation();
+        this.handleRemoveCard(index);
+      } else if (!e.target.closest('button')) {
+        this.handleCardClick(index);
+      }
+    };
+    container.addEventListener('click', this._handleContainerClick);
 
     return container;
   }
@@ -134,16 +164,17 @@ export default class CardGrid {
     const cardNumber = card.card?.number || card.cardNumber || '';
     const cardRarity = card.rarity?.name || card.rarity || '';
 
-    // Price mapping
-    const tcgLow = this.formatPrice(
-      card.pricing?.currentPrice ||
-      card.tcgLow ||
-      card.tcg_price
-    );
+    // Price mapping (market price is primary)
     const tcgMarket = this.formatPrice(
       card.pricing?.marketPrice ||
+      card.pricing?.currentPrice ||
       card.tcgMarket ||
       card.tcg_market_price
+    );
+    const tcgLow = this.formatPrice(
+      card.pricing?.lowPrice ||
+      card.tcgLow ||
+      card.tcg_price
     );
 
     const quantity = card.quantity > 1 ? `x${card.quantity}` : '';
@@ -168,6 +199,9 @@ export default class CardGrid {
     img.onerror = () => { img.onerror = null; img.src = this.getDefaultCardImage(); };
     imgWrapper.appendChild(img);
 
+    // Track image for cleanup
+    this.imageElements.push(img);
+
     // Quantity Badge
     if (quantity) {
       const qtyBadge = document.createElement('div');
@@ -176,11 +210,11 @@ export default class CardGrid {
       imgWrapper.appendChild(qtyBadge);
     }
 
-    // Price Overlay
-    if (tcgLow || tcgMarket) {
+    // Price Overlay (market price is primary)
+    if (tcgMarket || tcgLow) {
       const priceOverlay = document.createElement('div');
       priceOverlay.className = 'card-price-overlay';
-      priceOverlay.textContent = tcgLow || tcgMarket;
+      priceOverlay.textContent = tcgMarket || tcgLow;
       imgWrapper.appendChild(priceOverlay);
     }
 
@@ -192,20 +226,12 @@ export default class CardGrid {
       ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>'
       : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
     heartIcon.dataset.cardIndex = index;
-    heartIcon.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.handleToggleFavorite(index);
-    });
+    // Event handled by delegation on container
     imgWrapper.appendChild(heartIcon);
 
     cardEl.appendChild(imgWrapper);
 
-    // Card click handler (for detail modal)
-    cardEl.addEventListener('click', (e) => {
-      // Don't trigger if clicking on buttons
-      if (e.target.closest('button')) return;
-      this.handleCardClick(index);
-    });
+    // Card click handled by delegation on container
 
     // Info
     const infoDiv = document.createElement('div');
@@ -262,10 +288,7 @@ export default class CardGrid {
       btn.style.justifyContent = 'center';
       btn.style.cursor = 'pointer';
 
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.handleRemoveCard(index);
-      });
+      // Event handled by delegation on container
       cardEl.appendChild(btn);
     }
 
@@ -461,9 +484,26 @@ export default class CardGrid {
   }
 
   /**
-   * Destroy the card grid and clean up
+   * Destroy the card grid and clean up all resources
    */
   destroy() {
+    // Remove delegated event listener
+    if (this.element && this._handleContainerClick) {
+      this.element.removeEventListener('click', this._handleContainerClick);
+      this._handleContainerClick = null;
+    }
+
+    // Clean up image handlers to prevent memory leaks
+    if (this.imageElements && this.imageElements.length > 0) {
+      this.imageElements.forEach(img => {
+        img.onerror = null;
+        img.onload = null;
+        img.src = '';  // Cancel any pending loads
+      });
+      this.imageElements = [];
+    }
+
+    // Remove from DOM
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
