@@ -36,6 +36,11 @@ export class VoiceEngine {
         this.isRestarting = false; // Track if engine is auto-restarting
         this.restartTimeoutId = null; // Track pending restart to prevent race conditions
 
+        // Restart limiting (prevents infinite restart loops)
+        this.restartAttempts = 0;
+        this.maxRestartAttempts = 5;
+        this.restartDelay = 200; // Base delay in ms, increases with exponential backoff
+
         // Enhanced fantasy name processing components
         this.phoneticMapper = new PhoneticMapper(this.logger);
         this.confidenceManager = new AdaptiveConfidenceManager(this.storage, this.logger);
@@ -308,8 +313,25 @@ export class VoiceEngine {
 
                 // Auto-restart if user wants continuous listening and not manually stopped
                 if (this.shouldKeepListening && !this.isPaused && this.isInitialized) {
+                    // Check if max restart attempts reached (prevents infinite restart loops)
+                    if (this.restartAttempts >= this.maxRestartAttempts) {
+                        this.logger.warn(`Max restart attempts (${this.maxRestartAttempts}) reached, stopping voice recognition`);
+                        this.isListening = false;
+                        this.isRestarting = false;
+                        this.shouldKeepListening = false;
+                        this.restartAttempts = 0; // Reset for next manual start
+                        this.emitStatusChange('error');
+                        this.emitError({
+                            type: 'max_restarts',
+                            message: 'Voice recognition stopped after max restart attempts',
+                            isRetryable: true
+                        });
+                        return;
+                    }
+
                     // Mark as restarting but don't clear isListening flag yet to prevent UI flicker
                     this.isRestarting = true;
+                    this.restartAttempts++;
 
                     // Cancel any existing restart timeout
                     if (this.restartTimeoutId) {
@@ -317,7 +339,11 @@ export class VoiceEngine {
                         this.restartTimeoutId = null;
                     }
 
-                    // Quick restart with safety check
+                    // Exponential backoff delay (200ms, 300ms, 450ms, 675ms, 1012ms)
+                    const delay = Math.min(this.restartDelay * Math.pow(1.5, this.restartAttempts - 1), 2000);
+                    this.logger.debug(`Restart attempt ${this.restartAttempts}/${this.maxRestartAttempts}, delay: ${Math.round(delay)}ms`);
+
+                    // Restart with backoff delay
                     this.restartTimeoutId = setTimeout(() => {
                         this.restartTimeoutId = null;
 
@@ -337,7 +363,7 @@ export class VoiceEngine {
                             this.isRestarting = false;
                             this.emitStatusChange('ready');
                         }
-                    }, 50); // Minimal delay
+                    }, delay);
                 } else {
                     this.isListening = false;
                     this.isRestarting = false;
@@ -591,6 +617,9 @@ export class VoiceEngine {
                 return;
             }
 
+            // Reset restart attempts on successful result (voice recognition is working)
+            this.restartAttempts = 0;
+
             // Check if confidence is below threshold - but DON'T return early
             // Instead, flag the result so downstream handlers can show manual selection
             const isLowConfidence = confidence < (this.config.confidenceThreshold ?? 0);
@@ -714,6 +743,12 @@ export class VoiceEngine {
      * Attempt error recovery
      */
     async attemptRecovery() {
+        // Guard against concurrent recovery attempts (prevents stack overflow)
+        if (this.isRecovering) {
+            this.logger.debug('Recovery already in progress, skipping');
+            return;
+        }
+
         if (this.recognitionAttempts >= this.config.retryAttempts) {
             this.logger.error('Max retry attempts reached');
             this.isRecovering = false;
@@ -727,15 +762,17 @@ export class VoiceEngine {
         this.logger.info(`Attempting recovery (attempt ${this.recognitionAttempts}/${this.config.retryAttempts})`);
         this.emitStatusChange('recovering');
 
-        // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, this.config.retryDelay));
+        // Wait before retry with exponential backoff
+        const delay = this.config.retryDelay * Math.pow(1.5, this.recognitionAttempts - 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
 
         try {
             await this.startListening();
             this.isRecovering = false;
         } catch (error) {
             this.logger.error('Recovery attempt failed:', error);
-            this.attemptRecovery(); // Try again
+            this.isRecovering = false; // Reset before recursive call
+            await this.attemptRecovery(); // Try again with await
         }
     }
 
@@ -1362,25 +1399,60 @@ export class VoiceEngine {
         this.logger.debug('Error recovery mechanisms initialized');
     }
 
-    // Event handling methods
+    // Event handling methods (with duplicate prevention)
     onResult(callback) {
-        this.listeners.result.push(callback);
+        if (!this.listeners.result.includes(callback)) {
+            this.listeners.result.push(callback);
+        }
+    }
+
+    offResult(callback) {
+        const idx = this.listeners.result.indexOf(callback);
+        if (idx !== -1) this.listeners.result.splice(idx, 1);
     }
 
     onError(callback) {
-        this.listeners.error.push(callback);
+        if (!this.listeners.error.includes(callback)) {
+            this.listeners.error.push(callback);
+        }
+    }
+
+    offError(callback) {
+        const idx = this.listeners.error.indexOf(callback);
+        if (idx !== -1) this.listeners.error.splice(idx, 1);
     }
 
     onStatusChange(callback) {
-        this.listeners.statusChange.push(callback);
+        if (!this.listeners.statusChange.includes(callback)) {
+            this.listeners.statusChange.push(callback);
+        }
+    }
+
+    offStatusChange(callback) {
+        const idx = this.listeners.statusChange.indexOf(callback);
+        if (idx !== -1) this.listeners.statusChange.splice(idx, 1);
     }
 
     onPermissionChange(callback) {
-        this.listeners.permissionChange.push(callback);
+        if (!this.listeners.permissionChange.includes(callback)) {
+            this.listeners.permissionChange.push(callback);
+        }
+    }
+
+    offPermissionChange(callback) {
+        const idx = this.listeners.permissionChange.indexOf(callback);
+        if (idx !== -1) this.listeners.permissionChange.splice(idx, 1);
     }
 
     onInterimResult(callback) {
-        this.listeners.interimResult.push(callback);
+        if (!this.listeners.interimResult.includes(callback)) {
+            this.listeners.interimResult.push(callback);
+        }
+    }
+
+    offInterimResult(callback) {
+        const idx = this.listeners.interimResult.indexOf(callback);
+        if (idx !== -1) this.listeners.interimResult.splice(idx, 1);
     }
 
     /**

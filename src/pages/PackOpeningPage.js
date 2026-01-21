@@ -1390,16 +1390,16 @@ export default class PackOpeningPage {
       document.removeEventListener('click', this.boundHandlers.documentClick);
     }
 
-    // Remove voice engine listeners
+    // Remove voice engine listeners (use matching off* methods)
     if (this.voiceEngine) {
       if (this.boundHandlers.handleVoiceResult) {
-        this.voiceEngine.removeListener('result', this.boundHandlers.handleVoiceResult);
+        this.voiceEngine.offResult(this.boundHandlers.handleVoiceResult);
       }
       if (this.boundHandlers.handleVoiceStatus) {
-        this.voiceEngine.removeListener('statusChange', this.boundHandlers.handleVoiceStatus);
+        this.voiceEngine.offStatusChange(this.boundHandlers.handleVoiceStatus);
       }
       if (this.boundHandlers.handleVoiceError) {
-        this.voiceEngine.removeListener('error', this.boundHandlers.handleVoiceError);
+        this.voiceEngine.offError(this.boundHandlers.handleVoiceError);
       }
     }
 
@@ -1491,9 +1491,9 @@ export default class PackOpeningPage {
           });
         });
       });
-      // Observe container's parent (narrower scope than document.body)
-      const observeTarget = this.container.parentNode || document.body;
-      this.duplicateKiller.observe(observeTarget, { childList: true, subtree: true });
+      // Observe container only (no subtree to avoid performance issues)
+      // Only watch direct children of container to detect duplicate elements
+      this.duplicateKiller.observe(this.container, { childList: true, subtree: false });
 
       // Initialize services and load data
       await this.initialize();

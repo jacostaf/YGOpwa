@@ -17,7 +17,15 @@ export class AppErrorBoundary {
         this.errorHandlers = new Map();
         this.retryQueue = new Map();
         this.offlineMode = false;
-        
+
+        // Store bound references for event listeners (allows proper cleanup)
+        this._boundHandlers = {
+            onUnhandledRejection: this._handleUnhandledRejection.bind(this),
+            onGlobalError: this._handleGlobalError.bind(this),
+            onOnline: this.handleNetworkReconnect.bind(this),
+            onOffline: this.handleNetworkDisconnect.bind(this)
+        };
+
         // Error types and their configurations
         this.errorTypes = {
             VOICE_RECOGNITION_ERROR: {
@@ -65,27 +73,43 @@ export class AppErrorBoundary {
      * Set up global error handlers for unhandled errors
      */
     setupGlobalErrorHandlers() {
-        // Handle unhandled promise rejections
-        window.addEventListener('unhandledrejection', (event) => {
-            this.logger.error('Unhandled promise rejection:', event.reason);
-            this.handleError(event.reason, 'PROMISE_REJECTION');
-            event.preventDefault();
-        });
+        // Use stored bound references (allows removal in destroy())
+        window.addEventListener('unhandledrejection', this._boundHandlers.onUnhandledRejection);
+        window.addEventListener('error', this._boundHandlers.onGlobalError);
+        window.addEventListener('online', this._boundHandlers.onOnline);
+        window.addEventListener('offline', this._boundHandlers.onOffline);
+    }
 
-        // Handle global JavaScript errors
-        window.addEventListener('error', (event) => {
-            this.logger.error('Global JavaScript error:', event.error);
-            this.handleError(event.error, 'JAVASCRIPT_ERROR');
-        });
+    /**
+     * Internal handler for unhandled promise rejections
+     * @private
+     */
+    _handleUnhandledRejection(event) {
+        this.logger.error('Unhandled promise rejection:', event.reason);
+        this.handleError(event.reason, 'PROMISE_REJECTION');
+        event.preventDefault();
+    }
 
-        // Handle network status changes
-        window.addEventListener('online', () => {
-            this.handleNetworkReconnect();
-        });
+    /**
+     * Internal handler for global JavaScript errors
+     * @private
+     */
+    _handleGlobalError(event) {
+        this.logger.error('Global JavaScript error:', event.error);
+        this.handleError(event.error, 'JAVASCRIPT_ERROR');
+    }
 
-        window.addEventListener('offline', () => {
-            this.handleNetworkDisconnect();
-        });
+    /**
+     * Clean up global event listeners
+     * Should be called when the error boundary is no longer needed
+     */
+    destroy() {
+        window.removeEventListener('unhandledrejection', this._boundHandlers.onUnhandledRejection);
+        window.removeEventListener('error', this._boundHandlers.onGlobalError);
+        window.removeEventListener('online', this._boundHandlers.onOnline);
+        window.removeEventListener('offline', this._boundHandlers.onOffline);
+        this._boundHandlers = {};
+        this.logger.info('ErrorBoundary destroyed and listeners removed');
     }
 
     /**

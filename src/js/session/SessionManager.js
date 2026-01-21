@@ -1081,6 +1081,14 @@ export class SessionManager {
                 if (cardsToArchive > 0) {
                     const archived = this.currentSession.cards.splice(0, cardsToArchive);
                     this.archivedCards.push(...archived);
+
+                    // Limit archived cards to prevent unbounded memory growth
+                    const MAX_ARCHIVED_CARDS = 500;
+                    if (this.archivedCards.length > MAX_ARCHIVED_CARDS) {
+                        const overflow = this.archivedCards.length - MAX_ARCHIVED_CARDS;
+                        this.archivedCards.splice(0, overflow);
+                        this.logger.debug(`Trimmed ${overflow} oldest archived cards to stay under limit`);
+                    }
                     this.logger.debug(`Archived ${cardsToArchive} old cards (total archived: ${this.archivedCards.length})`);
                 }
             }
@@ -1503,27 +1511,21 @@ export class SessionManager {
         let extractedRarity = null;
         let extractedArtVariant = null;
 
-        console.log(`🔵 VOICE PROCESSING PIPELINE START`);
-        console.log(`🔵 Original transcript: "${transcript}"`);
-        console.log(`🔵 Enhanced transcript: "${processedTranscript}"`);
-        console.log(`🔵 Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
+        // Voice processing pipeline (use logger.debug instead of console.log to reduce overhead)
+        this.logger.debug(`Voice processing: "${transcript}" → "${processedTranscript}"`);
 
         // Extract rarity information
-        console.log(`🔵 STEP 1: Rarity extraction from: "${processedText}"`);
         const rarityResult = this.extractRarityFromVoice(processedText);
         processedText = rarityResult.cardName;
         extractedRarity = rarityResult.rarity;
-        console.log(`🔵 After rarity extraction: "${processedText}" (extracted rarity: "${extractedRarity}")`);
 
         // Extract art variant information
-        console.log(`🔵 STEP 2: Art variant extraction from: "${processedText}"`);
         const artResult = this.extractArtVariantFromVoice(processedText);
         processedText = artResult.cardName;
         extractedArtVariant = artResult.artVariant;
-        console.log(`🔵 After art variant extraction: "${processedText}" (extracted variant: "${extractedArtVariant}")`);
 
         const cleanTranscript = processedText.toLowerCase().trim();
-        console.log(`🔵 FINAL: Clean transcript for search: "${cleanTranscript}"`);
+        this.logger.debug(`Voice pipeline complete: "${cleanTranscript}" (rarity: ${extractedRarity}, art: ${extractedArtVariant})`);
 
         this.logger.debug(`[VOICE PROCESSING] Input transcript: "${processedTranscript}"`);
         this.logger.debug(`[VOICE PROCESSING] Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
