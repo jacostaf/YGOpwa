@@ -668,10 +668,14 @@ export class SessionManager {
                 throw new Error(errorMsg);
             }
 
-            // Cache the results
-            this.setCards.set(setIdentifier, data.data.cards);
+            // Pre-compute normalized names and cache
+            const cards = data.data.cards.map(card => ({
+                ...card,
+                _normalizedName: this.normalizeCardName(card.name)
+            }));
+            this.setCards.set(setIdentifier, cards);
 
-            return data.data.cards;
+            return cards;
 
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -907,12 +911,13 @@ export class SessionManager {
             const setCode = set?.code || set?.set_code || setId;
             const setName = set?.name || set?.set_name || setId;
 
-            // Tag each card with its source set for later reference
+            // Tag each card with its source set and pre-compute normalized name
             return cards.map(card => ({
                 ...card,
                 sourceSetId: setId,
                 sourceSetCode: setCode,
-                sourceSetName: setName
+                sourceSetName: setName,
+                _normalizedName: this.normalizeCardName(card.name)
             }));
         });
 
@@ -1163,25 +1168,63 @@ export class SessionManager {
             }
         }
 
-        // Try to match each word (or 2-word combo) against known set codes
-        for (let i = 0; i < words.length; i++) {
-            const word = words[i].toUpperCase();
+        // Pass 1: Join consecutive single-letter words into candidate set codes
+        // e.g., "s u d a primite dragon" → try "SUDA" as a set code
+        let i = 0;
+        while (i < words.length) {
+            if (words[i].length === 1 && /[a-zA-Z]/.test(words[i])) {
+                let letterRun = words[i];
+                let runEnd = i + 1;
+                while (runEnd < words.length && words[runEnd].length === 1 && /[a-zA-Z]/.test(words[runEnd])) {
+                    letterRun += words[runEnd];
+                    runEnd++;
+                }
+                if (letterRun.length >= 2) {
+                    const candidate = letterRun.toUpperCase();
+                    // Exact match
+                    if (setCodeMap.has(candidate)) {
+                        const remaining = [...words.slice(0, i), ...words.slice(runEnd)].join(' ').trim();
+                        this.logger.debug(`[SET EXTRACT] Joined letters "${letterRun}" → set code "${candidate}"`);
+                        return { cardName: remaining, setCode: candidate };
+                    }
+                    // Fuzzy match
+                    for (const [code] of setCodeMap) {
+                        const similarity = this.calculateSimilarity(candidate.toLowerCase(), code.toLowerCase());
+                        if (similarity >= 0.75) {
+                            const remaining = [...words.slice(0, i), ...words.slice(runEnd)].join(' ').trim();
+                            this.logger.debug(`[SET EXTRACT] Joined letters "${letterRun}" fuzzy → "${code}" (${similarity})`);
+                            return { cardName: remaining, setCode: code };
+                        }
+                    }
+                }
+            }
+            i++;
+        }
+
+        // Pass 2: Match individual words against known set codes
+        for (let j = 0; j < words.length; j++) {
+            const word = words[j].toUpperCase();
+
+            // Skip single-character words (too ambiguous)
+            if (word.length < 2) continue;
 
             // Direct match
             if (setCodeMap.has(word)) {
                 const matchedCode = setCodeMap.get(word);
-                const remaining = [...words.slice(0, i), ...words.slice(i + 1)].join(' ').trim();
+                const remaining = [...words.slice(0, j), ...words.slice(j + 1)].join(' ').trim();
                 this.logger.debug(`[SET EXTRACT] Found set code "${matchedCode}" in voice text`);
                 return { cardName: remaining, setCode: matchedCode };
             }
 
-            // Fuzzy match for close set codes (e.g., "BLM" → "BLMM")
-            for (const [code] of setCodeMap) {
-                const similarity = this.calculateSimilarity(word.toLowerCase(), code.toLowerCase());
-                if (similarity >= 0.75 && word.length >= 2) {
-                    const remaining = [...words.slice(0, i), ...words.slice(i + 1)].join(' ').trim();
-                    this.logger.debug(`[SET EXTRACT] Fuzzy matched set code "${word}" → "${code}" (similarity: ${similarity})`);
-                    return { cardName: remaining, setCode: code };
+            // Fuzzy match (require length >= 3 to avoid false matches on short words)
+            if (word.length >= 3) {
+                for (const [code] of setCodeMap) {
+                    const similarity = this.calculateSimilarity(word.toLowerCase(), code.toLowerCase());
+                    if (similarity >= 0.75) {
+                        const remaining = [...words.slice(0, j), ...words.slice(j + 1)].join(' ').trim();
+                        this.logger.debug(`[SET EXTRACT] Fuzzy matched set code "${word}" → "${code}" (similarity: ${similarity})`);
+                        return { cardName: remaining, setCode: code };
+                    }
                 }
             }
         }
@@ -1752,7 +1795,12 @@ export class SessionManager {
         // Step 1: Extract entities using flexible or legacy extraction
         const extraction = this.extractEntitiesFromVoice(processedTranscript);
 
-        const processedText = extraction.cardName;
+        // Strip parenthesized rarity from card name (e.g., "Primite Dragon Ether Beryl (Quarter Century Secret Rare)" → "Primite Dragon Ether Beryl")
+        // Database entries include rarity in the name, but we match card names separately from rarity
+        const processedText = (extraction.cardName || '')
+            .replace(/\s*\([^)]*(?:rare|secret|ultra|super|common|ghost|starlight|ultimate|collector|prismatic|gold|platinum|silver)[^)]*\)\s*$/i, '')
+            .replace(/\s*-\s*(?:Secret Rare|Ultra Rare|Super Rare|Rare|Common|Quarter Century Secret Rare|Starlight Rare|Ghost Rare|Collector's Rare|Prismatic Secret Rare|Ultimate Rare|Gold Rare|Platinum Rare|Silver Rare).*$/i, '')
+            .trim() || extraction.cardName;
         const extractedRarity = extraction.rarity;
         const extractedArtVariant = extraction.artVariant;
         // Use set code from extraction if found, otherwise fall back to early extraction
@@ -2028,7 +2076,7 @@ export class SessionManager {
 
         // First pass: Find matching card names
         for (const card of setCards) {
-            const normalizedCardName = this.normalizeCardName(card.name);
+            const normalizedCardName = card._normalizedName || this.normalizeCardName(card.name);
 
             // Multiple matching strategies
             let confidence = 0;
@@ -2071,124 +2119,75 @@ export class SessionManager {
                 .trim();
         };
 
+        // Pre-build base name → cards index for efficient second pass lookups
+        const baseNameIndex = new Map();
+        for (const card of setCards) {
+            const baseName = extractBaseCardName(card.name).toLowerCase();
+            if (!baseNameIndex.has(baseName)) {
+                baseNameIndex.set(baseName, []);
+            }
+            baseNameIndex.get(baseName).push(card);
+        }
+
         // Second pass: Create variants for each matching card name with different rarities
-        // Following the logic from oldIteration.py for proper rarity variant handling
         const allVariants = [];
         const processedBaseNames = new Set();
+        const addedVariantKeys = new Set();
 
         for (const match of initialMatches) {
             const baseCardName = extractBaseCardName(match.name);
+            const baseKey = baseCardName.toLowerCase();
 
-            // Skip if we already processed this base card name
-            if (processedBaseNames.has(baseCardName.toLowerCase())) {
-                continue;
-            }
-            processedBaseNames.add(baseCardName.toLowerCase());
+            if (processedBaseNames.has(baseKey)) continue;
+            processedBaseNames.add(baseKey);
 
-            // Find all cards with the same base name (removing rarity/variant info)
-            const matchingCards = setCards.filter(card => {
-                const cardBaseName = extractBaseCardName(card.name);
-                return cardBaseName.toLowerCase() === baseCardName.toLowerCase();
-            });
+            const matchingCards = baseNameIndex.get(baseKey) || [];
 
-            this.logger.debug(`[VARIANT] Found ${matchingCards.length} cards with base name: ${baseCardName}`);
-
-            // DEBUG: Log all matching cards with their rarities
-            if (matchingCards.length > 0) {
-                this.logger.debug(`[VARIANT DEBUG] All cards with base name "${baseCardName}":`,
-                    matchingCards.map(c => `"${c.name}" - ${c.rarity} [${c.set_code}] ID:${c.id}`)
-                );
-            }
-
-            // For each matching card, create variants (TCGcsv structure: each card is already a variant)
             for (const card of matchingCards) {
-                this.logger.debug(`[VARIANT] Processing card "${card.name}" with rarity: "${card.rarity}"`);
-                this.logger.debug(`[VARIANT] Card structure - name: "${card.name}", id: ${card.id}, rarity: "${card.rarity}"`);
-
-                // In TCGcsv structure, each card already has its rarity and set info directly
-                const rarity = card.rarity || 'Common'; // Default to Common if no rarity
-                // For multi-set mode, use sourceSetCode if available; otherwise fall back to card/currentSet
+                const rarity = card.rarity || 'Common';
                 const setCode = card.sourceSetCode || card.set_code || this.currentSet?.abbreviation || this.currentSet?.code || 'Unknown';
                 const setName = card.sourceSetName || this.currentSet?.name || 'Unknown Set';
 
                 // Filter out cards with invalid rarity
-                if (!rarity ||
-                    typeof rarity !== 'string' ||
-                    rarity.trim() === '' ||
-                    rarity.toLowerCase().trim() === 'unknown' ||
-                    rarity.toLowerCase().trim() === 'n/a' ||
-                    rarity.toLowerCase().trim() === 'undefined' ||
-                    rarity.toLowerCase().trim() === 'null') {
-                    this.logger.debug(`[VARIANT] Skipping card with invalid rarity: "${rarity}" for card: ${card.name}`);
+                const rarityLower = typeof rarity === 'string' ? rarity.toLowerCase().trim() : '';
+                if (!rarityLower || rarityLower === 'unknown' || rarityLower === 'n/a' || rarityLower === 'undefined' || rarityLower === 'null') {
                     continue;
                 }
-
-                this.logger.debug(`[VARIANT] Processing valid card: rarity="${rarity}", setCode="${setCode}" for card: ${card.name}`);
 
                 // Apply rarity filtering when extractedRarity is provided
                 let confidence = match.confidence;
                 if (extractedRarity) {
                     const rarityScore = this.calculateRarityScore(extractedRarity, rarity);
-                    this.logger.debug(`[VARIANT] Rarity matching: "${extractedRarity}" vs "${rarity}" = ${rarityScore}%`);
-
-                    // Skip variants that don't match the extracted rarity well enough
-                    if (rarityScore < 20) {
-                        this.logger.debug(`[VARIANT] Skipping variant due to poor rarity match: ${rarity} (score: ${rarityScore})`);
-                        continue;
-                    }
-
-                    // Use weighted confidence: 75% name + 25% rarity
-                    const nameScore = match.confidence;
-                    confidence = (nameScore * 0.75) + (rarityScore * 0.25);
-                    this.logger.debug(`[VARIANT] Weighted confidence: ${nameScore}% name + ${rarityScore}% rarity = ${confidence}%`);
+                    if (rarityScore < 20) continue;
+                    confidence = (match.confidence * 0.75) + (rarityScore * 0.25);
                 } else {
-                    // When no rarity is specified, slightly adjust confidence based on rarity commonness
-                    // This ensures variants have different confidence scores for better UI display
                     const rarityBonus = this.getRarityDisplayPriority(rarity);
-                    confidence = match.confidence + (rarityBonus * 0.01); // Very small adjustment
-                    this.logger.debug(`[VARIANT] No rarity specified, base confidence: ${match.confidence}%, adjusted: ${confidence}% (rarity bonus: ${rarityBonus})`);
+                    confidence = match.confidence + (rarityBonus * 0.01);
                 }
 
                 const variantKey = `${card.name}_${rarity}_${setCode}`;
+                if (addedVariantKeys.has(variantKey)) continue;
+                addedVariantKeys.add(variantKey);
 
-                // Check if we already added this exact variant
-                if (!allVariants.some(v => v.variantKey === variantKey)) {
-                    this.logger.debug(`[VARIANT] Created variant: ${card.name} - ${rarity} [${setCode}] (${confidence}%)`);
-                    const newVariant = {
-                        ...card,
-                        confidence: confidence,
-                        method: match.method,
-                        transcript: match.transcript,
-                        variantKey: variantKey,
-                        // Use the card's direct rarity and set info
-                        displayRarity: rarity,
-                        setInfo: {
-                            setCode: setCode,
-                            setName: setName
-                        },
-                        // Preserve source set info for multi-set sessions
-                        sourceSetId: card.sourceSetId,
-                        sourceSetCode: card.sourceSetCode,
-                        sourceSetName: card.sourceSetName
-                    };
-
-                    this.logger.debug(`[VARIANT] Variant object displayRarity: "${newVariant.displayRarity}", setInfo:`, newVariant.setInfo);
-                    allVariants.push(newVariant);
-                } else {
-                    this.logger.debug(`[VARIANT] Skipped duplicate variant: ${variantKey}`);
-                }
+                allVariants.push({
+                    ...card,
+                    confidence,
+                    method: match.method,
+                    transcript: match.transcript,
+                    variantKey,
+                    displayRarity: rarity,
+                    setInfo: { setCode, setName },
+                    sourceSetId: card.sourceSetId,
+                    sourceSetCode: card.sourceSetCode,
+                    sourceSetName: card.sourceSetName
+                });
             }
         }
 
         // Sort by confidence (highest first) and ensure unique confidence scores
         const sortedVariants = allVariants.sort((a, b) => b.confidence - a.confidence);
 
-        this.logger.debug(`[VARIANT] Pre-uniqueness variants:`, sortedVariants.map(v => `${v.name} - ${v.displayRarity} [${v.setInfo?.setCode}] (${v.confidence})`));
-
-        // Ensure unique confidence scores to avoid ties (similar to oldIteration.py)
         this.ensureUniqueConfidenceScores(sortedVariants);
-
-        this.logger.debug(`[VARIANT] Final variants:`, sortedVariants.map(v => `${v.name} - ${v.displayRarity} [${v.setInfo?.setCode}] (${v.confidence})`));
 
         this.logger.info(`Generated ${sortedVariants.length} card variants for transcript: "${transcript}"`);
 
@@ -2471,13 +2470,8 @@ export class SessionManager {
      * Based on the logic from oldIteration.py - fixed floating point precision issues
      */
     ensureUniqueConfidenceScores(variants) {
-        if (!variants || variants.length === 0) {
-            return;
-        }
+        if (!variants || variants.length === 0) return;
 
-        this.logger.debug(`[CONFIDENCE] Starting uniqueness adjustment for ${variants.length} variants`);
-
-        // Track used confidence scores (exactly like Python logic)
         const usedScores = new Set();
 
         for (let i = 0; i < variants.length; i++) {
@@ -2485,18 +2479,11 @@ export class SessionManager {
             const originalConfidence = variant.confidence;
             let confidence = originalConfidence;
 
-            this.logger.debug(`[CONFIDENCE] Processing variant ${i + 1}: "${variant.name}" - Original confidence: ${originalConfidence.toFixed(1)}%`);
-
-            // If this confidence is already used, find a unique one (exactly like Python)
-            // Fix floating point precision issues by using integer arithmetic
             let confidenceRounded = Math.round(confidence * 10) / 10;
             while (usedScores.has(confidenceRounded)) {
                 confidence -= 0.1;
-                // Use proper rounding to avoid floating point precision issues
                 confidenceRounded = Math.round(confidence * 10) / 10;
-                this.logger.debug(`[CONFIDENCE] Confidence ${confidenceRounded} already used, trying ${confidenceRounded}`);
 
-                // Ensure we don't go below reasonable bounds
                 if (confidenceRounded < 10) {
                     confidence = originalConfidence + 0.1;
                     confidenceRounded = Math.round(confidence * 10) / 10;
@@ -2508,19 +2495,13 @@ export class SessionManager {
                 }
             }
 
-            // Round to one decimal place and update (exactly like Python)
-            confidence = confidenceRounded;
-            variant.confidence = confidence;
-            usedScores.add(confidence);
+            variant.confidence = confidenceRounded;
+            usedScores.add(confidenceRounded);
 
-            this.logger.debug(`[CONFIDENCE] Final confidence for "${variant.name}": ${confidence}%`);
-
-            if (Math.abs(confidence - originalConfidence) > 0.05) { // Use tolerance for floating point comparison
-                this.logger.info(`[CONFIDENCE] Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidence.toFixed(1)}%`);
+            if (Math.abs(confidenceRounded - originalConfidence) > 0.05) {
+                this.logger.info(`[CONFIDENCE] Adjusted confidence for uniqueness: ${variant.name} ${originalConfidence.toFixed(1)}% -> ${confidenceRounded.toFixed(1)}%`);
             }
         }
-
-        this.logger.debug(`[CONFIDENCE] Used scores: ${Array.from(usedScores).sort((a, b) => b - a).join(', ')}`);
     }
 
     /**
@@ -2528,19 +2509,11 @@ export class SessionManager {
      * Handles common variations in Yu-Gi-Oh card naming
      */
     normalizeCardName(name) {
-        const original = name;
-        const normalized = name.toLowerCase()
+        return name.toLowerCase()
             .replace(/[\s-]+/g, ' ')  // Normalize spaces and hyphens
             .replace(/[^a-z0-9\s]/g, '') // Remove special characters except spaces and numbers
             .replace(/\s+/g, ' ')     // Normalize multiple spaces
             .trim();
-
-        // Debug logging to see what's happening to card names
-        if (original !== normalized) {
-            console.log(`🔍 NORMALIZE: "${original}" → "${normalized}"`);
-        }
-
-        return normalized;
     }
 
 
@@ -2648,6 +2621,11 @@ export class SessionManager {
             shorter.endsWith(longer) || shorter.startsWith(longer)) {
             const coverage = shorter.length / longer.length;
             return Math.min(0.80 + (coverage * 0.20), 1.0); // Min 80% for prefix/suffix matches
+        }
+
+        // Skip expensive Levenshtein if strings differ too much in length
+        if (longer.length > shorter.length * 2.5 || shorter.length < 3) {
+            return shorter.length / longer.length;
         }
 
         // Fall back to Levenshtein distance for other cases
