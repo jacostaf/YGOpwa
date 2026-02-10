@@ -240,6 +240,35 @@ export default class SettingsPage {
             <div class="setting-item" id="setting-autoExtractArtVariant">
               <!-- Toggle will be mounted here -->
             </div>
+
+            <!-- 10. Auto-extract Set -->
+            <div class="setting-item" id="setting-autoExtractSet">
+              <!-- Toggle will be mounted here -->
+            </div>
+
+            <!-- 11. Flexible Extraction (Order-Independent) -->
+            <div class="setting-item" id="setting-useFlexibleExtraction">
+              <!-- Toggle will be mounted here -->
+            </div>
+
+            <!-- 12. Extraction Confidence Threshold -->
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="extractionConfidenceThreshold" class="setting-label">Extraction Confidence Threshold</label>
+                <p class="setting-description">Minimum confidence to auto-add cards (0.5-1.0). Below this shows confirmation dialog.</p>
+              </div>
+              <div class="setting-control">
+                <input
+                  type="number"
+                  id="extractionConfidenceThreshold"
+                  class="setting-input-number"
+                  min="0.5"
+                  max="1.0"
+                  step="0.05"
+                  value="${this.currentSettings.extractionConfidenceThreshold || 0.75}"
+                >
+              </div>
+            </div>
           </div>
         </div>
 
@@ -320,6 +349,7 @@ export default class SettingsPage {
               <li><strong>Auto-confirm:</strong> Automatically adds cards when confidence is above the threshold</li>
               <li><strong>Continuous Listening:</strong> Keeps microphone active for multiple recognitions</li>
               <li><strong>Interim Results:</strong> Shows real-time transcription as you speak</li>
+              <li><strong>Flexible Extraction:</strong> Say card name, rarity, set in any order ("LP25 secret rare blue eyes")</li>
               <li><strong>Settings are saved locally</strong> and persist across sessions</li>
             </ul>
           </div>
@@ -402,7 +432,10 @@ export default class SettingsPage {
       voiceInterimResults: true,
       liveTranscript: true,
       autoExtractRarity: false,
-      autoExtractArtVariant: false
+      autoExtractArtVariant: false,
+      autoExtractSet: false,
+      useFlexibleExtraction: false,
+      extractionConfidenceThreshold: 0.75
     };
   }
 
@@ -449,6 +482,18 @@ export default class SettingsPage {
         description: 'Automatically detect and extract art variant info (e.g., "1st Edition")'
       },
       {
+        id: 'setting-autoExtractSet',
+        key: 'autoExtractSet',
+        label: 'Auto-extract Set',
+        description: 'Automatically detect and extract set code/name from voice input'
+      },
+      {
+        id: 'setting-useFlexibleExtraction',
+        key: 'useFlexibleExtraction',
+        label: 'Flexible Extraction',
+        description: 'Extract name, rarity, set, and art from voice in any order (replaces individual auto-extract options above)'
+      },
+      {
         id: 'setting-sessionAutoSave',
         key: 'sessionAutoSave',
         label: 'Auto-save Sessions',
@@ -473,6 +518,11 @@ export default class SettingsPage {
         this.toggleSwitches[config.key] = toggle;
       }
     });
+
+    // Apply initial state: grey out auto-extract toggles if flexible extraction is on
+    if (this.currentSettings.useFlexibleExtraction) {
+      this.updateAutoExtractToggles(true);
+    }
   }
 
   /**
@@ -528,11 +578,41 @@ export default class SettingsPage {
     // Update current settings
     this.currentSettings[name] = checked;
 
+    // When flexible extraction is toggled, disable/enable individual auto-extract toggles
+    if (name === 'useFlexibleExtraction') {
+      this.updateAutoExtractToggles(checked);
+    }
+
     // Mark as changed
     this.markAsChanged();
 
     // Apply preview (some settings can be previewed immediately)
     this.applyPreview();
+  }
+
+  /**
+   * Enable/disable individual auto-extract toggles based on flexible extraction state
+   */
+  updateAutoExtractToggles(flexEnabled) {
+    const dependentKeys = ['autoExtractRarity', 'autoExtractArtVariant', 'autoExtractSet'];
+
+    dependentKeys.forEach(key => {
+      const toggle = this.toggleSwitches[key];
+      if (!toggle) return;
+
+      const container = this.container.querySelector(`#setting-${key}`);
+      if (!container) return;
+
+      if (flexEnabled) {
+        // Disable and grey out — flex handles everything
+        container.style.opacity = '0.4';
+        container.style.pointerEvents = 'none';
+      } else {
+        // Re-enable
+        container.style.opacity = '1';
+        container.style.pointerEvents = 'auto';
+      }
+    });
   }
 
   /**
@@ -569,11 +649,14 @@ export default class SettingsPage {
   handleInputChange(e) {
     const input = e.target;
     const id = input.id;
-    let value = parseInt(input.value);
+
+    // Use parseFloat for decimal inputs, parseInt for integers
+    const isDecimalInput = id === 'extractionConfidenceThreshold';
+    let value = isDecimalInput ? parseFloat(input.value) : parseInt(input.value);
 
     // Validate value
-    const min = parseInt(input.min);
-    const max = parseInt(input.max);
+    const min = parseFloat(input.min);
+    const max = parseFloat(input.max);
 
     if (isNaN(value)) {
       value = min;
@@ -817,6 +900,14 @@ export default class SettingsPage {
       if (!validThemes.includes(this.currentSettings.theme)) {
         console.error('Invalid theme:', this.currentSettings.theme);
         return false;
+      }
+
+      // Validate extraction confidence threshold (0.5-1.0)
+      if (this.currentSettings.extractionConfidenceThreshold !== undefined) {
+        if (this.currentSettings.extractionConfidenceThreshold < 0.5 || this.currentSettings.extractionConfidenceThreshold > 1) {
+          console.error('Invalid extractionConfidenceThreshold:', this.currentSettings.extractionConfidenceThreshold);
+          return false;
+        }
       }
 
       return true;

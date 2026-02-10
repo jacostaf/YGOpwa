@@ -13,6 +13,22 @@
 import { Logger } from '../utils/Logger.js';
 import { config } from '../utils/config.js';
 
+// Lazy imports for flexible extraction (only loaded when enabled)
+let createTranscriptExtractor = null;
+let vocabularyStore = null;
+
+async function loadFlexibleExtractionModules() {
+    if (!createTranscriptExtractor) {
+        const [extractorModule, storeModule] = await Promise.all([
+            import('../voice/TranscriptExtractor.js'),
+            import('../voice/VocabularyStore.js')
+        ]);
+        createTranscriptExtractor = extractorModule.createTranscriptExtractor;
+        vocabularyStore = storeModule.vocabularyStore;
+    }
+    return { createTranscriptExtractor, vocabularyStore };
+}
+
 const isTestEnvironment = typeof import.meta !== 'undefined' && Boolean(import.meta.vitest);
 
 export class SessionManager {
@@ -27,8 +43,14 @@ export class SessionManager {
         // Settings (will be updated from app)
         this.settings = {
             autoExtractRarity: false,
-            autoExtractArtVariant: false
+            autoExtractArtVariant: false,
+            autoExtractSet: false,
+            extractionConfidenceThreshold: 0.75, // User-configurable threshold
+            useFlexibleExtraction: false // Use new token-based extractor (opt-in)
         };
+
+        // Transcript extractor for flexible voice entity extraction
+        this.transcriptExtractor = null;
 
         // Session state
         this.currentSession = null;
@@ -769,6 +791,11 @@ export class SessionManager {
             // Load set-specific card data
             await this.loadSetCards(set.id);
 
+            // Initialize transcript extractor for flexible voice extraction
+            if (this.settings.useFlexibleExtraction) {
+                await this.initializeTranscriptExtractor([set.code]);
+            }
+
             // Start auto-save if enabled
             if (this.config.autoSave) {
                 this.startAutoSave();
@@ -837,6 +864,12 @@ export class SessionManager {
 
             // Load cards for all sets and merge
             await this.loadMultiSetCards(setIds);
+
+            // Initialize transcript extractor for flexible voice extraction with all set codes
+            if (this.settings.useFlexibleExtraction) {
+                const setCodes = sets.map(s => s.code || s.set_code);
+                await this.initializeTranscriptExtractor(setCodes);
+            }
 
             // Start auto-save if enabled
             if (this.config.autoSave) {
@@ -957,6 +990,203 @@ export class SessionManager {
             this.logger.error('Failed to stop session:', error);
             throw error;
         }
+    }
+
+    /**
+     * Initialize the transcript extractor for flexible voice entity extraction.
+     * @param {string[]} setCodes - Set codes to preload card names for
+     */
+    async initializeTranscriptExtractor(setCodes = []) {
+        try {
+            this.logger.info(`[TranscriptExtractor] Initializing with set codes: ${setCodes.join(', ')}`);
+
+            // Lazy load the flexible extraction modules
+            const { createTranscriptExtractor: createExtractor, vocabularyStore: vocabStore } =
+                await loadFlexibleExtractionModules();
+
+            // Initialize vocabulary store if needed
+            if (!vocabStore.initialized) {
+                await vocabStore.initialize();
+            }
+
+            // Create the extractor with session context
+            this.transcriptExtractor = await createExtractor({
+                activeSetCodes: setCodes,
+                contextualBoosts: {
+                    cardNamesInSet: 0.15,
+                    activeSetCode: 0.2,
+                },
+                logger: this.logger,
+            });
+
+            this.logger.info('[TranscriptExtractor] Initialized successfully');
+        } catch (error) {
+            this.logger.error('[TranscriptExtractor] Initialization failed:', error);
+            // Don't throw - fall back to legacy extraction
+            this.transcriptExtractor = null;
+        }
+    }
+
+    /**
+     * Extract entities from voice transcript using flexible extraction.
+     * Falls back to legacy regex extraction if flexible extraction is disabled or fails.
+     * @param {string} transcript - Voice transcript
+     * @returns {Object} Extraction result with cardName, rarity, setCode, artVariant, confidence
+     */
+    extractEntitiesFromVoice(transcript) {
+        // Check if flexible extraction is available and enabled
+        const useFlexible = this.settings.useFlexibleExtraction && this.transcriptExtractor;
+
+        // If flex is enabled but extractor not initialized, try lazy init
+        if (this.settings.useFlexibleExtraction && !this.transcriptExtractor && !this._flexInitPending) {
+            this._flexInitPending = true;
+            const setCodes = this.currentSession?.isMultiSet
+                ? (this.currentSession.sets || []).map(s => s.code || s.set_code)
+                : this.currentSet ? [this.currentSet.abbreviation || this.currentSet.code] : [];
+            this.initializeTranscriptExtractor(setCodes).finally(() => {
+                this._flexInitPending = false;
+            });
+            this.logger.info('[FlexExtract] Lazy initialization triggered, using legacy for this call');
+        }
+
+        if (useFlexible) {
+            try {
+                const result = this.transcriptExtractor.extract(transcript);
+
+                this.logger.debug('[FlexExtract] Result:', {
+                    cardName: result.cardName?.value,
+                    rarity: result.rarity?.value,
+                    setCode: result.setCode?.value,
+                    artVariant: result.artVariant?.value,
+                    confidence: result.overallConfidence,
+                });
+
+                // Flexible extraction always extracts all entities.
+                // If no card name was found in vocabulary, use unmatched tokens
+                // (i.e. transcript minus rarity/set/art tokens) as the card name search query
+                let cardName = result.cardName?.value;
+                if (!cardName && result.unmatchedText.length > 0) {
+                    cardName = result.unmatchedText.join(' ');
+                }
+
+                return {
+                    cardName: cardName || transcript,
+                    rarity: result.rarity?.value || null,
+                    setCode: result.setCode?.value || null,
+                    artVariant: result.artVariant?.value || null,
+                    confidence: result.overallConfidence,
+                    needsConfirmation: result.overallConfidence < this.settings.extractionConfidenceThreshold,
+                    metadata: result.metadata,
+                    // For multi-set disambiguation
+                    ambiguousSets: result.metadata?.ambiguousSets,
+                    needsSetConfirmation: result.metadata?.needsSetConfirmation,
+                };
+            } catch (error) {
+                this.logger.warn('[FlexExtract] Error, falling back to legacy:', error);
+            }
+        }
+
+        // Fall back to legacy extraction
+        return this.extractEntitiesLegacy(transcript);
+    }
+
+    /**
+     * Legacy extraction using regex patterns.
+     * Used as fallback when flexible extraction is disabled or fails.
+     */
+    extractEntitiesLegacy(transcript) {
+        let processedText = transcript;
+        let rarity = null;
+        let artVariant = null;
+        let setCode = null;
+
+        // When flex extraction is enabled (as master switch), always extract
+        // even if the individual toggles are off (they're greyed out in UI)
+        const forceExtract = this.settings.useFlexibleExtraction;
+
+        // Extract set code (match against known sets in session)
+        if (forceExtract || this.settings.autoExtractSet) {
+            const setResult = this.extractSetCodeFromVoice(processedText);
+            processedText = setResult.cardName;
+            setCode = setResult.setCode;
+        }
+
+        // Extract rarity
+        const rarityResult = this.extractRarityFromVoice(processedText, forceExtract);
+        processedText = rarityResult.cardName;
+        rarity = rarityResult.rarity;
+
+        // Extract art variant
+        const artResult = this.extractArtVariantFromVoice(processedText, forceExtract);
+        processedText = artResult.cardName;
+        artVariant = artResult.artVariant;
+
+        return {
+            cardName: processedText,
+            rarity,
+            setCode,
+            artVariant,
+            confidence: 0.7, // Fixed confidence for legacy
+            needsConfirmation: false,
+            metadata: { legacyExtraction: true },
+        };
+    }
+
+    /**
+     * Extract set code from voice text by matching against known sets.
+     * Checks session sets first (multi-set), then all loaded sets.
+     */
+    extractSetCodeFromVoice(voiceText) {
+        if (!voiceText) return { cardName: voiceText, setCode: null };
+
+        const words = voiceText.split(/\s+/);
+
+        // Build a lookup of known set codes (case-insensitive)
+        const setCodeMap = new Map();
+
+        // Add active session sets
+        if (this.currentSession?.isMultiSet && this.currentSession.sets) {
+            for (const set of this.currentSession.sets) {
+                const code = (set.code || set.set_code || '').toUpperCase();
+                if (code) setCodeMap.set(code, code);
+            }
+        } else if (this.currentSet) {
+            const code = (this.currentSet.code || this.currentSet.set_code || '').toUpperCase();
+            if (code) setCodeMap.set(code, code);
+        }
+
+        // Also check all loaded card sets for broader matching
+        if (this.cardSets && this.cardSets.length > 0) {
+            for (const set of this.cardSets) {
+                const code = (set.code || set.set_code || '').toUpperCase();
+                if (code) setCodeMap.set(code, code);
+            }
+        }
+
+        // Try to match each word (or 2-word combo) against known set codes
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i].toUpperCase();
+
+            // Direct match
+            if (setCodeMap.has(word)) {
+                const matchedCode = setCodeMap.get(word);
+                const remaining = [...words.slice(0, i), ...words.slice(i + 1)].join(' ').trim();
+                this.logger.debug(`[SET EXTRACT] Found set code "${matchedCode}" in voice text`);
+                return { cardName: remaining, setCode: matchedCode };
+            }
+
+            // Fuzzy match for close set codes (e.g., "BLM" → "BLMM")
+            for (const [code] of setCodeMap) {
+                const similarity = this.calculateSimilarity(word.toLowerCase(), code.toLowerCase());
+                if (similarity >= 0.75 && word.length >= 2) {
+                    const remaining = [...words.slice(0, i), ...words.slice(i + 1)].join(' ').trim();
+                    this.logger.debug(`[SET EXTRACT] Fuzzy matched set code "${word}" → "${code}" (similarity: ${similarity})`);
+                    return { cardName: remaining, setCode: code };
+                }
+            }
+        }
+
+        return { cardName: voiceText, setCode: null };
     }
 
     /**
@@ -1397,8 +1627,8 @@ export class SessionManager {
     /**
      * Extract rarity information from voice text (matching oldIteration.py logic)
      */
-    extractRarityFromVoice(voiceText) {
-        if (!this.settings.autoExtractRarity) {
+    extractRarityFromVoice(voiceText, forceExtract = false) {
+        if (!forceExtract && !this.settings.autoExtractRarity) {
             this.logger.debug(`[RARITY EXTRACT] Auto-extract rarity disabled, returning original text: "${voiceText}"`);
             return { cardName: voiceText, rarity: null };
         }
@@ -1429,7 +1659,9 @@ export class SessionManager {
             const match = voiceText.match(pattern);
             if (match) {
                 const rarity = match[0];
-                const cardName = voiceText.replace(pattern, '').trim();
+                let cardName = voiceText.replace(pattern, '').trim();
+                // Clean up leftover parentheses/brackets from card names like "Card Name (Secret Rare)"
+                cardName = cardName.replace(/\(\s*\)/g, '').replace(/\[\s*\]/g, '').trim();
                 console.log(`🟡 RARITY MATCH! Pattern: ${pattern}, Matched: "${rarity}", Remaining: "${cardName}"`);
                 this.logger.info(`[RARITY EXTRACT] SUCCESS - Extracted rarity: '${rarity}', remaining card name: '${cardName}'`);
                 return { cardName, rarity };
@@ -1444,8 +1676,8 @@ export class SessionManager {
     /**
      * Extract art variant information from voice text (matching oldIteration.py logic)
      */
-    extractArtVariantFromVoice(voiceText) {
-        if (!this.settings.autoExtractArtVariant) {
+    extractArtVariantFromVoice(voiceText, forceExtract = false) {
+        if (!forceExtract && !this.settings.autoExtractArtVariant) {
             return { cardName: voiceText, artVariant: null };
         }
 
@@ -1506,36 +1738,43 @@ export class SessionManager {
             });
         }
 
-        // Step 1: Auto-extract rarity and art variant if enabled (matching oldIteration.py)
-        let processedText = processedTranscript;
-        let extractedRarity = null;
-        let extractedArtVariant = null;
-
-        // Voice processing pipeline (use logger.debug instead of console.log to reduce overhead)
-        this.logger.debug(`Voice processing: "${transcript}" → "${processedTranscript}"`);
-
-        // Extract rarity information
-        const rarityResult = this.extractRarityFromVoice(processedText);
-        processedText = rarityResult.cardName;
-        extractedRarity = rarityResult.rarity;
-
-        // Extract art variant information
-        const artResult = this.extractArtVariantFromVoice(processedText);
-        processedText = artResult.cardName;
-        extractedArtVariant = artResult.artVariant;
-
-        const cleanTranscript = processedText.toLowerCase().trim();
-        this.logger.debug(`Voice pipeline complete: "${cleanTranscript}" (rarity: ${extractedRarity}, art: ${extractedArtVariant})`);
-
-        this.logger.debug(`[VOICE PROCESSING] Input transcript: "${processedTranscript}"`);
-        this.logger.debug(`[VOICE PROCESSING] Auto-extract rarity enabled: ${this.settings.autoExtractRarity}`);
-        this.logger.debug(`[VOICE PROCESSING] Auto-extract art variant enabled: ${this.settings.autoExtractArtVariant}`);
-
-        if (extractedRarity || extractedArtVariant) {
-            this.logger.info(`[VOICE PROCESSING] Extracted from voice - Rarity: "${extractedRarity}", Art Variant: "${extractedArtVariant}", Card Name: "${processedText}"`);
-        } else {
-            this.logger.debug(`[VOICE PROCESSING] No rarity or art variant extracted, using processed card name: "${processedText}"`);
+        // Step 0: Try to extract set code from the ORIGINAL transcript first,
+        // because voice enhancement may strip/transform set codes like "BLM" → lost
+        let earlySetCode = null;
+        if (this.settings.useFlexibleExtraction || this.settings.autoExtractSet) {
+            const earlySetResult = this.extractSetCodeFromVoice(transcript);
+            earlySetCode = earlySetResult.setCode;
+            if (earlySetCode) {
+                this.logger.info(`[VOICE PROCESSING] Early set code extraction from original: "${earlySetCode}"`);
+            }
         }
+
+        // Step 1: Extract entities using flexible or legacy extraction
+        const extraction = this.extractEntitiesFromVoice(processedTranscript);
+
+        const processedText = extraction.cardName;
+        const extractedRarity = extraction.rarity;
+        const extractedArtVariant = extraction.artVariant;
+        // Use set code from extraction if found, otherwise fall back to early extraction
+        const extractedSetCode = extraction.setCode || earlySetCode;
+        const cleanTranscript = processedText.toLowerCase().trim();
+
+        // Log extraction results
+        this.logger.debug(`[VOICE PROCESSING] Extraction result:`, {
+            cardName: processedText,
+            rarity: extractedRarity,
+            artVariant: extractedArtVariant,
+            setCode: extractedSetCode,
+            earlySetCode: earlySetCode,
+            confidence: extraction.confidence,
+            needsConfirmation: extraction.needsConfirmation,
+            isFlexible: !extraction.metadata?.legacyExtraction,
+        });
+
+        // Store extraction metadata for potential confirmation dialogs
+        processingMetadata.extraction = extraction;
+        processingMetadata.extractedSetCode = extractedSetCode;
+        processingMetadata.extractedArtVariant = extractedArtVariant;
 
         try {
             // Use unified matching approach with enhanced fantasy name processing
@@ -1543,6 +1782,28 @@ export class SessionManager {
 
             if (this.currentSet) {
                 recognizedCards = await this.findCardsInCurrentSetEnhanced(cleanTranscript, extractedRarity, processingMetadata);
+            }
+
+            // Boost cards matching the extracted set code (instead of hard filtering)
+            if (extractedSetCode && recognizedCards.length > 1) {
+                const setCodeUpper = extractedSetCode.toUpperCase();
+                let matchCount = 0;
+
+                for (const card of recognizedCards) {
+                    const cardSet = (card.sourceSetCode || card.set_code || '').toUpperCase();
+                    // Exact or fuzzy set code match
+                    if (cardSet === setCodeUpper || this.calculateSimilarity(cardSet.toLowerCase(), setCodeUpper.toLowerCase()) >= 0.75) {
+                        card.confidence += 15; // Significant boost for matching set
+                        card.setMatched = true;
+                        matchCount++;
+                    }
+                }
+
+                if (matchCount > 0) {
+                    // Re-sort after boosting
+                    recognizedCards.sort((a, b) => b.confidence - a.confidence);
+                    this.logger.debug(`[VOICE PROCESSING] Boosted ${matchCount} cards matching set "${extractedSetCode}"`);
+                }
             }
 
             this.logger.info(`Found ${recognizedCards.length} potential card matches`);

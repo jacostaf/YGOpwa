@@ -452,14 +452,15 @@ export class VoiceEngine {
                 throw new Error('No recognition engine available');
             }
 
-            // If restarting, ensure previous instance is fully stopped
-            if (this.isRestarting) {
-                try {
-                    engine.instance.abort();
-                } catch (e) {
-                    // Ignore abort errors
-                }
+            // Ensure previous instance is fully stopped before starting
+            try {
+                engine.instance.abort();
+            } catch (e) {
+                // Ignore abort errors - engine may not be running
             }
+
+            // Small delay to let abort complete
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             // Start recognition with timeout
             await this.startEngineWithTimeout(engine);
@@ -761,6 +762,24 @@ export class VoiceEngine {
 
         this.logger.info(`Attempting recovery (attempt ${this.recognitionAttempts}/${this.config.retryAttempts})`);
         this.emitStatusChange('recovering');
+
+        // Cancel any pending auto-restart from onend handler to prevent race
+        if (this.restartTimeoutId) {
+            clearTimeout(this.restartTimeoutId);
+            this.restartTimeoutId = null;
+        }
+
+        // Abort current recognition to ensure clean state
+        try {
+            const engine = this.engines.get(this.currentEngine);
+            if (engine && engine.instance) {
+                engine.instance.abort();
+            }
+        } catch (e) {
+            // Ignore abort errors
+        }
+        this.isListening = false;
+        this.isRestarting = false;
 
         // Wait before retry with exponential backoff
         const delay = this.config.retryDelay * Math.pow(1.5, this.recognitionAttempts - 1);
