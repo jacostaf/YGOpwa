@@ -1784,16 +1784,24 @@ export class SessionManager {
         // Step 0: Try to extract set code from the ORIGINAL transcript first,
         // because voice enhancement may strip/transform set codes like "BLM" → lost
         let earlySetCode = null;
+        let textForExtraction = processedTranscript;
         if (this.settings.useFlexibleExtraction || this.settings.autoExtractSet) {
             const earlySetResult = this.extractSetCodeFromVoice(transcript);
             earlySetCode = earlySetResult.setCode;
             if (earlySetCode) {
                 this.logger.info(`[VOICE PROCESSING] Early set code extraction from original: "${earlySetCode}"`);
+                // Strip set tokens from the enhanced transcript so flex extraction
+                // processes fewer tokens (reduces n-grams and Fuse.js calls)
+                const enhancedSetResult = this.extractSetCodeFromVoice(processedTranscript);
+                if (enhancedSetResult.setCode) {
+                    textForExtraction = enhancedSetResult.cardName;
+                    this.logger.info(`[VOICE PROCESSING] Stripped set tokens for extraction: "${processedTranscript}" → "${textForExtraction}"`);
+                }
             }
         }
 
         // Step 1: Extract entities using flexible or legacy extraction
-        const extraction = this.extractEntitiesFromVoice(processedTranscript);
+        const extraction = this.extractEntitiesFromVoice(textForExtraction);
 
         // Strip parenthesized rarity from card name (e.g., "Primite Dragon Ether Beryl (Quarter Century Secret Rare)" → "Primite Dragon Ether Beryl")
         // Database entries include rarity in the name, but we match card names separately from rarity

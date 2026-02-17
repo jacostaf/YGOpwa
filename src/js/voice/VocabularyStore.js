@@ -473,6 +473,14 @@ export class VocabularyStore {
   setVocabulary(category, entries) {
     this.vocabularies.set(category, entries);
 
+    // Hard caps for entity categories with known max sizes.
+    // Prevents overly long vocabulary entries from inflating n-gram windows.
+    const CATEGORY_MAX_TOKENS = {
+      rarity: 4,      // "Quarter Century Secret Rare" = 4 words
+      setCode: 2,     // "LP25" = 1 word
+      artVariant: 3,  // "alternate art" = 2 words
+    };
+
     // Build first-token index
     const tokenIndex = new Map();
     let maxTokenCount = 0;
@@ -490,7 +498,14 @@ export class VocabularyStore {
     }
 
     this.byFirstToken.set(category, tokenIndex);
-    this.maxTokens.set(category, maxTokenCount);
+
+    // Apply hard cap if this category has one, otherwise use vocabulary-computed max
+    const hardCap = CATEGORY_MAX_TOKENS[category];
+    if (hardCap) {
+      this.maxTokens.set(category, Math.min(maxTokenCount, hardCap));
+    } else {
+      this.maxTokens.set(category, maxTokenCount);
+    }
 
     // Build Fuse index
     const fuseOpts = FUSE_OPTIONS[category] || { threshold: 0.4, keys: ['canonical', 'variants'], includeScore: true };
