@@ -253,6 +253,47 @@ export class CollectionManager {
   }
 
   /**
+   * Add multiple cards to a collection in a single insert
+   * @param {string} collectionId
+   * @param {Array<Object>} cards
+   * @returns {Promise<Array>} Inserted rows
+   */
+  async batchAddCardsToCollection(collectionId, cards) {
+    const user = authService.getUser();
+    if (!user || !supabase) throw new Error('User not authenticated');
+
+    if (!Array.isArray(cards) || cards.length === 0) {
+      return [];
+    }
+
+    console.log(`[CollectionManager] Batch adding ${cards.length} cards to collection:`, collectionId);
+
+    const rows = cards.map(card => ({
+      collection_id: collectionId,
+      card_id: card.productId || card.card?.productId || card.tcgcsv_product_id || card.product_id || card.id,
+      name: card.name || card.cardName,
+      set_code: card.setCode || card.set_code,
+      rarity: card.rarity,
+      card_type: getCardCategory(card),
+      quantity: card.quantity || 1
+    }));
+
+    const { data, error } = await supabase
+      .from('collection_cards')
+      .insert(rows)
+      .select();
+
+    if (error) {
+      console.error('[CollectionManager] Error batch adding cards:', error);
+      throw error;
+    }
+
+    console.log(`[CollectionManager] Batch added ${data.length} cards successfully`);
+    this.invalidateCache();
+    return data;
+  }
+
+  /**
    * Create a pack event with price snapshots for cards being added
    * This captures the price at the moment cards are packed for ROI tracking
    * @param {string} userId - User's ID

@@ -764,6 +764,16 @@ tr:hover .rarity-name {
 
   .rarity-table-container {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    background:
+      linear-gradient(to right, var(--vault-surface) 30%, transparent),
+      linear-gradient(to left, var(--vault-surface) 30%, transparent),
+      linear-gradient(to right, rgba(0,0,0,0.3), transparent 15px),
+      linear-gradient(to left, rgba(0,0,0,0.3), transparent 15px);
+    background-position: left center, right center, left center, right center;
+    background-size: 20px 100%, 20px 100%, 15px 100%, 15px 100%;
+    background-repeat: no-repeat;
+    background-attachment: local, local, scroll, scroll;
   }
 
   .rarity-table {

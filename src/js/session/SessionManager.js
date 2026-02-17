@@ -1353,10 +1353,19 @@ export class SessionManager {
                 const cardsToArchive = this.currentSession.cards.length - this.config.archiveThreshold;
                 if (cardsToArchive > 0) {
                     const archived = this.currentSession.cards.splice(0, cardsToArchive);
+                    // Clear image references from archived cards to allow GC
+                    archived.forEach(c => {
+                        delete c.image_url;
+                        delete c.image_url_small;
+                        delete c.image_url_cropped;
+                        delete c.imageUrl;
+                        delete c.imageUrlSmall;
+                        delete c.card_images;
+                    });
                     this.archivedCards.push(...archived);
 
                     // Limit archived cards to prevent unbounded memory growth
-                    const MAX_ARCHIVED_CARDS = 500;
+                    const MAX_ARCHIVED_CARDS = 200;
                     if (this.archivedCards.length > MAX_ARCHIVED_CARDS) {
                         const overflow = this.archivedCards.length - MAX_ARCHIVED_CARDS;
                         this.archivedCards.splice(0, overflow);
