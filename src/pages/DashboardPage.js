@@ -15,6 +15,7 @@ import StatsCard from '../components/StatsCard.js';
 import DashboardService from '../services/DashboardService.js';
 import LeaderboardService, { LEADERBOARD_TYPES } from '../services/leaderboardService.js';
 import { CollectionManager } from '../services/CollectionManager.js';
+import { fetchGlobalActivity, formatTimeAgo } from '../services/ActivityService.js';
 
 let lastDashboardMountHash = null;
 
@@ -109,7 +110,7 @@ export default class DashboardPage {
     }
   }
 
-  buildHighlightCard(type, winner, source, isFirst = false) {
+  buildHighlightCard(type, winner, source) {
     const label = this.getLeaderboardLabel(type);
     const metric = this.formatLeaderboardMetric(type, winner);
     const userName = winner?.display_name || 'No leader yet';
@@ -121,13 +122,8 @@ export default class DashboardPage {
 
     const meta = source === 'fallback' ? '<span class="leaderboard-highlight-badge">Sample Data</span>' : '';
 
-    // First card (Value) gets emphasized treatment, others are more subtle
-    const cardClass = isFirst
-      ? 'leaderboard-highlight-card leaderboard-highlight-card--primary'
-      : 'leaderboard-highlight-card leaderboard-highlight-card--secondary';
-
     return `
-      <article class="${cardClass}" data-type="${type}" data-testid="leaderboard-highlight">
+      <article class="leaderboard-highlight-card" data-type="${type}" data-testid="leaderboard-highlight">
         <header class="leaderboard-highlight-header">
           <span class="leaderboard-highlight-title">${label} ${meta}</span>
           <span class="leaderboard-highlight-metric">${metric}</span>
@@ -204,7 +200,7 @@ export default class DashboardPage {
 
       const cards = results.map(({ data, source }, index) => {
         const leader = Array.isArray(data) && data.length > 0 ? data[0] : null;
-        return this.buildHighlightCard(types[index], leader, source, index === 0);
+        return this.buildHighlightCard(types[index], leader, source);
       });
 
       grid.innerHTML = cards.join('');
@@ -321,7 +317,7 @@ export default class DashboardPage {
    * Render recent activity feed
    * @private
    */
-  renderRecentActivity() {
+  async renderRecentActivity() {
     try {
       const container = this.container.querySelector('#activity-list');
       if (!container) {
@@ -329,67 +325,58 @@ export default class DashboardPage {
         return;
       }
 
-      const activities = this.dashboardService.getRecentActivity(5);
+      // Show loading state
+      container.innerHTML = `
+        <div class="py-4 text-center">
+          <p class="text-neutral-500 text-sm animate-pulse">Loading activity...</p>
+        </div>
+      `;
 
-      // Ensure activities is an array
-      if (!Array.isArray(activities)) {
-        console.error('activities is not an array:', activities);
-        container.innerHTML = `
-          <div class="empty-state text-center py-8">
-            <i data-lucide="Activity" class="w-12 h-12 text-neutral-600 mx-auto mb-3"></i>
-            <p class="text-neutral-500 text-sm">No recent activity</p>
-          </div>
-        `;
-        return;
-      }
+      const activities = await fetchGlobalActivity(8);
 
-      if (activities.length === 0) {
-        // Show empty state - minimal, not card-heavy
+      if (!Array.isArray(activities) || activities.length === 0) {
         container.innerHTML = `
           <div class="empty-state py-6 text-center">
             <i data-lucide="Activity" class="w-8 h-8 text-neutral-600 mx-auto mb-2"></i>
             <p class="text-neutral-500 text-sm">No recent activity</p>
-            <p class="text-neutral-600 text-xs mt-1">Use voice recognition or check prices to see activity</p>
+            <p class="text-neutral-600 text-xs mt-1">Activity from all users will appear here</p>
           </div>
         `;
-      } else {
-        // Render activity items - dense list, no heavy card treatment
-        container.innerHTML = activities.map((activity, index) => `
-          <article class="activity-item flex items-center justify-between py-2 ${index < activities.length - 1 ? 'border-b border-neutral-800/40' : ''}" role="article" aria-label="${this.escapeHtml(activity.name || 'Unknown')} - ${this.escapeHtml(activity.value || 'N/A')}">
-            <div class="activity-info flex items-center gap-2.5">
-              <div class="activity-icon w-7 h-7 flex items-center justify-center" aria-hidden="true">
-                <i data-lucide="${activity.icon || 'Activity'}" class="w-4 h-4 ${activity.type === 'price' ? 'text-green-400/70' : 'text-neutral-500'}"></i>
-              </div>
-              <div>
-                <div class="text-sm text-neutral-200">${this.escapeHtml(activity.name || 'Unknown')}</div>
-                <div class="text-xs text-neutral-500">${this.escapeHtml(activity.typeLabel || 'Activity')}</div>
-              </div>
-            </div>
-            <div class="activity-value text-sm tabular-nums ${activity.type === 'price' ? 'text-green-400 font-medium' :
-            activity.type === 'pack' ? 'text-neutral-400' :
-              'text-neutral-500'
-          }">
-              ${this.escapeHtml(activity.value || 'N/A')}
-            </div>
-          </article>
-        `).join('');
+        if (window.lucide) window.lucide.createIcons();
+        return;
       }
 
-      // Initialize Lucide icons
-      if (window.lucide) {
-        window.lucide.createIcons();
-      }
+      container.innerHTML = activities.map((activity, index) => `
+        <article class="activity-item flex items-center gap-2.5 py-3 ${index < activities.length - 1 ? 'border-b border-neutral-800/40' : ''}" role="article">
+          <div class="activity-icon w-7 h-7 flex-shrink-0 flex items-center justify-center" aria-hidden="true">
+            <i data-lucide="${activity.icon}" class="w-4 h-4 ${activity.color}"></i>
+          </div>
+          <div class="flex-1 min-w-0 text-sm text-neutral-300"><strong class="text-neutral-100">${this.escapeHtml(activity.displayName)}</strong> ${this.escapeHtml(activity.description)}</div>
+          <span class="text-xs text-neutral-500 whitespace-nowrap ml-3 flex-shrink-0">${formatTimeAgo(activity.createdAt)}</span>
+        </article>
+      `).join('');
+
+      if (window.lucide) window.lucide.createIcons();
     } catch (error) {
       console.error('Error rendering recent activity:', error);
+      const container = this.container?.querySelector('#activity-list');
+      if (container) {
+        container.innerHTML = `
+          <div class="empty-state py-6 text-center">
+            <i data-lucide="Activity" class="w-8 h-8 text-neutral-600 mx-auto mb-2"></i>
+            <p class="text-neutral-500 text-sm">No recent activity</p>
+          </div>
+        `;
+        if (window.lucide) window.lucide.createIcons();
+      }
     }
   }
 
   /**
-   * Render quick stats with asymmetric layout
-   * First stat is featured (larger), remaining stats are in a dense list
+   * Render quick stats — uniform flat rows, no featured hero
    * @private
    */
-  renderQuickStats() {
+  async renderQuickStats() {
     try {
       const container = this.container.querySelector('#quick-stats-grid');
       if (!container) {
@@ -397,38 +384,23 @@ export default class DashboardPage {
         return;
       }
 
-      const quickStats = this.dashboardService.getQuickStats();
+      const quickStats = await this.dashboardService.getQuickStats();
 
-      // Ensure quickStats is an array
       if (!Array.isArray(quickStats) || quickStats.length === 0) {
         console.error('quickStats is not an array or empty:', quickStats);
         return;
       }
 
-      // First stat gets featured treatment (larger, prominent)
-      const [featured, ...secondary] = quickStats;
-
-      // Build featured stat - hero styling for visual hierarchy
-      const featuredHtml = `
-        <div class="quick-stat-featured p-5 rounded-xl bg-neutral-900/60 border border-neutral-800/50" role="listitem" aria-label="${this.escapeHtml(featured.label || 'N/A')}: ${this.escapeHtml(featured.value || '0')}">
-          <div class="text-label-dense mb-2" aria-hidden="true">${this.escapeHtml(featured.label || 'N/A')}</div>
-          <div class="text-hero" aria-hidden="true">${this.escapeHtml(featured.value || '0')}</div>
-        </div>
-      `;
-
-      // Secondary stats - dense flat list (no card background per item)
-      const secondaryHtml = secondary.length > 0 ? `
-        <div class="quick-stats-secondary mt-3">
-          ${secondary.map((stat, idx) => `
-            <div class="quick-stat-row section-flat-bordered ${idx === secondary.length - 1 ? 'border-0 mb-0 pb-0' : ''}" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
-              <span class="text-label-subtle">${this.escapeHtml(stat.label || 'N/A')}</span>
-              <span class="text-value-sm">${this.escapeHtml(stat.value || '0')}</span>
-            </div>
-          `).join('')}
-        </div>
-      ` : '';
-
-      container.innerHTML = featuredHtml + secondaryHtml;
+      // All stats get the same flat row treatment
+      container.innerHTML = quickStats.map((stat, idx) => {
+        const valueHtml = stat.detail
+          ? `<span style="text-align:right;line-height:1.2;display:flex;flex-direction:column;align-items:flex-end"><span style="font-size:0.8rem;font-weight:600">${this.escapeHtml(stat.value || '0')}</span><span style="font-size:0.6rem;color:var(--text-tertiary,#78716c)">${this.escapeHtml(stat.detail)}</span></span>`
+          : `<span class="text-value-sm">${this.escapeHtml(stat.value || '0')}</span>`;
+        return `<div class="quick-stat-row section-flat-bordered ${idx === quickStats.length - 1 ? 'border-0 mb-0 pb-0' : ''}" role="listitem" aria-label="${this.escapeHtml(stat.label || 'N/A')}: ${this.escapeHtml(stat.value || '0')}">
+          <span class="text-label-subtle">${this.escapeHtml(stat.label || 'N/A')}</span>
+          ${valueHtml}
+        </div>`;
+      }).join('');
     } catch (error) {
       console.error('Error rendering quick stats:', error);
     }

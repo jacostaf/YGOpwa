@@ -717,6 +717,36 @@ export async function fetchCardPriceHistory(options = {}) {
   }
 }
 
+/**
+ * Fetch the single most expensive card in the current user's collection.
+ * Returns the mapped item or null.
+ */
+export async function fetchTopCollectionCard(options = {}) {
+  const client = resolveClient(options.client);
+  try {
+    const { data, error } = await client
+      .from(COLLECTION_ITEMS_VIEW)
+      .select('*')
+      .order('current_price', { ascending: false, nullsFirst: false })
+      .limit(1);
+
+    if (error) {
+      throw handleSupabaseError(error, 'Failed to fetch top collection card', 'FETCH_TOP_CARD_FAILED');
+    }
+
+    if (!data || data.length === 0) return { item: null, error: null };
+    return { item: mapRowToItem(data[0]), error: null };
+  } catch (error) {
+    if (error instanceof CollectionsServiceError) {
+      return { item: null, error };
+    }
+    return {
+      item: null,
+      error: new CollectionsServiceError('Failed to fetch top collection card', 'FETCH_TOP_CARD_ERROR', error),
+    };
+  }
+}
+
 export default {
   fetchCollectionItems,
   fetchCollectionItemById,
@@ -726,4 +756,5 @@ export default {
   removeCollectionQuantity,
   batchUpsertCollectionItems,
   fetchCardPriceHistory,
+  fetchTopCollectionCard,
 };

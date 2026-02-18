@@ -6095,25 +6095,6 @@ body {
   height: 16px;
 }
 
-/* Leaderboard card variants for visual hierarchy */
-.leaderboard-highlight-card--primary {
-  border-color: var(--border-default);
-  background: var(--surface-secondary);
-}
-
-.leaderboard-highlight-card--secondary {
-  border-color: var(--border-subtle);
-  background: transparent;
-  min-height: 140px;
-}
-
-.leaderboard-highlight-card--secondary .leaderboard-highlight-metric {
-  font-size: var(--text-sm);
-}
-
-.leaderboard-highlight-card--secondary .leaderboard-highlight-body h3 {
-  font-size: var(--text-base);
-}
 
 /* Collection Preview Styles */
 .collection-preview-container {

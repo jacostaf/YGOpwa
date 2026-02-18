@@ -11,6 +11,8 @@
  */
 
 import { cacheCoordinator } from './CacheCoordinator.js';
+import { fetchCollectionSummary, fetchTopCollectionCard } from './collectionsService.js';
+import { fetchTopPackPull, fetchPackEventSummaries } from './packEventsService.js';
 
 export default class DashboardService {
   constructor(options = {}) {
@@ -347,34 +349,32 @@ export default class DashboardService {
   }
 
   /**
-   * Get quick stats (4 items)
-   * @returns {Array} Array of quick stat objects
+   * Get quick stats (3 items) — async, fetches from Supabase
+   * @returns {Promise<Array>} Array of quick stat objects
    */
-  getQuickStats() {
+  async getQuickStats() {
     try {
       // Check cache
       if (this.isCacheValid() && Array.isArray(this.statsCache.quickStats)) {
         return this.statsCache.quickStats;
       }
 
-      const stats = [
+      const stats = await Promise.all([
         this.getTotalValueQuickStat(),
         this.getTopCardStat(),
-        this.getRareCardsStat(),
-        this.getRecentAddsStat()
-      ];
+        this.getRecentAddsStat(),
+      ]);
 
       // Update cache
       this.statsCache.quickStats = stats;
+      this.statsCache.lastUpdate = Date.now();
 
       return stats;
     } catch (error) {
       console.error('Error getting quick stats:', error);
-      // Return default stats if error occurs
       return [
         { label: 'Total Value', value: '$0' },
         { label: 'Top Card', value: 'None' },
-        { label: 'Rare Count', value: '0' },
         { label: 'Recent Adds', value: '0' }
       ];
     }
@@ -385,32 +385,18 @@ export default class DashboardService {
    * @private
    * @returns {Object} Stat object
    */
-  getTotalValueQuickStat() {
-    let totalValue = 0;
-
-    // Try to get from CollectionsService first (more accurate)
-    const collectionSummary = window.app?.collectionsService?.summary;
-    if (collectionSummary) {
-      totalValue = parseFloat(collectionSummary.total_value) || 0;
-    } else if (this.sessionManager && this.sessionManager.sessionHistory) {
-      // Fallback to session history
-      const history = Array.isArray(this.sessionManager.sessionHistory)
-        ? this.sessionManager.sessionHistory
-        : [];
-      history.forEach(session => {
-        if (session && Array.isArray(session.cards)) {
-          session.cards.forEach(card => {
-            const price = card.tcgPlayerMarketPrice || card.tcgPlayerLowPrice || 0;
-            totalValue += parseFloat(price) || 0;
-          });
-        }
-      });
+  async getTotalValueQuickStat() {
+    try {
+      const { summary } = await fetchCollectionSummary();
+      const totalValue = summary?.totalMarketValue || 0;
+      return {
+        label: 'Total Value',
+        value: totalValue > 0 ? `$${totalValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0'
+      };
+    } catch (error) {
+      console.warn('getTotalValueQuickStat failed:', error);
+      return { label: 'Total Value', value: '$0' };
     }
-
-    return {
-      label: 'Total Value',
-      value: totalValue > 0 ? `$${totalValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0'
-    };
   }
 
   /**
@@ -418,41 +404,31 @@ export default class DashboardService {
    * @private
    * @returns {Object} Stat object
    */
-  getTopCardStat() {
-    let topCardName = 'None';
-    let maxPrice = 0;
-
-    // We need to iterate over all cards. 
-    // Ideally CollectionsService would provide this.
-    // For now, iterate session history as fallback or if collection service doesn't have individual cards loaded.
-
-    if (this.sessionManager && this.sessionManager.sessionHistory) {
-      const history = Array.isArray(this.sessionManager.sessionHistory)
-        ? this.sessionManager.sessionHistory
-        : [];
-
-      history.forEach(session => {
-        if (session && Array.isArray(session.cards)) {
-          session.cards.forEach(card => {
-            const price = parseFloat(card.tcgPlayerMarketPrice || card.tcgPlayerLowPrice || 0);
-            if (price > maxPrice) {
-              maxPrice = price;
-              topCardName = card.name;
-            }
-          });
-        }
-      });
+  async getTopCardStat() {
+    try {
+      const { item } = await fetchTopCollectionCard();
+      if (!item) {
+        return { label: 'Top Card', value: 'None' };
+      }
+      const cardName = item.card?.name || item.card?.slug || 'Unknown';
+      const displayName = cardName.length > 22 ? cardName.substring(0, 19) + '...' : cardName;
+      // card.number may already include the set prefix (e.g. "SUDA-ENO25")
+      const cardNum = item.card?.number?.toUpperCase();
+      const setCode = item.set?.code?.toUpperCase();
+      const setAndNumber = cardNum
+        ? (cardNum.startsWith(setCode + '-') ? cardNum : `${setCode}-${cardNum}`)
+        : setCode;
+      const detailParts = [
+        setAndNumber,
+        item.rarity?.name,
+        item.pricing?.currentPrice ? `$${Number(item.pricing.currentPrice).toFixed(2)}` : null
+      ].filter(Boolean);
+      const detail = detailParts.length > 0 ? detailParts.join(' \u00b7 ') : null;
+      return { label: 'Top Card', value: displayName, detail };
+    } catch (error) {
+      console.warn('getTopCardStat failed:', error);
+      return { label: 'Top Card', value: 'None' };
     }
-
-    // Truncate if too long
-    if (topCardName.length > 15) {
-      topCardName = topCardName.substring(0, 12) + '...';
-    }
-
-    return {
-      label: 'Top Card',
-      value: topCardName
-    };
   }
 
   /**
@@ -460,27 +436,16 @@ export default class DashboardService {
    * @private
    * @returns {Object} Stat object
    */
-  getRecentAddsStat() {
-    let recentCount = 0;
-    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-
-    if (this.sessionManager && this.sessionManager.sessionHistory) {
-      const history = Array.isArray(this.sessionManager.sessionHistory)
-        ? this.sessionManager.sessionHistory
-        : [];
-
-      history.forEach(session => {
-        const sessionDate = new Date(session.createdAt || session.timestamp).getTime();
-        if (sessionDate > oneWeekAgo && session.cards) {
-          recentCount += session.cards.length;
-        }
-      });
+  async getRecentAddsStat() {
+    try {
+      const { events } = await fetchPackEventSummaries({ limit: 1 });
+      const recent = events?.[0];
+      const count = recent?.totalQuantity || 0;
+      return { label: 'Recent Adds', value: count.toString() };
+    } catch (error) {
+      console.warn('getRecentAddsStat failed:', error);
+      return { label: 'Recent Adds', value: '0' };
     }
-
-    return {
-      label: 'Recent Adds',
-      value: recentCount.toString()
-    };
   }
 
   /**
@@ -532,39 +497,6 @@ export default class DashboardService {
     };
   }
 
-  /**
-   * Get Rare Cards quick stat
-   * @private
-   * @returns {Object} Stat object
-   */
-  getRareCardsStat() {
-    let rareCards = 0;
-
-    if (this.sessionManager && this.sessionManager.sessionHistory) {
-      const history = Array.isArray(this.sessionManager.sessionHistory)
-        ? this.sessionManager.sessionHistory
-        : [];
-      const rareRarities = ['rare', 'super rare', 'ultra rare', 'secret rare', 'ultimate rare',
-        'ghost rare', 'starlight rare', 'collector rare', 'prismatic secret rare',
-        'quarter century secret rare', 'platinum secret rare'];
-
-      history.forEach(session => {
-        if (session && Array.isArray(session.cards)) {
-          session.cards.forEach(card => {
-            const rarity = (card.rarity || '').toLowerCase();
-            if (rareRarities.some(r => rarity.includes(r))) {
-              rareCards++;
-            }
-          });
-        }
-      });
-    }
-
-    return {
-      label: 'Rare Cards',
-      value: rareCards.toString()
-    };
-  }
 
   /**
    * Get Average Response Time quick stat
