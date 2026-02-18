@@ -313,6 +313,7 @@ export default class SettingsPage {
               </div>
               <div class="setting-control">
                 <select id="themeSelect" class="setting-select">
+                  <option value="dusk" ${this.currentSettings.theme === 'dusk' ? 'selected' : ''}>Dusk</option>
                   <option value="dark" ${this.currentSettings.theme === 'dark' ? 'selected' : ''}>Dark</option>
                   <option value="light" ${this.currentSettings.theme === 'light' ? 'selected' : ''}>Light</option>
                   <option value="blue" ${this.currentSettings.theme === 'blue' ? 'selected' : ''}>Blue</option>

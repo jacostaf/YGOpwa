@@ -787,9 +787,19 @@ textarea:disabled:focus {
  */
 [data-theme="light"],
 .theme-light {
-  --focus-color: #737373;
+  --focus-color: #525252;
   --text-contrast: #000;
   --border-contrast: rgba(0, 0, 0, 0.3);
+}
+
+/**
+ * Dusk mode - Warm-tinted contrast
+ */
+[data-theme="dusk"],
+.theme-dusk {
+  --focus-color: #c4b8a4;
+  --text-contrast: #ece6db;
+  --border-contrast: rgba(196, 184, 164, 0.3);
 }
 
 /* =================================================================
