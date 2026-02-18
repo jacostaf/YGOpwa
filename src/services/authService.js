@@ -305,9 +305,9 @@ class AuthService {
       console.log('AuthService: Fetching profile for user:', this.user.id);
       // Add a timeout to profile fetch to prevent blocking initialization
       const profilePromise = supabase
-        .from('user_profiles')
+        .from('profiles')
         .select('*')
-        .eq('id', this.user.id)
+        .eq('user_id', this.user.id)
         .maybeSingle(); // Use maybeSingle to avoid error if no profile exists
 
       const timeoutPromise = new Promise((_, reject) =>
@@ -320,8 +320,8 @@ class AuthService {
         console.warn('Error fetching profile:', error);
         // Fallback to metadata if profile fetch fails
         this.profile = {
-          id: this.user.id,
-          username: this.user.user_metadata?.username || this.user.email?.split('@')[0],
+          user_id: this.user.id,
+          display_name: this.user.user_metadata?.username || this.user.email?.split('@')[0],
           avatar_url: this.user.user_metadata?.avatar_url
         };
       } else if (!data) {
@@ -351,15 +351,15 @@ class AuthService {
     if (!this.user || !supabase) return null;
 
     const newProfile = {
-      id: this.user.id,
-      username: this.user.user_metadata?.username || this.user.email?.split('@')[0],
+      user_id: this.user.id,
+      display_name: this.user.user_metadata?.username || this.user.email?.split('@')[0],
       avatar_url: this.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${this.user.id}`,
       updated_at: new Date().toISOString()
     };
 
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .insert([newProfile])
         .select()
         .single();
@@ -394,9 +394,9 @@ class AuthService {
       };
 
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .update(updatesWithTimestamp)
-        .eq('id', this.user.id)
+        .eq('user_id', this.user.id)
         .select()
         .single();
 

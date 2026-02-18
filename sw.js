@@ -19,13 +19,18 @@ const CACHE_URLS = [
   '/manifest.json',
   // CSS files
   '/src/css/main.css',
-  '/src/css/components.css',
   '/src/css/responsive.css',
   '/src/css/themes.css',
   '/src/css/layouts.css',
   '/src/css/sidebar.css',
   '/src/css/animations.css',
   '/src/css/accessibility.css',
+  '/src/css/settings.css',
+  '/src/css/theme-settings.css',
+  '/src/css/collection.css',
+  '/src/css/pack-opening-compact.css',
+  '/src/css/rarity-admin.css',
+  '/src/css/utilities.css',
   // Core app
   '/src/js/app.js',
   // Components
@@ -35,6 +40,9 @@ const CACHE_URLS = [
   '/src/components/PatternList.js',
   '/src/components/AchievementBadge.js',
   '/src/components/ToggleSwitch.js',
+  '/src/components/UserProfile.js',
+  '/src/components/RarityAdmin.js',
+  '/src/components/AuthModal.js',
   // Pages
   '/src/pages/DashboardPage.js',
   '/src/pages/PackOpeningPage.js',
@@ -42,12 +50,25 @@ const CACHE_URLS = [
   '/src/pages/VoiceTrainingPage.js',
   '/src/pages/SettingsPage.js',
   '/src/pages/ThemeSettingsPage.js',
-  '/src/pages/CollectionPage.js',
+  '/src/pages/CollectionPageV2.js',
   '/src/pages/AchievementsPage.js',
+  '/src/pages/LeaderboardPage.js',
+  '/src/pages/AdminPage.js',
+  '/src/pages/RarityAdminPage.js',
   // Services
   '/src/services/DashboardService.js',
   '/src/services/CollectionManager.js',
   '/src/services/AchievementManager.js',
+  '/src/services/leaderboardService.js',
+  '/src/services/ActivityService.js',
+  '/src/services/authService.js',
+  '/src/services/collectionsService.js',
+  '/src/services/pricingService.js',
+  '/src/services/subscriptionService.js',
+  '/src/services/rarityService.js',
+  '/src/services/CacheCoordinator.js',
+  '/src/services/packEventsService.js',
+  '/src/services/cardMetadataService.js',
   // Themes
   '/src/themes/theme-config.js',
   '/src/themes/ThemeManager.js',
@@ -55,16 +76,21 @@ const CACHE_URLS = [
   '/src/utils/Router.js',
   '/src/utils/IconLoader.js',
   '/src/utils/AnimationHelper.js',
-  '/src/utils/Logger.js',
-  '/src/utils/Storage.js',
-  // Voice (existing)
+  '/src/utils/EventEmitter.js',
+  // JS Utils
+  '/src/js/utils/Logger.js',
+  '/src/js/utils/Storage.js',
+  '/src/js/utils/ImageManager.js',
+  '/src/js/utils/ErrorBoundary.js',
+  '/src/js/utils/config.js',
+  // Voice
   '/src/js/voice/VoiceEngine.js',
   '/src/js/voice/PermissionManager.js',
-  // Session (existing)
+  // Session
   '/src/js/session/SessionManager.js',
-  // Price (existing)
+  // Price
   '/src/js/price/PriceChecker.js',
-  // UI (existing)
+  // UI
   '/src/js/ui/UIManager.js'
 ];
 

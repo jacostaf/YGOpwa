@@ -11,7 +11,6 @@
  * - Responsive layout
  */
 
-import StatsCard from '../components/StatsCard.js';
 import DashboardService from '../services/DashboardService.js';
 import LeaderboardService, { LEADERBOARD_TYPES } from '../services/leaderboardService.js';
 import { CollectionManager } from '../services/CollectionManager.js';

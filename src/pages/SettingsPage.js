@@ -47,7 +47,7 @@ export default class SettingsPage {
    */
   getProfileUsername() {
     const profile = authService?.profile;
-    return profile?.username || '';
+    return profile?.display_name || '';
   }
 
   /**
@@ -85,7 +85,7 @@ export default class SettingsPage {
 
       if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
 
-      const { error } = await authService.updateProfile({ username: newUsername });
+      const { error } = await authService.updateProfile({ display_name: newUsername });
 
       if (error) {
         if (error.code === '23505') { // Unique violation
