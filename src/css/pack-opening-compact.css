@@ -819,6 +819,7 @@
     flex-wrap: wrap;
     gap: var(--spacing-sm);
     max-height: none;
+    overflow-x: auto;
   }
 
   .sidebar-section {

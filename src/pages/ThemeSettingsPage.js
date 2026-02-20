@@ -15,6 +15,7 @@
  */
 
 import themeManager from '../themes/ThemeManager.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class ThemeSettingsPage {
   constructor(router) {
@@ -182,10 +183,7 @@ export default class ThemeSettingsPage {
     // Attach event listeners
     this.attachEventListeners();
 
-    // Initialize Lucide icons
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
-    }
+    refreshIcons();
 
     console.log('ThemeSettingsPage mounted with current theme:', this.currentTheme);
   }
@@ -286,10 +284,7 @@ export default class ThemeSettingsPage {
       // Re-attach listeners
       this.attachEventListeners();
 
-      // Re-initialize icons
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
+      refreshIcons();
     }
   }
 

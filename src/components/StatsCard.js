@@ -11,6 +11,8 @@
  * - Responsive design
  */
 
+import { refreshIcons } from '../utils/IconLoader.js';
+
 export default class StatsCard {
   /**
    * Create a StatsCard instance
@@ -87,7 +89,7 @@ export default class StatsCard {
 
     // Initialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     return this.element;

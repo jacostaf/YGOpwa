@@ -266,7 +266,7 @@ async function fetchItemsByIds(client, ids = []) {
 }
 
 /**
- * Fetch all collection items for the authenticated user.
+ * Fetch collection items for the authenticated user with pagination support.
  *
  * @param {Object} [options]
  * @param {string} [options.search] - case-insensitive search term applied to name, slug, or number.
@@ -275,8 +275,10 @@ async function fetchItemsByIds(client, ids = []) {
  * @param {string} [options.language]
  * @param {string} [options.sortBy]
  * @param {'asc'|'desc'} [options.sortOrder]
+ * @param {number} [options.page=0] - Zero-based page index.
+ * @param {number} [options.pageSize=50] - Number of items per page.
  * @param {import('@supabase/supabase-js').SupabaseClient} [options.client]
- * @returns {Promise<{ items: CollectionItem[], error: CollectionsServiceError|null }>}
+ * @returns {Promise<{ items: CollectionItem[], hasMore: boolean, error: CollectionsServiceError|null }>}
  */
 export async function fetchCollectionItems(options = {}) {
   const {
@@ -286,6 +288,8 @@ export async function fetchCollectionItems(options = {}) {
     language,
     sortBy = 'card_name',
     sortOrder = 'asc',
+    page = 0,
+    pageSize = 50,
     client: overrideClient,
   } = options;
 
@@ -317,23 +321,31 @@ export async function fetchCollectionItems(options = {}) {
 
     query = query.order(sortBy, { ascending: sortOrder !== 'desc' });
 
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
     const { data, error } = await query;
 
     if (error) {
       throw handleSupabaseError(error, 'Failed to fetch collection items', 'FETCH_COLLECTION_FAILED');
     }
 
+    const items = (data || []).map(mapRowToItem);
+
     return {
-      items: (data || []).map(mapRowToItem),
+      items,
+      hasMore: items.length === pageSize,
       error: null,
     };
   } catch (error) {
     if (error instanceof CollectionsServiceError) {
-      return { items: [], error };
+      return { items: [], hasMore: false, error };
     }
 
     return {
       items: [],
+      hasMore: false,
       error: new CollectionsServiceError('Failed to fetch collection items', 'FETCH_COLLECTION_ERROR', error),
     };
   }

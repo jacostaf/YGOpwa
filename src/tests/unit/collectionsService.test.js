@@ -14,6 +14,7 @@ function createQueryMock(result) {
     or: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
+    range: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue(finalResult),
@@ -91,10 +92,11 @@ describe('collectionsService', () => {
       },
     });
 
-    const { items, error } = await fetchCollectionItems({ client });
+    const { items, hasMore, error } = await fetchCollectionItems({ client });
 
     expect(error).toBeNull();
     expect(items).toHaveLength(1);
+    expect(hasMore).toBe(false);
 
     const item = items[0];
     expect(item.cardVariantId).toBe('variant-1');
@@ -127,9 +129,10 @@ describe('collectionsService', () => {
       },
     });
 
-    const { items, error } = await fetchCollectionItems({ client });
+    const { items, hasMore, error } = await fetchCollectionItems({ client });
 
     expect(items).toHaveLength(0);
+    expect(hasMore).toBe(false);
     expect(error).toBeTruthy();
     expect(error.message).toContain('boom');
   });

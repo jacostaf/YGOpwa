@@ -10,6 +10,7 @@
  */
 
 import { supabase, isSupabaseAvailable } from '../lib/supabaseClient.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class RarityAdmin {
   constructor(options = {}) {
@@ -91,7 +92,7 @@ export default class RarityAdmin {
         <p>${this.escapeHtml(message)}</p>
       </div>
     `;
-    if (window.lucide) window.lucide.createIcons();
+    refreshIcons();
   }
 
   /**
@@ -128,7 +129,7 @@ export default class RarityAdmin {
     this.element = target.querySelector('.rarity-admin');
     this.bindEvents();
 
-    if (window.lucide) window.lucide.createIcons();
+    refreshIcons();
   }
 
   /**

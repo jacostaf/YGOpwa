@@ -235,8 +235,13 @@ export default class Router {
       // Clear container
       this.pageContainer.innerHTML = '';
 
-      // Get page component
-      const PageComponent = this.routes.get(route);
+      // Get page component (resolve lazy imports)
+      let PageComponent = this.routes.get(route);
+      if (typeof PageComponent === 'function' && !PageComponent.prototype) {
+        const module = await PageComponent();
+        PageComponent = module.default;
+        this.routes.set(route, PageComponent); // cache for next visit
+      }
 
       // Create page instance
       const pageInstance = typeof PageComponent === 'function'

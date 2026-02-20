@@ -14,6 +14,7 @@
  */
 
 import { AchievementBadge } from '../components/AchievementBadge.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export class AchievementsPage {
   constructor(router) {
@@ -339,7 +340,7 @@ export class AchievementsPage {
 
     // Initialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     // Attach event listeners
@@ -433,7 +434,7 @@ export class AchievementsPage {
 
     // Re-initialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     // Update filter buttons

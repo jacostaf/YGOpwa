@@ -13,6 +13,7 @@
 
 import DashboardService from '../services/DashboardService.js';
 import LeaderboardService, { LEADERBOARD_TYPES } from '../services/leaderboardService.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 import { CollectionManager } from '../services/CollectionManager.js';
 import { fetchGlobalActivity, formatTimeAgo } from '../services/ActivityService.js';
 
@@ -122,7 +123,7 @@ export default class DashboardPage {
     const meta = source === 'fallback' ? '<span class="leaderboard-highlight-badge">Sample Data</span>' : '';
 
     return `
-      <article class="leaderboard-highlight-card" data-type="${type}" data-testid="leaderboard-highlight">
+      <article class="leaderboard-highlight-card" data-type="${type}" data-testid="leaderboard-highlight" tabindex="0" role="link" aria-label="${label} leader: ${userName}">
         <header class="leaderboard-highlight-header">
           <span class="leaderboard-highlight-title">${label} ${meta}</span>
           <span class="leaderboard-highlight-metric">${metric}</span>
@@ -208,8 +209,18 @@ export default class DashboardPage {
         button.addEventListener('click', this.boundHandlers.handleHighlightNavigate);
       });
 
+      grid.querySelectorAll('.leaderboard-highlight-card[tabindex]').forEach((card) => {
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const btn = card.querySelector('[data-action="view-leaderboard"]');
+            if (btn) btn.click();
+          }
+        });
+      });
+
       if (window.lucide) {
-        window.lucide.createIcons();
+        refreshIcons();
       }
     } catch (error) {
       console.warn('Failed to render leaderboard highlights', error);
@@ -341,7 +352,7 @@ export default class DashboardPage {
             <p class="text-neutral-600 text-xs mt-1">Activity from all users will appear here</p>
           </div>
         `;
-        if (window.lucide) window.lucide.createIcons();
+        refreshIcons();
         return;
       }
 
@@ -350,12 +361,12 @@ export default class DashboardPage {
           <div class="activity-icon w-7 h-7 flex-shrink-0 flex items-center justify-center" aria-hidden="true">
             <i data-lucide="${activity.icon}" class="w-4 h-4 ${activity.color}"></i>
           </div>
-          <div class="flex-1 min-w-0 text-sm text-neutral-300"><strong class="text-neutral-100">${this.escapeHtml(activity.displayName)}</strong> ${this.escapeHtml(activity.description)}</div>
+          <div class="flex-1 min-w-0 text-sm text-neutral-300 line-clamp-2"><strong class="text-neutral-100">${this.escapeHtml(activity.displayName)}</strong> ${this.escapeHtml(activity.description)}</div>
           <span class="text-xs text-neutral-500 whitespace-nowrap ml-3 flex-shrink-0">${formatTimeAgo(activity.createdAt)}</span>
         </article>
       `).join('');
 
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
     } catch (error) {
       console.error('Error rendering recent activity:', error);
       const container = this.container?.querySelector('#activity-list');
@@ -366,7 +377,7 @@ export default class DashboardPage {
             <p class="text-neutral-500 text-sm">No recent activity</p>
           </div>
         `;
-        if (window.lucide) window.lucide.createIcons();
+        refreshIcons();
       }
     }
   }
@@ -577,7 +588,7 @@ export default class DashboardPage {
 
     // Initialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     // Attach CTA handler
@@ -640,6 +651,7 @@ export default class DashboardPage {
   startAutoRefresh() {
     // Refresh every 30 seconds
     this.refreshInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       this.refreshData();
     }, 30000);
 
@@ -665,9 +677,9 @@ export default class DashboardPage {
    * @returns {string} Escaped text
    */
   escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (!this._escapeDiv) this._escapeDiv = document.createElement('div');
+    this._escapeDiv.textContent = text;
+    return this._escapeDiv.innerHTML;
   }
 
   /**
@@ -702,7 +714,7 @@ export default class DashboardPage {
 
       // Initialize Lucide icons
       if (window.lucide) {
-        window.lucide.createIcons();
+        refreshIcons();
       }
 
       // Start auto-refresh

@@ -594,9 +594,12 @@ export class CollectionManager {
 
   /**
    * Get all cards from all user collections (flattened)
+   * @param {Object} [options]
+   * @param {number} [options.offset] - Starting index for pagination
+   * @param {number} [options.limit] - Maximum number of cards to fetch
    * @returns {Promise<Array>} All user cards
    */
-  async getAllUserCards() {
+  async getAllUserCards(options = {}) {
     const { user } = await authService.getCurrentUser();
     if (!user || !supabase) return [];
 
@@ -619,10 +622,16 @@ export class CollectionManager {
       console.log('[CollectionManager] Fetching cards for collection IDs:', collectionIds);
 
       // Fetch cards for these collections
-      const { data: cards, error: cardError } = await supabase
+      let cardQuery = supabase
         .from('collection_cards')
         .select('*')
         .in('collection_id', collectionIds);
+
+      if (options.offset !== undefined && options.limit !== undefined) {
+        cardQuery = cardQuery.range(options.offset, options.offset + options.limit - 1);
+      }
+
+      const { data: cards, error: cardError } = await cardQuery;
 
       console.log('[CollectionManager] Collection cards fetch result:', cards?.length || 0, cardError || 'no error');
 

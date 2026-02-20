@@ -6,7 +6,7 @@
 import { features, isSupabaseConfigured } from '../lib/config.js';
 import { getCurrentUser, onAuthStateChange, signOut } from '../services/authService.js';
 import AuthModal from '../components/AuthModal.js';
-import UserProfile from '../components/UserProfile.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 /**
  * Initialize authentication UI
@@ -120,9 +120,7 @@ function renderSignInButton(container) {
     </button>
   `;
 
-  if (window.lucide) {
-    window.lucide.createIcons();
-  }
+  refreshIcons();
 
   const signInBtn = document.getElementById('sign-in-btn');
   if (signInBtn) {
@@ -150,52 +148,32 @@ function renderSignInButton(container) {
 }
 
 /**
- * Render user profile component
+ * Render user profile with logout button
  */
 function renderUserProfile(user, container) {
-  const userProfile = new UserProfile({
-    user,
-    onSignOut: async () => {
-      console.log('User signed out');
-      try {
-        await signOut();
-        // Reload page to reset state
-        window.location.reload();
-      } catch (error) {
-        console.error('Sign out error:', error);
-      }
-    },
-    onProfileClick: (action) => {
-      console.log('Profile action:', action);
-      handleProfileAction(action);
+  const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'User';
+  const initial = displayName.charAt(0).toUpperCase();
+
+  container.innerHTML = `
+    <div class="auth-logout-row">
+      <div class="auth-logout-avatar">${initial}</div>
+      <span class="auth-logout-name">${displayName}</span>
+      <button id="logout-btn" class="auth-logout-btn" type="button" aria-label="Log out">
+        <i data-lucide="log-out"></i>
+      </button>
+    </div>
+  `;
+
+  refreshIcons();
+
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    try {
+      await signOut();
+      window.location.reload();
+    } catch (error) {
+      console.error('Sign out error:', error);
     }
   });
-
-  userProfile.render(container);
-}
-
-/**
- * Handle profile menu actions
- */
-function handleProfileAction(action) {
-  if (!window.router) {
-    console.error('Router not found');
-    return;
-  }
-
-  switch (action) {
-    case 'settings':
-      window.router.navigate('settings');
-      break;
-    case 'collection':
-      window.router.navigate('collection');
-      break;
-    case 'packs':
-      window.router.navigate('pack-opening');
-      break;
-    default:
-      console.log('Unknown action:', action);
-  }
 }
 
 export default { initAuth };

@@ -14,6 +14,7 @@
 
 import { features } from '../lib/config.js';
 import * as authService from '../services/authService.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class AuthModal {
   /**
@@ -527,7 +528,7 @@ export default class AuthModal {
     document.body.appendChild(this.element);
 
     if (window && window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     // Focus email input

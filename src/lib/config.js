@@ -195,17 +195,15 @@ function getEnvBoolean(key, defaultValue = false) {
 export const supabaseConfig = {
   url: '',
   anonKey: '',
-  serviceRoleKey: '',
 };
 
 /**
  * Refresh Supabase config values from current environment
- * @returns {{url: string, anonKey: string, serviceRoleKey: string}}
+ * @returns {{url: string, anonKey: string}}
  */
 export function refreshSupabaseConfig() {
   supabaseConfig.url = getEnv('VITE_SUPABASE_URL', '').trim();
   supabaseConfig.anonKey = getEnv('VITE_SUPABASE_ANON_KEY', '').trim();
-  supabaseConfig.serviceRoleKey = getEnv('SUPABASE_SERVICE_ROLE_KEY', '').trim();
   return supabaseConfig;
 }
 

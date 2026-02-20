@@ -17,6 +17,7 @@
 import ToggleSwitch from '../components/ToggleSwitch.js';
 import themeManager from '../themes/ThemeManager.js';
 import { authService } from '../services/authService.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class SettingsPage {
   constructor(router) {
@@ -83,7 +84,7 @@ export default class SettingsPage {
       btn.disabled = true;
       btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i> Saving...';
 
-      if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+      refreshIcons();
 
       const { error } = await authService.updateProfile({ display_name: newUsername });
 
@@ -383,10 +384,7 @@ export default class SettingsPage {
     // Attach event listeners
     this.attachEventListeners();
 
-    // Initialize Lucide icons
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
-    }
+    refreshIcons();
 
     console.log('SettingsPage mounted');
   }
@@ -749,10 +747,7 @@ export default class SettingsPage {
       indicator.innerHTML = '<i data-lucide="alert-circle"></i> Unsaved changes';
       pageHeader.appendChild(indicator);
 
-      // Re-initialize Lucide icons
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
+      refreshIcons();
     } else if (!this.hasChanges && indicator) {
       // Remove indicator
       indicator.remove();
@@ -934,10 +929,7 @@ export default class SettingsPage {
         // Re-attach listeners
         this.attachEventListeners();
 
-        // Re-initialize icons
-        if (window.lucide && typeof window.lucide.createIcons === 'function') {
-          window.lucide.createIcons();
-        }
+        refreshIcons();
       });
     }
   }

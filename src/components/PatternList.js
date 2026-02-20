@@ -5,6 +5,8 @@
  * Allows users to view, edit, delete, and analyze their learned patterns.
  */
 
+import { refreshIcons } from '../utils/IconLoader.js';
+
 export default class PatternList {
   constructor(options = {}) {
     this.patterns = options.patterns || [];
@@ -258,10 +260,7 @@ export default class PatternList {
     this.container.innerHTML = this.render();
     this.attachEventListeners();
 
-    // Initialize Lucide icons
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
-    }
+    refreshIcons();
   }
 
   /**
@@ -273,10 +272,7 @@ export default class PatternList {
       this.container.innerHTML = this.render();
       this.attachEventListeners();
 
-      // Re-initialize Lucide icons
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
+      refreshIcons();
     }
   }
 

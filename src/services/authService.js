@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../lib/supabaseClient.js';
+import { supabaseConfig } from '../lib/config.js';
 
 console.log('AuthService module loaded (TIMESTAMP: ' + Date.now() + ')');
 
@@ -12,8 +13,9 @@ class AuthService {
     this.user = null;
     this.session = null;
     this.profile = null;
+    this._profileReady = null;
     this._authStateListeners = [];
-    this.projectRef = this._extractProjectRef();
+    this._projectRef = null;  // lazy — computed on first access
 
     // Initialize with a global timeout to prevent initPromise from hanging forever
     let timeoutId;
@@ -29,6 +31,13 @@ class AuthService {
     });
 
     this.initPromise = Promise.race([initPromise, globalTimeout]);
+  }
+
+  get projectRef() {
+    if (!this._projectRef) {
+      this._projectRef = this._extractProjectRef();
+    }
+    return this._projectRef;
   }
 
   /**
@@ -77,7 +86,9 @@ class AuthService {
 
     if (this.user) {
       // Fetch profile in background, don't await it to unblock initialization
-      this.fetchProfile().catch(err => console.warn('AuthService: Background profile fetch failed:', err));
+      this._profileReady = this.fetchProfile().catch(err => {
+        console.warn('AuthService: Background profile fetch failed:', err);
+      });
     }
 
     // Listen for auth changes
@@ -89,7 +100,8 @@ class AuthService {
       this.user = session?.user || null;
 
       if (event === 'SIGNED_IN' || (this.user && !previousUser)) {
-        await this.fetchProfile();
+        this._profileReady = this.fetchProfile();
+        await this._profileReady;
       } else if (event === 'SIGNED_OUT') {
         this.profile = null;
       }
@@ -322,13 +334,14 @@ class AuthService {
         this.profile = {
           user_id: this.user.id,
           display_name: this.user.user_metadata?.username || this.user.email?.split('@')[0],
-          avatar_url: this.user.user_metadata?.avatar_url
+          avatar_url: this.user.user_metadata?.avatar_url,
+          is_admin: false
         };
       } else if (!data) {
         console.log('AuthService: No profile found, creating one...');
         this.profile = await this.createProfile();
       } else {
-        console.log('AuthService: Profile fetched successfully:', data);
+        console.log('AuthService: Profile fetched. is_admin:', data?.is_admin, '| keys:', Object.keys(data || {}).join(', '));
         this.profile = data;
       }
 
@@ -340,7 +353,16 @@ class AuthService {
       return this.profile;
     } catch (err) {
       console.error('Failed to fetch profile:', err);
-      return null;
+      if (!this.profile) {
+        this.profile = {
+          user_id: this.user?.id,
+          display_name: this.user?.user_metadata?.username || this.user?.email?.split('@')[0] || 'User',
+          avatar_url: this.user?.user_metadata?.avatar_url,
+          is_admin: false
+        };
+      }
+      this.notifyListeners('PROFILE_UPDATED', this.session);
+      return this.profile;
     }
   }
 
@@ -453,8 +475,7 @@ class AuthService {
    */
   _extractProjectRef() {
     try {
-      // Try to get URL from supabase client options
-      const url = supabase?.auth?.options?.url || '';
+      const url = supabaseConfig?.url || '';
       if (url) {
         const hostname = new URL(url).hostname;
         return hostname.split('.')[0];
@@ -462,8 +483,7 @@ class AuthService {
     } catch (e) {
       console.warn('AuthService: Failed to extract projectRef from URL');
     }
-    // Fallback to the one previously hardcoded if extraction fails
-    return 'kguazmofmstmethzoeyn';
+    return '';
   }
 }
 

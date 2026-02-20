@@ -56,21 +56,20 @@
    ================================================================= */
 
 /**
- * Remove default focus outline (we'll add custom ones below)
- * Only remove if we provide an alternative focus indicator
- */
-*:focus {
-  outline: none;
-}
-
-/**
  * Visible focus indicator for all interactive elements
  * WCAG 2.4.7: Focus must be visible with 2px minimum thickness and 3:1 contrast
  */
 *:focus-visible {
-  outline: 2px solid var(--focus-color, #d4d4d4);
+  outline: 2px solid var(--accent-primary, var(--focus-color, #d4d4d4));
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/**
+ * Remove focus outline for mouse/touch users (only show for keyboard)
+ */
+*:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* =================================================================

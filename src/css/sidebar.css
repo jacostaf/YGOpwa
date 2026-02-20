@@ -421,12 +421,8 @@
 
 /* ===== SIDEBAR FOOTER ===== */
 .sidebar-footer {
-  padding: 1rem;
+  padding: 0.5rem;
   border-top: 1px solid var(--border-primary);
-  background: var(--bg-secondary);
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
 }
 
 #auth-container {
@@ -516,6 +512,10 @@ body.sidebar-open .sidebar-overlay {
 
 /* Tablet: Slightly smaller sidebar */
 @media (min-width: 768px) and (max-width: 1024px) {
+  :root {
+    --sidebar-width: 220px;
+  }
+
   .sidebar {
     width: 220px;
   }
@@ -563,8 +563,6 @@ body.sidebar-open .sidebar-overlay {
 
 .sidebar {
   animation: fadeIn 0.4s ease;
-  overflow: hidden;
-  /* Prevent sidebar itself from scrolling */
 }
 
 /* Reduced motion support */

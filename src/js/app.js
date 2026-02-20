@@ -24,6 +24,7 @@ import { Storage } from './utils/Storage.js';
 import { AchievementManager } from '../services/AchievementManager.js';
 import { CollectionManager } from '../services/CollectionManager.js';
 import { authService } from '../services/authService.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 /**
  * Main Application Class
@@ -1356,7 +1357,7 @@ class YGORipperApp {
                 // Update modal content
                 const modalContent = modal.querySelector('.modal-body') || modal;
                 modalContent.innerHTML = content;
-                lucide.createIcons();
+                refreshIcons();
 
                 // Re-bind events
                 const confirmBtn = modal.querySelector('#confirm-add-btn');

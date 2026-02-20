@@ -9,6 +9,7 @@ console.log('CollectionPageV2 module loaded (TIMESTAMP: ' + Date.now() + ')');
 import { CollectionManager } from '../services/CollectionManager.js';
 import { authService } from '../services/authService.js';
 import CardGrid from '../components/CardGrid.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 import {
   fetchCollectionItems,
   fetchCollectionSummary,
@@ -25,6 +26,41 @@ import {
   evaluateCollectionQuota,
 } from '../services/subscriptionService.js';
 import { filterByCardType } from '../config/FilterSettings.js';
+
+function showInputModal(title, placeholder = '', defaultValue = '') {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px)';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg-secondary,#1a1a1a);border:1px solid var(--border-primary,#333);border-radius:12px;padding:1.5rem;min-width:320px;max-width:90vw';
+    modal.innerHTML = `
+      <h3 style="margin:0 0 1rem;color:var(--text-primary,#fff);font-size:1rem">${title}</h3>
+      <input type="text" class="modal-input" placeholder="${placeholder}" value="${defaultValue}"
+        style="width:100%;padding:0.625rem;border-radius:8px;border:1px solid var(--border-primary,#333);background:var(--bg-primary,#0a0a0a);color:var(--text-primary,#fff);font-size:0.875rem;box-sizing:border-box">
+      <div style="display:flex;gap:0.75rem;margin-top:1rem;justify-content:flex-end">
+        <button class="modal-cancel" style="padding:0.5rem 1rem;border-radius:8px;border:1px solid var(--border-primary,#333);background:transparent;color:var(--text-secondary,#999);cursor:pointer">Cancel</button>
+        <button class="modal-confirm" style="padding:0.5rem 1rem;border-radius:8px;border:none;background:var(--accent-primary,#737373);color:#fff;cursor:pointer">OK</button>
+      </div>
+    `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const input = modal.querySelector('.modal-input');
+    input.focus();
+    input.select();
+
+    const close = (value) => { overlay.remove(); resolve(value); };
+    modal.querySelector('.modal-cancel').onclick = () => close(null);
+    modal.querySelector('.modal-confirm').onclick = () => close(input.value);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') close(input.value);
+      if (e.key === 'Escape') close(null);
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+  });
+}
 
 export class CollectionPage {
   constructor(app) {
@@ -43,6 +79,12 @@ export class CollectionPage {
       error: null,
       isLoading: false,
       isMutating: false,
+      pagination: {
+        page: 0,
+        pageSize: 50,
+        hasMore: true,
+        isLoadingMore: false,
+      },
       filters: {
         set: 'all',
         rarity: 'all',
@@ -272,13 +314,13 @@ export class CollectionPage {
   async handleCreateCollection() {
     try {
       console.log('[CollectionPage] handleCreateCollection START');
-      const name = prompt('Enter collection name:');
+      const name = await showInputModal('Enter collection name:', 'Collection name');
       if (!name?.trim()) {
         console.log('[CollectionPage] handleCreateCollection cancelled - no name');
         return;
       }
 
-      const description = prompt('Enter description (optional):');
+      const description = await showInputModal('Enter description (optional):', 'Description');
 
       this.toggleLoadingIndicator(true);
       console.log('[CollectionPage] Creating collection:', name);
@@ -351,17 +393,41 @@ export class CollectionPage {
       <div class="collection-page">
         <!-- Header -->
         <div class="top-header">
-            <div class="header-title">
+            <div class="header-title" style="flex-shrink: 0;">
                 <h1 id="collectionTitle">Collection</h1>
             </div>
-            <div class="header-actions">
-                <button class="btn-secondary" id="exportCollectionBtn">
+            
+            <!-- Appended Toolbar Content -->
+            <div class="search-wrapper" style="flex: 1; max-width: 300px;">
+                <i data-lucide="search"></i>
+                <input type="text" id="searchInput" class="search-input" placeholder="Search by name, set, or description...">
+            </div>
+            
+            <div class="filter-chips" role="group" aria-label="Card type filter" style="flex-shrink: 0;">
+                <button class="chip active" data-filter="all" aria-pressed="true">All</button>
+                <button class="chip" data-filter="monster" aria-pressed="false">Monsters</button>
+                <button class="chip" data-filter="spell" aria-pressed="false">Spells</button>
+                <button class="chip" data-filter="trap" aria-pressed="false">Traps</button>
+            </div>
+
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                <button class="btn-secondary" id="exportCollectionBtn" style="padding: 4px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
                     <i data-lucide="download" style="width: 16px;"></i>
-                    Export
+                    <span>Export</span>
                 </button>
-                <button class="btn-primary" id="addCardBtn">
+                <button class="btn-primary" id="addCardBtn" style="padding: 4px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
                     <i data-lucide="plus" style="width: 18px;"></i>
-                    Add Card
+                    <span>Add Card</span>
+                </button>
+                <div style="width: 1px; height: 16px; background: var(--border-primary, #333); margin: 0 4px;"></div>
+                <button class="btn-secondary" id="filterBtn" style="padding: 6px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="filter" style="width: 16px;"></i>
+                </button>
+                <button class="btn-secondary view-btn active" data-view="grid" style="padding: 6px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="layout-grid" style="width: 16px;"></i>
+                </button>
+                <button class="btn-secondary view-btn" data-view="list" style="padding: 6px; display: flex; align-items: center; justify-content: center;">
+                    <i data-lucide="list" style="width: 16px;"></i>
                 </button>
             </div>
         </div>
@@ -370,17 +436,21 @@ export class CollectionPage {
         <div class="stats-ribbon">
             <div class="stat-item">
                 <div class="stat-label">Total Value</div>
-                <div class="stat-value" id="statTotalValue">$0.00</div>
-                <div class="stat-trend" id="statValueTrend">
-                    <i data-lucide="trending-up" style="width: 12px;"></i>
-                    <span>+0.0%</span>
+                <div style="display: flex; align-items: baseline; gap: 8px;">
+                    <div class="stat-value" id="statTotalValue">$0.00</div>
+                    <div class="stat-trend" id="statValueTrend">
+                        <i data-lucide="trending-up" style="width: 12px;"></i>
+                        <span>+0.0%</span>
+                    </div>
                 </div>
             </div>
             <div class="stat-item">
                 <div class="stat-label">Total Cards</div>
-                <div class="stat-value" id="statTotalCards">0</div>
-                <div class="stat-trend" id="statCardsTrend">
-                    +0 this week
+                <div style="display: flex; align-items: baseline; gap: 8px;">
+                    <div class="stat-value" id="statTotalCards">0</div>
+                    <div class="stat-trend" id="statCardsTrend">
+                        +0 this week
+                    </div>
                 </div>
             </div>
             <div class="stat-item">
@@ -393,36 +463,14 @@ export class CollectionPage {
             </div>
         </div>
 
-        <!-- Toolbar -->
-            <div class="toolbar">
-                <div class="search-wrapper">
-                    <i data-lucide="search"></i>
-                    <input type="text" id="searchInput" class="search-input" placeholder="Search by name, set, or description...">
-                </div>
-                
-                <div class="filter-chips">
-                    <div class="chip active" data-filter="all">All</div>
-                    <div class="chip" data-filter="monster">Monsters</div>
-                    <div class="chip" data-filter="spell">Spells</div>
-                    <div class="chip" data-filter="trap">Traps</div>
-                </div>
-
-                <div style="margin-left: auto; display: flex; gap: 8px;">
-                    <button class="btn-secondary" id="filterBtn" style="padding: 8px;">
-                        <i data-lucide="filter" style="width: 16px;"></i>
-                    </button>
-                    <button class="btn-secondary view-btn active" data-view="grid" style="padding: 8px;">
-                        <i data-lucide="layout-grid" style="width: 16px;"></i>
-                    </button>
-                    <button class="btn-secondary view-btn" data-view="list" style="padding: 8px;">
-                        <i data-lucide="list" style="width: 16px;"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Collection Display -->
+        <!-- Collection Display -->
             <div class="collection-display">
               <div id="cardGrid"></div>
+              <div id="loadMoreContainer" class="hidden" style="display:flex;justify-content:center;padding:1.5rem 0;">
+                <button id="loadMoreBtn" class="btn-secondary" style="padding:10px 24px;font-size:0.9rem;">
+                  Load More
+                </button>
+              </div>
               <div id="emptyState" class="empty-state hidden">
                 <i data-lucide="search-x"></i>
                 <h3>No cards found</h3>
@@ -529,7 +577,7 @@ export class CollectionPage {
       this.attachEvents();
 
       if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
+        refreshIcons();
       }
 
       // Load initial data from Supabase - NON-BLOCKING
@@ -555,7 +603,7 @@ export class CollectionPage {
     // Buttons are now part of the render() template for better layout control
     // We just need to ensure icons are initialized
     if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -641,8 +689,9 @@ export class CollectionPage {
 
       if (!user) {
         console.log('CollectionPage: Guest mode');
-        // Guest mode: use local session cards only
+        // Guest mode: use local session cards only (no pagination - all local)
         this.state.cards = this.collectionManager.getAllCards();
+        this.state.pagination = { page: 0, pageSize: 50, hasMore: false, isLoadingMore: false };
 
         // Load favorites from localStorage
         const favoritesKey = 'voxrip_favorites';
@@ -685,8 +734,14 @@ export class CollectionPage {
       // Authenticated mode
       console.log('CollectionPage: loadData (v2 fix) - Authenticated user:', user.email, 'ID:', user.id);
       // Use CollectionManager to fetch cards (compatible with current schema)
+      const pageSize = this.state.pagination.pageSize;
       const cards = await this.collectionManager.getAllUserCards();
       console.log('CollectionPage: Fetched cards from manager:', cards?.length || 0);
+
+      // Reset pagination state on fresh load
+      this.state.pagination.page = 0;
+      this.state.pagination.hasMore = (cards?.length || 0) >= pageSize;
+      this.state.pagination.isLoadingMore = false;
 
       // Mock summary and plan for now as views might be missing
       const summaryResult = { summary: null, error: null };
@@ -892,7 +947,7 @@ export class CollectionPage {
         refreshBtn.innerHTML = refreshBtn.dataset.originalLabel;
       }
       if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
+        refreshIcons();
       }
     }
   }
@@ -1613,6 +1668,12 @@ export class CollectionPage {
         exportBtn.addEventListener('click', () => this.handleExport());
       }
 
+      // Load More (pagination)
+      const loadMoreBtn = document.getElementById('loadMoreBtn');
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', () => this.handleLoadMore());
+      }
+
       // Filter Chips (Monster/Spell/Trap)
       const chips = this.container.querySelectorAll('.chip');
       chips.forEach(chip => {
@@ -1620,8 +1681,12 @@ export class CollectionPage {
           const cardType = e.currentTarget.dataset.filter; // Use currentTarget for reliability
 
           // Update UI
-          this.container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+          this.container.querySelectorAll('.chip').forEach(c => {
+            c.classList.remove('active');
+            c.setAttribute('aria-pressed', 'false');
+          });
           e.currentTarget.classList.add('active');
+          e.currentTarget.setAttribute('aria-pressed', 'true');
 
           // Update state and refresh display
           this.state.filters.cardType = cardType;
@@ -1948,17 +2013,17 @@ export class CollectionPage {
         return;
       }
 
-      const slugInput = prompt('Enter card name or slug (e.g., blue-eyes-white-dragon):');
+      const slugInput = await showInputModal('Enter card name or slug:', 'blue-eyes-white-dragon');
       if (!slugInput) return;
 
-      const quantityInput = prompt('Quantity:', '1');
+      const quantityInput = await showInputModal('Quantity:', 'Enter quantity', '1');
       const quantity = parseInt(quantityInput) || 1;
 
       // Select collection
       let collectionId = this.state.filters.collectionId;
       if (!collectionId || collectionId === 'all') {
         const options = collections.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
-        const choice = prompt(`Select a collection:\n${options}`, '1');
+        const choice = await showInputModal(`Select a collection:\n${options}`, 'Enter number', '1');
         const index = parseInt(choice) - 1;
         if (collections[index]) {
           collectionId = collections[index].id;
@@ -2098,13 +2163,92 @@ export class CollectionPage {
         if (listView) listView.style.display = 'none';
       }
 
+      // Update Load More button visibility
+      const loadMoreContainer = document.getElementById('loadMoreContainer');
+      if (loadMoreContainer) {
+        const { hasMore, isLoadingMore } = this.state.pagination;
+        if (hasMore && !isEmpty) {
+          loadMoreContainer.classList.remove('hidden');
+          loadMoreContainer.style.display = 'flex';
+          const loadMoreBtn = document.getElementById('loadMoreBtn');
+          if (loadMoreBtn) {
+            loadMoreBtn.disabled = isLoadingMore;
+            loadMoreBtn.textContent = isLoadingMore ? 'Loading...' : 'Load More';
+          }
+        } else {
+          loadMoreContainer.classList.add('hidden');
+          loadMoreContainer.style.display = 'none';
+        }
+      }
+
       // Update icons
       if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
+        refreshIcons();
       }
 
     } catch (error) {
       console.error('CollectionPage: Error updating display', error);
+    }
+  }
+
+  /**
+   * Handle Load More button click - fetches next page and appends results
+   */
+  async handleLoadMore() {
+    if (this.state.pagination.isLoadingMore || !this.state.pagination.hasMore) return;
+
+    this.state.pagination.isLoadingMore = true;
+    this.updateDisplay();
+
+    try {
+      const nextPage = this.state.pagination.page + 1;
+      const { user } = await authService.getCurrentUser();
+
+      if (!user) {
+        // Guest mode has no pagination (all cards are local)
+        this.state.pagination.hasMore = false;
+        this.state.pagination.isLoadingMore = false;
+        this.updateDisplay();
+        return;
+      }
+
+      // Fetch next page via CollectionManager (same approach as loadData)
+      const pageSize = this.state.pagination.pageSize;
+      const cards = await this.collectionManager.getAllUserCards({
+        offset: nextPage * pageSize,
+        limit: pageSize,
+      });
+
+      if (!cards || cards.length === 0) {
+        this.state.pagination.hasMore = false;
+      } else {
+        // Load favorites
+        const favoritesKey = 'voxrip_favorites';
+        const favorites = JSON.parse(localStorage.getItem(favoritesKey) || '{}');
+        const newCards = cards.filter(Boolean).map(card => ({
+          ...card,
+          isFavorite: favorites[card.id || card.cardVariantId] || false,
+        }));
+
+        this.state.cards = [...this.state.cards, ...newCards];
+        this.state.pagination.page = nextPage;
+        this.state.pagination.hasMore = newCards.length >= pageSize;
+
+        this.collectionManager.setExternalCards(this.state.cards, { ttl: Number.MAX_SAFE_INTEGER });
+        this.recalculateDerivedState();
+
+        if (this.cardGrid) {
+          this.cardGrid.update(this.state.sortedCards);
+        }
+      }
+    } catch (error) {
+      console.error('[CollectionPage] Error loading more cards:', error);
+      if (this.app?.showToast) {
+        this.app.showToast('Failed to load more cards', 'error');
+      }
+    } finally {
+      this.state.pagination.isLoadingMore = false;
+      this.updateDisplay();
     }
   }
 
@@ -2383,7 +2527,7 @@ export class CollectionPage {
         </div>
       `;
       if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
+        refreshIcons();
       }
     }
   }

@@ -13,7 +13,7 @@
  */
 
 import CardGrid from '../components/CardGrid.js';
-import IconLoader from '../utils/IconLoader.js';
+import IconLoader, { refreshIcons } from '../utils/IconLoader.js';
 import CollectionManager from '../services/CollectionManager.js';
 import { authService } from '../services/authService.js';
 
@@ -1506,9 +1506,23 @@ export default class PackOpeningPage {
    * @private
    */
   showError(message) {
-    // TODO: Implement toast notification system
-    alert(message);
+    const toast = window.app?.uiManager?.showToast;
+    if (toast) {
+      window.app.uiManager.showToast(message, 'error');
+    } else {
+      this._showInlineToast(message, 'error');
+    }
     console.error(message);
+  }
+
+  _showInlineToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
   }
 
   /**
@@ -1611,7 +1625,7 @@ export default class PackOpeningPage {
         `;
 
         if (window.lucide) {
-          window.lucide.createIcons();
+          refreshIcons();
         }
       }
     }
@@ -1762,7 +1776,7 @@ export default class PackOpeningPage {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 
     // Initialize icons in modal
-    if (typeof lucide !== 'undefined') lucide.createIcons();
+    refreshIcons();
 
     // Event Listeners for Modal
     const modal = document.querySelector('.modal-overlay');
@@ -1796,7 +1810,7 @@ export default class PackOpeningPage {
     confirmCreateBtn.onclick = async () => {
       const name = document.getElementById('new-collection-name').value;
       const desc = document.getElementById('new-collection-desc').value;
-      if (!name) return alert('Please enter a name');
+      if (!name) { this.showError('Please enter a name'); return; }
 
       try {
         const newCol = await this.collectionManager.createCollection(name, desc);
@@ -1806,7 +1820,7 @@ export default class PackOpeningPage {
         }
       } catch (err) {
         console.error(err);
-        alert('Failed to create collection');
+        this.showError('Failed to create collection');
       }
     };
 
@@ -1883,7 +1897,7 @@ export default class PackOpeningPage {
         }
       } catch (err) {
         console.error(err);
-        alert('Failed to add some cards');
+        this.showError('Failed to add some cards');
         btn.textContent = originalText;
         btn.disabled = false;
       }
