@@ -2263,12 +2263,21 @@ export class CollectionPage {
       // Total cards (sum of quantities)
       const totalCardsValue = cards.reduce((sum, card) => sum + (Number(card.quantity) || 1), 0);
 
-      // Total value (sum of each card's total value, using market price as primary)
-      const totalValueDollars = cards.reduce((sum, card) => {
+      // Total value + pack value aggregation in a single pass
+      let totalValueDollars = 0;
+      let totalPackValue = 0;
+      let totalCurrentOfPacked = 0;
+      for (const card of cards) {
         const price = card.pricing?.currentPrice || card.tcgMarket || card.pricing?.marketPrice || 0;
-        const quantity = Number(card.quantity) || 1;
-        return sum + (price * quantity);
-      }, 0);
+        const qty = Number(card.quantity) || 1;
+        totalValueDollars += price * qty;
+
+        const packPrice = card.packPrice ?? card.pricing?.priceAtPack;
+        if (packPrice != null && packPrice > 0) {
+          totalPackValue += packPrice * qty;
+          totalCurrentOfPacked += price * qty;
+        }
+      }
 
       // Unique cards (count of distinct cards)
       const uniqueCardsValue = cards.length;
@@ -2314,14 +2323,18 @@ export class CollectionPage {
 
       const valueTrend = document.getElementById('statValueTrend');
       if (valueTrend) {
-        // For now, show 0% trend (would need historical data per collection)
-        const trend = 0;
-        const trendIcon = trend >= 0 ? 'trending-up' : 'trending-down';
-        valueTrend.innerHTML = `
-        <i data-lucide="${trendIcon}" style="width: 12px;"></i>
-        <span>${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%</span>
-      `;
-        valueTrend.style.color = trend >= 0 ? '#10b981' : '#ef4444';
+        if (totalPackValue > 0) {
+          const trend = ((totalCurrentOfPacked - totalPackValue) / totalPackValue) * 100;
+          const trendIcon = trend >= 0 ? 'trending-up' : 'trending-down';
+          valueTrend.innerHTML = `
+          <i data-lucide="${trendIcon}" style="width: 12px;"></i>
+          <span>${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%</span>
+        `;
+          valueTrend.style.color = trend >= 0 ? '#10b981' : '#ef4444';
+          valueTrend.style.display = '';
+        } else {
+          valueTrend.style.display = 'none';
+        }
       }
 
       const cardsTrend = document.getElementById('statCardsTrend');

@@ -190,7 +190,7 @@ export default class Sidebar {
         <div class="nav-group">
             <button class="btn-secondary back-btn" id="backToDashboardBtn">
                 <i data-lucide="arrow-left"></i>
-                Back to Dashboard
+                <span class="btn-text">Back to Dashboard</span>
             </button>
 
             <div class="nav-label">Library</div>
@@ -216,7 +216,7 @@ export default class Sidebar {
         <div class="sidebar-actions">
             <button class="btn-secondary new-collection-btn" id="sidebarCreateCollectionBtn">
                 <i data-lucide="plus-circle"></i>
-                New Collection
+                <span class="btn-text">New Collection</span>
             </button>
         </div>
       </nav>
