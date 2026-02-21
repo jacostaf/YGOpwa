@@ -12,7 +12,7 @@
 const SW_DEBUG = false;
 function swLog(...args) { if (SW_DEBUG) console.log('[SW]', ...args); }
 
-const CACHE_NAME = 'voxrip-v2.3.0';
+const CACHE_NAME = 'voxrip-v2.3.1';
 const RUNTIME_CACHE = 'voxrip-runtime';
 
 // Resources to cache for offline use

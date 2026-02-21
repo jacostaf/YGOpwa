@@ -1390,8 +1390,10 @@ export class SessionManager {
             );
 
             if (!hasValidImportedPricing) {
-                // Start async price update without blocking
-                this._updateCardPricing(enhancedCard, cardData);
+                // Start async price update without blocking — catch to prevent unhandled rejection
+                this._updateCardPricing(enhancedCard, cardData).catch(err => {
+                    this.logger.warn('Background pricing update failed:', err.message);
+                });
             } else if (cardData.tcg_price || cardData.tcg_market_price) {
                 // Use existing pricing data immediately
                 this._applyPricingData(enhancedCard, {

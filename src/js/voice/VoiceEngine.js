@@ -453,14 +453,23 @@ export class VoiceEngine {
             }
 
             // Ensure previous instance is fully stopped before starting
+            // Note: abort() fires onend asynchronously, which can schedule a duplicate
+            // restart. We cancel that after the delay to prevent a restart race condition
+            // that exhausts maxRestartAttempts.
             try {
                 engine.instance.abort();
             } catch (e) {
                 // Ignore abort errors - engine may not be running
             }
 
-            // Small delay to let abort complete
+            // Small delay to let abort complete (including its onend event)
             await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Cancel any restart timeout that the abort-triggered onend may have scheduled
+            if (this.restartTimeoutId) {
+                clearTimeout(this.restartTimeoutId);
+                this.restartTimeoutId = null;
+            }
 
             // Start recognition with timeout
             await this.startEngineWithTimeout(engine);
