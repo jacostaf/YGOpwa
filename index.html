@@ -51,13 +51,7 @@
     <link rel="stylesheet" href="src/css/accessibility.css" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="src/css/rarity-admin.css" media="print" onload="this.media='all'">
 
-    <!-- Preload critical resources -->
-    <link rel="modulepreload" href="src/js/app.js" crossorigin="anonymous">
-    <link rel="modulepreload" href="src/js/voice/VoiceEngine.js" crossorigin="anonymous">
-
-    <!-- Lucide Icons CDN -->
-    <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" defer></script>
-
+    <!-- Import map MUST come before any modulepreload or module scripts -->
     <script type="importmap" id="supabase-importmap">
     {
       "imports": {
@@ -66,6 +60,13 @@
       }
     }
     </script>
+
+    <!-- Preload critical resources (after import map) -->
+    <link rel="modulepreload" href="src/js/app.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="src/js/voice/VoiceEngine.js" crossorigin="anonymous">
+
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" defer></script>
 </head>
 
 <body>
