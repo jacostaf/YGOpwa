@@ -38,8 +38,7 @@
   display: flex;
   flex-direction: column;
   transition: transform var(--transition-normal), width 0.2s ease;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /* Custom scrollbar for sidebar */
@@ -92,7 +91,7 @@
   border-top: 1px solid var(--border-primary, #262626);
   flex-shrink: 0;
   font-size: var(--text-sm, 0.875rem);
-  color: var(--text-tertiary, #737373);
+  color: var(--text-tertiary, #9e9590);
   text-align: center;
 }
 
@@ -171,7 +170,7 @@ body.sidebar-collapsed .main-content {
 
 .page-container {
   flex: 1;
-  padding: var(--spacing-lg, 1.5rem) var(--spacing-xl, 2rem);
+  padding: var(--spacing-sm, 0.5rem) var(--spacing-xl, 2rem);
   padding-bottom: calc(var(--spacing-lg, 1.5rem) + 40px); /* Extra space for 32px status bar */
   overflow-y: auto;
   overflow-x: hidden;
@@ -268,8 +267,7 @@ body.sidebar-collapsed .main-content {
 /* Tablet and below (< 1024px) */
 @media (max-width: 1023px) {
   .page-container {
-    padding: var(--spacing-lg, 1.5rem) var(--spacing-lg, 1.5rem);
-    /* 24px all around for tablets */
+    padding: var(--spacing-lg, 1.5rem);
   }
 
   .page-header {
@@ -334,8 +332,7 @@ body.sidebar-collapsed .main-content {
 
   /* Reduce page container padding */
   .page-container {
-    padding: var(--spacing-md, 1rem) var(--spacing-md, 1rem);
-    /* 16px all around for large mobile */
+    padding: var(--spacing-md, 1rem);
   }
 
   /* Sidebar header adjustments */
@@ -695,7 +692,7 @@ body.sidebar-collapsed .status-bar {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  z-index: 2147483647 !important;
+  z-index: var(--z-modal-backdrop, 1040) !important;
   padding: 1rem;
   opacity: 1 !important;
   transition: opacity var(--transition-fast);
@@ -721,8 +718,7 @@ body.sidebar-collapsed .status-bar {
   overflow: hidden;
   transform: scale(1);
   transition: transform 0.3s ease;
-  z-index: 2147483647 !important;
-  /* Max z-index */
+  z-index: var(--z-modal, 1050) !important;
   display: flex !important;
   flex-direction: column;
   position: relative !important;
@@ -768,4 +764,19 @@ body.sidebar-collapsed .status-bar {
 .modal-content {
   padding: 1.5rem;
   overflow-y: auto;
+}
+
+/* Safe area insets for notched devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pack-sidebar {
+    padding-bottom: calc(var(--spacing-sm) + env(safe-area-inset-bottom));
+  }
+
+  .cards-area {
+    padding-bottom: calc(var(--spacing-md) + env(safe-area-inset-bottom));
+  }
+
+  .modal-overlay {
+    padding: env(safe-area-inset-top, 1rem) 1rem env(safe-area-inset-bottom, 1rem) 1rem;
+  }
 }

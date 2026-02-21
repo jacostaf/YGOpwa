@@ -4,8 +4,9 @@
  * This file defines the default theme (dark) using CSS custom properties.
  * Theme switching is handled by ThemeManager.js which updates these properties dynamically.
  *
- * All 7 themes use the same variable names but with different values:
- * - dark (default)
+ * All 8 themes use the same variable names but with different values:
+ * - dusk (default)
+ * - dark
  * - light
  * - blue
  * - violet
@@ -20,23 +21,23 @@
      Human-designed color system for VoxRip
      ======================================== */
 
-  /* Surface Colors - Solid, no transparency */
-  --surface-primary: #0a0a0a;
-  --surface-secondary: #141414;
-  --surface-tertiary: #1c1c1c;
-  --surface-elevated: #1f1f1f;
-  --surface-hover: #242424;
+  /* Surface Colors - Solid, warm-shifted for intentional feel */
+  --surface-primary: #0b0a09;
+  --surface-secondary: #15140f;
+  --surface-tertiary: #1d1c18;
+  --surface-elevated: #201e1c;
+  --surface-hover: #2a2825;
 
-  /* Text Colors - Warm gray tones */
+  /* Text Colors - Warm gray tones (WCAG AA compliant) */
   --text-primary: #f5f5f4;
   --text-secondary: #a8a29e;
-  --text-tertiary: #78716c;
-  --text-muted: #57534e;
+  --text-tertiary: #9e9590;
+  --text-muted: #6d6560;
   --text-inverse: #0a0a0a;
 
   /* Border Colors - Subtle, intentional */
   --border-subtle: #1f1f1f;
-  --border-default: #2a2a2a;
+  --border-default: #333333;
   --border-strong: #3d3d3d;
   --border-primary: #2a2a2a;
   --border-focus: #4a4a4a;
@@ -46,7 +47,7 @@
   --accent-secondary: #a3a3a3;
   --accent-hover: #ffffff;
   --accent-muted: #737373;
-  --accent-subtle: rgba(255, 255, 255, 0.06);
+  --accent-subtle: rgba(255, 255, 255, 0.10);
 
   /* Feedback Colors - Desaturated for cohesion */
   --feedback-success: #4ade80;
@@ -104,7 +105,7 @@
   --text-4xl: 2.25rem;
   /* 36px */
 
-  /* Font Weights */
+  /* Font Weights - Less chunky for refined feel */
   --font-normal: 400;
   --font-medium: 500;
   --font-semibold: 600;
@@ -188,42 +189,42 @@
    ======================================== */
 [data-theme="light"] {
   /* Surface Colors - Warm off-whites */
-  --surface-primary: #fafaf9;
+  --surface-primary: #f9f8f5;
   --surface-secondary: #ffffff;
-  --surface-tertiary: #f5f5f4;
+  --surface-tertiary: #f2f0ec;
   --surface-elevated: #ffffff;
-  --surface-hover: #f0f0ef;
+  --surface-hover: #ece9e4;
 
-  /* Text Colors - Warm grays */
+  /* Text Colors - Warm grays (WCAG AA compliant) */
   --text-primary: #1c1917;
   --text-secondary: #57534e;
-  --text-tertiary: #78716c;
-  --text-muted: #a8a29e;
-  --text-inverse: #fafaf9;
+  --text-tertiary: #68625c;
+  --text-muted: #8f8880;
+  --text-inverse: #f9f8f5;
 
-  /* Border Colors */
-  --border-subtle: #e7e5e4;
-  --border-default: #d6d3d1;
+  /* Border Colors - Warm, visible */
+  --border-subtle: #ddd9d5;
+  --border-default: #ccc7c2;
   --border-strong: #a8a29e;
-  --border-primary: #d6d3d1;
+  --border-primary: #ccc7c2;
   --border-focus: #78716c;
 
-  /* Accent Colors - Neutral dark grays (matches dark theme philosophy) */
-  --accent-primary: #404040;
-  --accent-secondary: #525252;
-  --accent-hover: #262626;
+  /* Accent Colors - Warm dark grays */
+  --accent-primary: #3a3530;
+  --accent-secondary: #4d4740;
+  --accent-hover: #252018;
   --accent-muted: #737373;
-  --accent-subtle: rgba(0, 0, 0, 0.04);
+  --accent-subtle: rgba(0, 0, 0, 0.07);
 
   /* Sidebar */
-  --sidebar-bg: #f5f5f4;
+  --sidebar-bg: #f2f0ec;
   --sidebar-hover: rgba(0, 0, 0, 0.03);
-  --sidebar-active: #e7e5e4;
+  --sidebar-active: #ddd9d5;
 
   /* Cards */
   --card-bg: #ffffff;
-  --card-bg-hover: #fafaf9;
-  --card-border: #e7e5e4;
+  --card-bg-hover: #f9f8f5;
+  --card-border: #ddd9d5;
 
   /* Backgrounds */
   --bg-primary: var(--surface-primary);
@@ -231,13 +232,76 @@
   --bg-tertiary: var(--surface-tertiary);
   --bg-hover: var(--surface-hover);
 
-  /* Shadows - Softer for light mode */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 2px 6px -1px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 4px 12px -2px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 8px 20px -4px rgba(0, 0, 0, 0.12);
-  --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  /* Shadows - Softer for light mode, slightly warm */
+  --shadow-xs: 0 1px 2px rgba(20, 15, 10, 0.04);
+  --shadow-sm: 0 1px 3px rgba(20, 15, 10, 0.06);
+  --shadow-md: 0 2px 6px -1px rgba(20, 15, 10, 0.08);
+  --shadow-lg: 0 4px 12px -2px rgba(20, 15, 10, 0.1);
+  --shadow-xl: 0 8px 20px -4px rgba(20, 15, 10, 0.12);
+  --shadow-inner: inset 0 1px 2px rgba(20, 15, 10, 0.05);
+}
+
+/* ========================================
+   DUSK THEME - Warm Earthy Dark
+   ======================================== */
+[data-theme="dusk"] {
+  /* Surface Colors - Warm charcoal/brown-black */
+  --surface-primary: #0c0a07;
+  --surface-secondary: #161209;
+  --surface-tertiary: #1e1a12;
+  --surface-elevated: #231e15;
+  --surface-hover: #2d2619;
+
+  /* Text Colors - Warm cream/sand (WCAG AA compliant) */
+  --text-primary: #ece6db;
+  --text-secondary: #a69a8a;
+  --text-tertiary: #7e7264;
+  --text-muted: #5e5446;
+  --text-inverse: #0c0a07;
+
+  /* Border Colors - Warm brown */
+  --border-subtle: #221d14;
+  --border-default: #362e24;
+  --border-strong: #453b2f;
+  --border-primary: #2c2519;
+  --border-focus: #504436;
+
+  /* Accent Colors - Desaturated warm sand (subtle, not colorful) */
+  --accent-primary: #c4b8a4;
+  --accent-secondary: #a29784;
+  --accent-hover: #d8cfc0;
+  --accent-muted: #7a7060;
+  --accent-subtle: rgba(196, 184, 164, 0.08);
+
+  /* Feedback Colors */
+  --feedback-success: #4ade80;
+  --feedback-warning: #fbbf24;
+  --feedback-error: #f87171;
+  --feedback-info: #60a5fa;
+
+  /* Sidebar */
+  --sidebar-bg: #100d08;
+  --sidebar-hover: rgba(196, 184, 164, 0.04);
+  --sidebar-active: #1c1710;
+
+  /* Cards */
+  --card-bg: #151108;
+  --card-bg-hover: #1c1710;
+  --card-border: #221d14;
+
+  /* Backgrounds (legacy) */
+  --bg-primary: var(--surface-primary);
+  --bg-secondary: var(--surface-secondary);
+  --bg-tertiary: var(--surface-tertiary);
+  --bg-hover: var(--surface-hover);
+
+  /* Shadows - Warm-tinted */
+  --shadow-xs: 0 1px 2px rgba(8, 6, 3, 0.35);
+  --shadow-sm: 0 1px 3px rgba(8, 6, 3, 0.3);
+  --shadow-md: 0 2px 6px -1px rgba(8, 6, 3, 0.4);
+  --shadow-lg: 0 4px 12px -2px rgba(8, 6, 3, 0.45);
+  --shadow-xl: 0 8px 20px -4px rgba(8, 6, 3, 0.55);
+  --shadow-inner: inset 0 1px 2px rgba(8, 6, 3, 0.2);
 }
 
 /* ========================================
@@ -280,9 +344,8 @@ body {
 .glass-card:hover,
 .card:hover {
   background-color: var(--card-bg-hover);
-  border-color: var(--border-default);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
-  /* NO transform on hover - subtle elevation only */
 }
 
 /* ========================================
@@ -308,16 +371,23 @@ button {
   padding: var(--spacing-sm) var(--spacing-md);
   font-weight: var(--font-semibold);
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition: background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .btn-primary:hover {
   background-color: var(--surface-hover);
   border-color: var(--border-focus);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary:active {
   background-color: var(--surface-tertiary);
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .btn-primary:focus-visible {
@@ -473,22 +543,6 @@ textarea {
 }
 
 /* ========================================
-   ACCESSIBILITY: REDUCED MOTION
-   ======================================== */
-
-@media (prefers-reduced-motion: reduce) {
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ========================================
    THEME-SPECIFIC OVERRIDES (OPTIONAL)
    ======================================== */
 
@@ -497,26 +551,31 @@ textarea {
   color: #ffffff;
 }
 
+/* Dusk theme - dark text on warm sand accent background */
+[data-theme="dusk"] .btn-primary {
+  color: var(--text-inverse);
+}
+
 body[data-theme="light"] {
-  /* Light theme gets softer, more diffused shadows */
+  /* Light theme gets softer, more diffused shadows (warm-tinted) */
   --shadow-sm:
-    0 1px 2px 0 rgba(0, 0, 0, 0.08),
-    0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    0 1px 2px 0 rgba(20, 15, 10, 0.08),
+    0 1px 3px 0 rgba(20, 15, 10, 0.05);
 
   --shadow-md:
-    0 2px 4px -1px rgba(0, 0, 0, 0.15),
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 1px 8px -1px rgba(0, 0, 0, 0.06);
+    0 2px 4px -1px rgba(20, 15, 10, 0.15),
+    0 4px 6px -1px rgba(20, 15, 10, 0.1),
+    0 1px 8px -1px rgba(20, 15, 10, 0.06);
 
   --shadow-lg:
-    0 4px 6px -2px rgba(0, 0, 0, 0.15),
-    0 10px 15px -3px rgba(0, 0, 0, 0.12),
-    0 2px 20px -2px rgba(0, 0, 0, 0.08);
+    0 4px 6px -2px rgba(20, 15, 10, 0.15),
+    0 10px 15px -3px rgba(20, 15, 10, 0.12),
+    0 2px 20px -2px rgba(20, 15, 10, 0.08);
 
   --shadow-xl:
-    0 10px 10px -5px rgba(0, 0, 0, 0.1),
-    0 20px 25px -5px rgba(0, 0, 0, 0.15),
-    0 8px 40px -8px rgba(0, 0, 0, 0.12);
+    0 10px 10px -5px rgba(20, 15, 10, 0.1),
+    0 20px 25px -5px rgba(20, 15, 10, 0.15),
+    0 8px 40px -8px rgba(20, 15, 10, 0.12);
 }
 
 /* ========================================
@@ -562,6 +621,14 @@ body[data-theme="amber"] {
   --accent-secondary: #d18f2a;
   --accent-hover: #f0b655;
   --accent-muted: #b87a1a;
+}
+
+/* Dusk accent theme */
+body[data-theme="dusk"] {
+  --accent-primary: #c4b8a4;
+  --accent-secondary: #a29784;
+  --accent-hover: #d8cfc0;
+  --accent-muted: #7a7060;
 }
 
 /* ========================================

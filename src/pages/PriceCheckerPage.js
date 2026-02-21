@@ -11,6 +11,7 @@
 
 import { PriceChecker } from '../js/price/PriceChecker.js';
 import { Logger } from '../js/utils/Logger.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class PriceCheckerPage {
   constructor(router) {
@@ -192,7 +193,7 @@ export default class PriceCheckerPage {
 
     // Initialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     // Initialize services
@@ -456,7 +457,7 @@ export default class PriceCheckerPage {
 
     // Reinitialize Lucide icons for the new content
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     // Scroll to results
@@ -487,7 +488,7 @@ export default class PriceCheckerPage {
 
     // Reinitialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -538,7 +539,7 @@ export default class PriceCheckerPage {
 
     // Reinitialize icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -624,7 +625,7 @@ export default class PriceCheckerPage {
 
     // Initialize Lucide icons
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     // Auto remove after 3 seconds

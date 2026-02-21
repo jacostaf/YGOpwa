@@ -8,6 +8,7 @@
 import { Logger } from '../js/utils/Logger.js';
 import { authService } from '../services/authService.js';
 import RarityAdmin from '../components/RarityAdmin.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class RarityAdminPage {
   constructor(router) {
@@ -62,7 +63,7 @@ export default class RarityAdminPage {
       </div>
     `;
 
-    if (window.lucide) window.lucide.createIcons();
+    refreshIcons();
   }
 
   async unmount() {

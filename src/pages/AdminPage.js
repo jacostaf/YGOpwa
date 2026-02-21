@@ -1,6 +1,7 @@
 import { Logger } from '../js/utils/Logger.js';
 import { authService } from '../services/authService.js';
 import { config } from '../js/utils/config.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 
 export default class AdminPage {
@@ -44,7 +45,7 @@ export default class AdminPage {
           </div>
         </div>
       `;
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
       return;
     }
 
@@ -167,7 +168,7 @@ export default class AdminPage {
       </div>
     `;
 
-    if (window.lucide) window.lucide.createIcons();
+    refreshIcons();
   }
 
   attachEvents() {
@@ -264,7 +265,7 @@ export default class AdminPage {
       status.className = 'mt-4 text-sm text-danger';
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="download-cloud"></i> Refresh Card Catalog';
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -326,7 +327,7 @@ export default class AdminPage {
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="download-cloud"></i> Refresh Card Catalog';
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -381,7 +382,7 @@ export default class AdminPage {
       status.className = 'mt-4 text-sm text-danger';
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="upload-cloud"></i> Sync to Database';
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -427,7 +428,7 @@ export default class AdminPage {
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="upload-cloud"></i> Sync to Database';
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -525,7 +526,7 @@ export default class AdminPage {
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="rotate-cw"></i> Refresh Leaderboards';
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -584,7 +585,7 @@ export default class AdminPage {
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i data-lucide="zap"></i> Force Refresh';
-      if (window.lucide) window.lucide.createIcons();
+      refreshIcons();
     }
   }
 

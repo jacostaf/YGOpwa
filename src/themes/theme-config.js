@@ -1,6 +1,6 @@
 /**
  * VoxRip Theme Configuration
- * Defines all 7 available themes with their color palettes
+ * Defines all 8 available themes with their color palettes
  *
  * Each theme includes:
  * - name: Theme identifier
@@ -56,44 +56,91 @@ export const THEMES = {
     }
   },
 
+  dusk: {
+    name: 'dusk',
+    displayName: 'Dusk',
+    colors: {
+      // Background colors - Warm charcoal
+      '--bg-primary': '#0c0a07',
+      '--bg-secondary': '#161209',
+      '--bg-tertiary': '#1e1a12',
+
+      // Card/Surface colors
+      '--card-bg': 'rgba(21, 17, 8, 0.4)',
+      '--card-bg-hover': 'rgba(28, 23, 16, 0.6)',
+      '--card-border': 'rgba(34, 29, 20, 0.5)',
+
+      // Text colors - Warm cream/sand
+      '--text-primary': '#ece6db',
+      '--text-secondary': '#a69a8a',
+      '--text-tertiary': '#7e7264',
+      '--text-muted': '#5e5446',
+
+      // Accent colors - Desaturated warm sand
+      '--accent-primary': '#c4b8a4',
+      '--accent-secondary': '#a29784',
+      '--accent-hover': '#d8cfc0',
+
+      // Gradient backgrounds
+      '--gradient-from': '#0c0a07',
+      '--gradient-via': '#161209',
+      '--gradient-to': '#0c0a07',
+
+      // Border colors - Warm brown
+      '--border-primary': '#2c2519',
+      '--border-secondary': '#453b2f',
+
+      // Sidebar colors
+      '--sidebar-bg': 'rgba(16, 13, 8, 0.8)',
+      '--sidebar-active': 'rgba(196, 184, 164, 0.12)',
+      '--sidebar-hover': 'rgba(196, 184, 164, 0.06)',
+
+      // Status colors
+      '--success': '#4ade80',
+      '--warning': '#fbbf24',
+      '--error': '#f87171',
+      '--info': '#60a5fa',
+    }
+  },
+
   light: {
     name: 'light',
     displayName: 'Light',
     colors: {
-      // Background colors
-      '--bg-primary': '#f8fafc',           // slate-50
-      '--bg-secondary': '#f1f5f9',         // slate-100
-      '--bg-tertiary': '#e2e8f0',          // slate-200
+      // Background colors - Warm off-whites
+      '--bg-primary': '#f9f8f5',
+      '--bg-secondary': '#f5f3ef',
+      '--bg-tertiary': '#e8e4de',
 
-      // Card/Surface colors
-      '--card-bg': 'rgba(241, 245, 249, 0.4)',
-      '--card-bg-hover': 'rgba(241, 245, 249, 0.6)',
-      '--card-border': 'rgba(226, 232, 240, 0.5)',
+      // Card/Surface colors - Warm
+      '--card-bg': 'rgba(245, 243, 239, 0.4)',
+      '--card-bg-hover': 'rgba(245, 243, 239, 0.6)',
+      '--card-border': 'rgba(221, 217, 213, 0.5)',
 
-      // Text colors
-      '--text-primary': '#0f172a',         // slate-900
-      '--text-secondary': '#64748b',       // slate-500
-      '--text-tertiary': '#94a3b8',        // slate-400
-      '--text-muted': '#cbd5e1',           // slate-300
+      // Text colors - Warm, WCAG AA compliant
+      '--text-primary': '#1c1917',
+      '--text-secondary': '#57524c',
+      '--text-tertiary': '#68625c',
+      '--text-muted': '#8f8880',
 
-      // Accent colors
-      '--accent-primary': '#64748b',       // slate-500
-      '--accent-secondary': '#94a3b8',     // slate-400
-      '--accent-hover': '#475569',         // slate-600
+      // Accent colors - Warm dark
+      '--accent-primary': '#3a3530',
+      '--accent-secondary': '#4d4740',
+      '--accent-hover': '#252018',
 
-      // Gradient backgrounds
-      '--gradient-from': '#f8fafc',        // slate-50
-      '--gradient-via': '#f1f5f9',         // slate-100
-      '--gradient-to': '#f8fafc',          // slate-50
+      // Gradient backgrounds - Warm
+      '--gradient-from': '#f9f8f5',
+      '--gradient-via': '#f5f3ef',
+      '--gradient-to': '#f9f8f5',
 
-      // Border colors
-      '--border-primary': '#e2e8f0',       // slate-200
-      '--border-secondary': '#cbd5e1',     // slate-300
+      // Border colors - Warm, visible
+      '--border-primary': '#ccc7c2',
+      '--border-secondary': '#a8a29e',
 
-      // Sidebar colors
-      '--sidebar-bg': 'rgba(241, 245, 249, 0.8)',
-      '--sidebar-active': 'rgba(100, 116, 139, 0.2)',
-      '--sidebar-hover': 'rgba(100, 116, 139, 0.1)',
+      // Sidebar colors - Warm
+      '--sidebar-bg': 'rgba(245, 243, 239, 0.8)',
+      '--sidebar-active': 'rgba(58, 53, 48, 0.15)',
+      '--sidebar-hover': 'rgba(58, 53, 48, 0.08)',
 
       // Status colors
       '--success': '#22c55e',
@@ -342,7 +389,7 @@ export const THEMES = {
 /**
  * Default theme configuration
  */
-export const DEFAULT_THEME = 'dark';
+export const DEFAULT_THEME = 'dusk';
 
 /**
  * Get all available theme names

@@ -14,6 +14,16 @@
  *    element.appendChild(icon);
  */
 
+let _pending = null;
+export function refreshIcons() {
+  if (!_pending) {
+    _pending = requestAnimationFrame(() => {
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      _pending = null;
+    });
+  }
+}
+
 export default class IconLoader {
   /**
    * Check if Lucide library is loaded
@@ -93,13 +103,11 @@ export default class IconLoader {
   }
 
   /**
-   * Initialize all icons on the page
-   * Call this after dynamically adding icon elements
+   * Initialize all icons on the page (debounced via rAF).
+   * Call this after dynamically adding icon elements.
    */
   static refreshIcons() {
-    if (this.isLoaded() && window.lucide.createIcons) {
-      window.lucide.createIcons();
-    }
+    refreshIcons();
   }
 
   /**

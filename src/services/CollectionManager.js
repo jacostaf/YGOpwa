@@ -253,6 +253,47 @@ export class CollectionManager {
   }
 
   /**
+   * Add multiple cards to a collection in a single insert
+   * @param {string} collectionId
+   * @param {Array<Object>} cards
+   * @returns {Promise<Array>} Inserted rows
+   */
+  async batchAddCardsToCollection(collectionId, cards) {
+    const user = authService.getUser();
+    if (!user || !supabase) throw new Error('User not authenticated');
+
+    if (!Array.isArray(cards) || cards.length === 0) {
+      return [];
+    }
+
+    console.log(`[CollectionManager] Batch adding ${cards.length} cards to collection:`, collectionId);
+
+    const rows = cards.map(card => ({
+      collection_id: collectionId,
+      card_id: card.productId || card.card?.productId || card.tcgcsv_product_id || card.product_id || card.id,
+      name: card.name || card.cardName,
+      set_code: card.setCode || card.set_code,
+      rarity: card.rarity,
+      card_type: getCardCategory(card),
+      quantity: card.quantity || 1
+    }));
+
+    const { data, error } = await supabase
+      .from('collection_cards')
+      .insert(rows)
+      .select();
+
+    if (error) {
+      console.error('[CollectionManager] Error batch adding cards:', error);
+      throw error;
+    }
+
+    console.log(`[CollectionManager] Batch added ${data.length} cards successfully`);
+    this.invalidateCache();
+    return data;
+  }
+
+  /**
    * Create a pack event with price snapshots for cards being added
    * This captures the price at the moment cards are packed for ROI tracking
    * @param {string} userId - User's ID
@@ -553,9 +594,12 @@ export class CollectionManager {
 
   /**
    * Get all cards from all user collections (flattened)
+   * @param {Object} [options]
+   * @param {number} [options.offset] - Starting index for pagination
+   * @param {number} [options.limit] - Maximum number of cards to fetch
    * @returns {Promise<Array>} All user cards
    */
-  async getAllUserCards() {
+  async getAllUserCards(options = {}) {
     const { user } = await authService.getCurrentUser();
     if (!user || !supabase) return [];
 
@@ -578,10 +622,16 @@ export class CollectionManager {
       console.log('[CollectionManager] Fetching cards for collection IDs:', collectionIds);
 
       // Fetch cards for these collections
-      const { data: cards, error: cardError } = await supabase
+      let cardQuery = supabase
         .from('collection_cards')
         .select('*')
         .in('collection_id', collectionIds);
+
+      if (options.offset !== undefined && options.limit !== undefined) {
+        cardQuery = cardQuery.range(options.offset, options.offset + options.limit - 1);
+      }
+
+      const { data: cards, error: cardError } = await cardQuery;
 
       console.log('[CollectionManager] Collection cards fetch result:', cards?.length || 0, cardError || 'no error');
 

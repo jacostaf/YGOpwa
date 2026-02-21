@@ -56,12 +56,24 @@ export default class Sidebar {
     // Subscribe to auth changes to update sidebar when user logs in/out or profile loads
     if (authService) {
       authService.onAuthStateChange((event, session) => {
-        console.log('Sidebar: Auth state changed:', event);
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'PROFILE_UPDATED') {
+        console.log('Sidebar: Auth state changed:', event, '| is_admin:', authService.profile?.is_admin);
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'PROFILE_UPDATED' || event === 'INITIAL_SESSION') {
           this.render();
           this.attachEvents(); // Re-attach events after re-render
         }
       });
+
+      // Safety net: explicitly re-render after profile loads
+      // Covers cases where PROFILE_UPDATED fires before sidebar subscribes
+      if (authService._profileReady) {
+        authService._profileReady.then(() => {
+          if (authService.profile?.is_admin && !this.container.querySelector('[data-nav-id="admin"]')) {
+            console.log('Sidebar: Profile ready via safety net, re-rendering for admin tab');
+            this.render();
+            this.attachEvents();
+          }
+        });
+      }
     }
   }
 
@@ -123,9 +135,8 @@ export default class Sidebar {
     }
 
     const profile = authService?.profile;
-    console.log('Sidebar: Profile state:', profile);
     const isAdmin = profile && profile.is_admin;
-    console.log('Sidebar: isAdmin:', isAdmin);
+    console.log('Sidebar: renderNavigation | is_admin:', profile?.is_admin, '(type:', typeof profile?.is_admin + ') | resolved:', isAdmin);
 
     const itemsToRender = [...this.navItems];
     if (isAdmin) {
@@ -179,7 +190,7 @@ export default class Sidebar {
         <div class="nav-group">
             <button class="btn-secondary back-btn" id="backToDashboardBtn">
                 <i data-lucide="arrow-left"></i>
-                Back to Dashboard
+                <span class="btn-text">Back to Dashboard</span>
             </button>
 
             <div class="nav-label">Library</div>
@@ -205,7 +216,7 @@ export default class Sidebar {
         <div class="sidebar-actions">
             <button class="btn-secondary new-collection-btn" id="sidebarCreateCollectionBtn">
                 <i data-lucide="plus-circle"></i>
-                New Collection
+                <span class="btn-text">New Collection</span>
             </button>
         </div>
       </nav>
@@ -237,16 +248,7 @@ export default class Sidebar {
   renderFooter() {
     return `
       <div class="sidebar-footer">
-        <!-- Auth UI Container -->
         <div id="auth-container"></div>
-        
-        <div class="sidebar-version">
-          <i data-lucide="code" class="sidebar-version-icon"></i>
-          <span class="sidebar-version-text">v2.0.0</span>
-        </div>
-        <div class="sidebar-credits">
-          VoxRip PWA
-        </div>
       </div>
     `;
   }

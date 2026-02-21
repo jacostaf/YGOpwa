@@ -10,19 +10,6 @@
  * - Mobile-friendly interface
  */
 
-/* Respect user's motion preferences */
-@media (prefers-reduced-motion: reduce) {
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
 /* CSS Custom Properties (Variables) */
 :root {
   /* NOTE: Core theme colors are now defined in themes.css */
@@ -295,23 +282,6 @@ body {
 }
 
 /* Header styles removed */
-
-/* Main Content */
-.main-content {
-  flex: 1;
-  padding: var(--spacing-md);
-  width: 100%;
-  transition: margin-left 0.3s ease;
-}
-
-/* Desktop Layout Adjustment */
-@media (min-width: 768px) {
-  .main-content {
-    margin-left: var(--sidebar-width);
-    width: calc(100% - var(--sidebar-width));
-    padding: var(--spacing-md);
-  }
-}
 
 .tab-panel {
   display: none;
@@ -1107,18 +1077,6 @@ body {
     --text-primary: #ffffff;
     --border-primary: #666666;
     --accent-primary: #ffff00;
-  }
-}
-
-/* Reduced Motion */
-@media (prefers-reduced-motion: reduce) {
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
 }
 
@@ -5566,34 +5524,18 @@ body {
 }
 
 /* ========================================
-   User profile dropdown
+   User logout row
    ======================================== */
-.auth-profile {
-  position: relative;
-}
-
-.auth-profile-trigger {
-  display: inline-flex;
+.auth-logout-row {
+  display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--card-bg);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  padding: 0.25rem 0.5rem;
 }
 
-.auth-profile-trigger:hover,
-.auth-profile.is-open .auth-profile-trigger {
-  background: var(--card-bg-hover);
-  border-color: var(--accent-primary);
-  box-shadow: var(--shadow-accent-md);
-}
-
-.auth-profile-avatar {
-  width: 36px;
-  height: 36px;
+.auth-logout-avatar {
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-full);
   display: inline-flex;
   align-items: center;
@@ -5601,150 +5543,44 @@ body {
   background: linear-gradient(135deg, var(--accent-hover), var(--accent-primary));
   color: var(--bg-primary);
   font-weight: var(--font-semibold);
-  letter-spacing: 0.02em;
-  box-shadow: var(--shadow-accent-sm);
-}
-
-.auth-profile-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-
-.auth-profile-name {
   font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
+  flex-shrink: 0;
+}
+
+.auth-logout-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
-.auth-profile-email {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.auth-profile-chevron {
-  width: 16px;
-  height: 16px;
-  color: var(--text-tertiary);
-  transition: transform var(--transition-fast), color var(--transition-fast);
-}
-
-.auth-profile.is-open .auth-profile-chevron {
-  transform: rotate(180deg);
-  color: var(--accent-primary);
-}
-
-.auth-profile-dropdown {
-  position: absolute;
-  top: calc(100% + var(--spacing-sm));
-  right: 0;
-  width: min(280px, 80vw);
-  background: var(--card-bg);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-2xl);
-  padding: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  opacity: 0;
-  transform: translateY(-6px);
-  pointer-events: none;
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
-  z-index: var(--z-popover);
-}
-
-.auth-profile-dropdown.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-@media (max-width: 640px) {
-  .auth-profile-dropdown {
-    position: fixed;
-    right: var(--spacing-md);
-    left: var(--spacing-md);
-    bottom: var(--spacing-lg);
-    top: auto;
-  }
-}
-
-.auth-profile-user {
-  display: none;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.auth-profile-user .auth-profile-email {
-  color: var(--text-secondary);
-}
-
-@media (max-width: 768px) {
-  .auth-profile-user {
-    display: flex;
-  }
-}
-
-.auth-profile-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.auth-profile-section-title {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
-}
-
-.auth-profile-item,
-.auth-profile-signout {
-  display: flex;
+.auth-logout-btn {
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  width: 100%;
-  padding: var(--spacing-sm) var(--spacing-sm);
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
+  color: var(--text-tertiary);
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-  text-align: left;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.auth-profile-item:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-.auth-profile-item-icon {
-  width: 18px;
-  height: 18px;
-  color: inherit;
-}
-
-.auth-profile-divider {
-  height: 1px;
-  background: var(--border-primary);
-  opacity: 0.6;
-}
-
-.auth-profile-signout {
-  color: var(--error);
-}
-
-.auth-profile-signout:hover {
+.auth-logout-btn:hover {
   background: rgba(239, 68, 68, 0.12);
   color: var(--error);
+}
+
+.auth-logout-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .auth-trigger-label {
@@ -6095,25 +5931,6 @@ body {
   height: 16px;
 }
 
-/* Leaderboard card variants for visual hierarchy */
-.leaderboard-highlight-card--primary {
-  border-color: var(--border-default);
-  background: var(--surface-secondary);
-}
-
-.leaderboard-highlight-card--secondary {
-  border-color: var(--border-subtle);
-  background: transparent;
-  min-height: 140px;
-}
-
-.leaderboard-highlight-card--secondary .leaderboard-highlight-metric {
-  font-size: var(--text-sm);
-}
-
-.leaderboard-highlight-card--secondary .leaderboard-highlight-body h3 {
-  font-size: var(--text-base);
-}
 
 /* Collection Preview Styles */
 .collection-preview-container {
@@ -6672,13 +6489,13 @@ body {
   min-width: 0;
 }
 
-.stat-label {
+.collection-stats-grid .stat-label {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin-bottom: 4px;
 }
 
-.stat-value {
+.collection-stats-grid .stat-value {
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);

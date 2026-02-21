@@ -30,9 +30,6 @@
     "coverage:open": "open coverage/combined-report.html",
     "test-voice": "node src/tests/voice.test.js",
     "build": "node scripts/build.js",
-    "install-electron": "npm install electron@32.3.3 --save-dev",
-    "start-electron": "electron main.js",
-    "package-electron": "electron-builder",
     "plan:set": "node scripts/admin/set-user-plan.js"
   },
   "keywords": [
@@ -55,15 +52,14 @@
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
     "canvas": "^3.1.2",
-    "electron": "^32.3.3",
-    "electron-builder": "^25.0.0",
     "jsdom": "^26.1.0",
     "playwright": "^1.54.1",
+    "supabase": "^2.51.0",
     "vitest": "^3.2.4"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
-    "supabase": "^2.51.0"
+    "fuse.js": "^7.1.0"
   },
   "engines": {
     "node": ">=16.0.0",

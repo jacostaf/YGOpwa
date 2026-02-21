@@ -56,21 +56,20 @@
    ================================================================= */
 
 /**
- * Remove default focus outline (we'll add custom ones below)
- * Only remove if we provide an alternative focus indicator
- */
-*:focus {
-  outline: none;
-}
-
-/**
  * Visible focus indicator for all interactive elements
  * WCAG 2.4.7: Focus must be visible with 2px minimum thickness and 3:1 contrast
  */
 *:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--accent-primary, var(--focus-color, #d4d4d4));
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/**
+ * Remove focus outline for mouse/touch users (only show for keyboard)
+ */
+*:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* =================================================================
@@ -83,16 +82,16 @@
 button:focus-visible,
 .btn:focus-visible,
 .icon-btn:focus-visible {
-  outline: 3px solid var(--focus-color, #a3a3a3);
+  outline: 3px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.2);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.25);
 }
 
 /**
  * Links - Focus with underline and outline
  */
 a:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 3px;
   text-decoration: underline;
   text-decoration-thickness: 2px;
@@ -104,10 +103,10 @@ a:focus-visible {
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 0px;
-  border-color: var(--focus-color, #a3a3a3);
-  box-shadow: 0 0 0 3px rgba(163, 163, 163, 0.15);
+  border-color: var(--focus-color, #d4d4d4);
+  box-shadow: 0 0 0 3px rgba(212, 212, 212, 0.2);
 }
 
 /**
@@ -115,25 +114,25 @@ select:focus-visible {
  */
 input[type="checkbox"]:focus-visible,
 input[type="radio"]:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.2);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.25);
 }
 
 /**
  * Range sliders - Focus with track highlight
  */
 input[type="range"]:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 4px;
 }
 
 input[type="range"]:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.3);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.35);
 }
 
 input[type="range"]:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.3);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.35);
 }
 
 /* =================================================================
@@ -144,18 +143,18 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  * Sidebar nav items - Enhanced focus with background
  */
 .sidebar-nav-item:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: -2px;
-  background: rgba(163, 163, 163, 0.1);
+  background: rgba(212, 212, 212, 0.12);
 }
 
 /**
  * Sidebar close button - Focus with ring
  */
 .sidebar-close:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.2);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.25);
 }
 
 /* =================================================================
@@ -169,9 +168,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .glass-card:focus-visible,
 .section-card:focus-visible,
 .stats-card:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.15),
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.2),
               var(--shadow-lg, 0 10px 20px rgba(0, 0, 0, 0.2));
 }
 
@@ -180,7 +179,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  */
 .card button:focus-visible,
 .card a:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
   position: relative;
   z-index: 1;
@@ -201,9 +200,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  * Modal close button - Enhanced focus
  */
 .modal-close:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.25);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.3);
 }
 
 /**
@@ -221,9 +220,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  * Toast close button - Focus with ring
  */
 .toast-close:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 3px rgba(163, 163, 163, 0.2);
+  box-shadow: 0 0 0 3px rgba(212, 212, 212, 0.25);
 }
 
 /* =================================================================
@@ -234,9 +233,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  * Toggle switch checkbox - Enhanced focus on slider
  */
 .toggle-checkbox:focus-visible + .toggle-slider {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.2);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.25);
 }
 
 /* =================================================================
@@ -248,9 +247,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  */
 .dropdown-item:focus-visible,
 .menu-item:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: -2px;
-  background: rgba(163, 163, 163, 0.15);
+  background: rgba(212, 212, 212, 0.2);
 }
 
 /* =================================================================
@@ -262,7 +261,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  */
 td:focus-visible,
 th:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: -2px;
   position: relative;
   z-index: 1;
@@ -272,7 +271,7 @@ th:focus-visible {
  * Table rows - Focus for row selection
  */
 tr:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: -2px;
 }
 
@@ -563,7 +562,7 @@ textarea:disabled:focus {
  */
 .pagination button:focus-visible,
 .pagination a:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
   z-index: 1;
 }
@@ -596,9 +595,9 @@ textarea:disabled:focus {
  * Tab buttons - Focus with background
  */
 [role="tab"]:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: -2px;
-  background: rgba(163, 163, 163, 0.1);
+  background: rgba(212, 212, 212, 0.12);
 }
 
 /**
@@ -618,9 +617,9 @@ textarea:disabled:focus {
  * Accordion button - Focus with ring
  */
 [role="button"][aria-expanded]:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(163, 163, 163, 0.2);
+  box-shadow: 0 0 0 4px rgba(212, 212, 212, 0.25);
 }
 
 /**
@@ -649,7 +648,7 @@ textarea:disabled:focus {
  * Breadcrumb links - Focus with underline
  */
 .breadcrumb a:focus-visible {
-  outline: 2px solid var(--focus-color, #a3a3a3);
+  outline: 2px solid var(--focus-color, #d4d4d4);
   outline-offset: 2px;
   text-decoration: underline;
 }
@@ -777,7 +776,7 @@ textarea:disabled:focus {
  */
 [data-theme="dark"],
 .theme-dark {
-  --focus-color: #a3a3a3;
+  --focus-color: #d4d4d4;
   --text-contrast: #fff;
   --border-contrast: rgba(255, 255, 255, 0.3);
 }
@@ -787,9 +786,19 @@ textarea:disabled:focus {
  */
 [data-theme="light"],
 .theme-light {
-  --focus-color: #737373;
+  --focus-color: #525252;
   --text-contrast: #000;
   --border-contrast: rgba(0, 0, 0, 0.3);
+}
+
+/**
+ * Dusk mode - Warm-tinted contrast
+ */
+[data-theme="dusk"],
+.theme-dusk {
+  --focus-color: #c4b8a4;
+  --text-contrast: #ece6db;
+  --border-contrast: rgba(196, 184, 164, 0.3);
 }
 
 /* =================================================================
@@ -802,7 +811,7 @@ textarea:disabled:focus {
 .card:focus-within,
 .glass-card:focus-within,
 .form-group:focus-within {
-  box-shadow: 0 0 0 1px rgba(163, 163, 163, 0.1);
+  box-shadow: 0 0 0 1px rgba(212, 212, 212, 0.12);
 }
 
 /* =================================================================

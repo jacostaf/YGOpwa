@@ -9,7 +9,10 @@
  * - Performance optimizations
  */
 
-const CACHE_NAME = 'voxrip-v2.1.0';
+const SW_DEBUG = false;
+function swLog(...args) { if (SW_DEBUG) console.log('[SW]', ...args); }
+
+const CACHE_NAME = 'voxrip-v2.3.0';
 const RUNTIME_CACHE = 'voxrip-runtime';
 
 // Resources to cache for offline use
@@ -19,13 +22,18 @@ const CACHE_URLS = [
   '/manifest.json',
   // CSS files
   '/src/css/main.css',
-  '/src/css/components.css',
   '/src/css/responsive.css',
   '/src/css/themes.css',
   '/src/css/layouts.css',
   '/src/css/sidebar.css',
   '/src/css/animations.css',
   '/src/css/accessibility.css',
+  '/src/css/settings.css',
+  '/src/css/theme-settings.css',
+  '/src/css/collection.css',
+  '/src/css/pack-opening-compact.css',
+  '/src/css/rarity-admin.css',
+  '/src/css/utilities.css',
   // Core app
   '/src/js/app.js',
   // Components
@@ -35,6 +43,9 @@ const CACHE_URLS = [
   '/src/components/PatternList.js',
   '/src/components/AchievementBadge.js',
   '/src/components/ToggleSwitch.js',
+  '/src/components/UserProfile.js',
+  '/src/components/RarityAdmin.js',
+  '/src/components/AuthModal.js',
   // Pages
   '/src/pages/DashboardPage.js',
   '/src/pages/PackOpeningPage.js',
@@ -42,12 +53,25 @@ const CACHE_URLS = [
   '/src/pages/VoiceTrainingPage.js',
   '/src/pages/SettingsPage.js',
   '/src/pages/ThemeSettingsPage.js',
-  '/src/pages/CollectionPage.js',
+  '/src/pages/CollectionPageV2.js',
   '/src/pages/AchievementsPage.js',
+  '/src/pages/LeaderboardPage.js',
+  '/src/pages/AdminPage.js',
+  '/src/pages/RarityAdminPage.js',
   // Services
   '/src/services/DashboardService.js',
   '/src/services/CollectionManager.js',
   '/src/services/AchievementManager.js',
+  '/src/services/leaderboardService.js',
+  '/src/services/ActivityService.js',
+  '/src/services/authService.js',
+  '/src/services/collectionsService.js',
+  '/src/services/pricingService.js',
+  '/src/services/subscriptionService.js',
+  '/src/services/rarityService.js',
+  '/src/services/CacheCoordinator.js',
+  '/src/services/packEventsService.js',
+  '/src/services/cardMetadataService.js',
   // Themes
   '/src/themes/theme-config.js',
   '/src/themes/ThemeManager.js',
@@ -55,16 +79,21 @@ const CACHE_URLS = [
   '/src/utils/Router.js',
   '/src/utils/IconLoader.js',
   '/src/utils/AnimationHelper.js',
-  '/src/utils/Logger.js',
-  '/src/utils/Storage.js',
-  // Voice (existing)
+  '/src/utils/EventEmitter.js',
+  // JS Utils
+  '/src/js/utils/Logger.js',
+  '/src/js/utils/Storage.js',
+  '/src/js/utils/ImageManager.js',
+  '/src/js/utils/ErrorBoundary.js',
+  '/src/js/utils/config.js',
+  // Voice
   '/src/js/voice/VoiceEngine.js',
   '/src/js/voice/PermissionManager.js',
-  // Session (existing)
+  // Session
   '/src/js/session/SessionManager.js',
-  // Price (existing)
+  // Price
   '/src/js/price/PriceChecker.js',
-  // UI (existing)
+  // UI
   '/src/js/ui/UIManager.js'
 ];
 
@@ -98,16 +127,16 @@ const ROUTE_CONFIG = [
 
 // Install event - cache core resources
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker...');
+  swLog('Installing service worker...');
 
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('[SW] Caching app shell resources');
+        swLog('Caching app shell resources');
         return cache.addAll(CACHE_URLS);
       })
       .then(() => {
-        console.log('[SW] App shell cached successfully');
+        swLog('App shell cached successfully');
         // Force activation of new service worker
         return self.skipWaiting();
       })
@@ -119,7 +148,7 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker...');
+  swLog('Activating service worker...');
 
   event.waitUntil(
     caches.keys()
@@ -128,14 +157,14 @@ self.addEventListener('activate', (event) => {
           cacheNames.map((cacheName) => {
             // Delete old caches
             if (cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE) {
-              console.log('[SW] Deleting old cache:', cacheName);
+              swLog('Deleting old cache:', cacheName);
               return caches.delete(cacheName);
             }
           })
         );
       })
       .then(() => {
-        console.log('[SW] Service worker activated');
+        swLog('Service worker activated');
         // Claim all clients
         return self.clients.claim();
       })
@@ -217,11 +246,11 @@ async function cacheFirst(request, cacheName) {
   const cached = await cache.match(request);
 
   if (cached) {
-    console.log('[SW] Serving from cache:', request.url);
+    swLog('Serving from cache:', request.url);
     return cached;
   }
 
-  console.log('[SW] Cache miss, fetching:', request.url);
+  swLog('Cache miss, fetching:', request.url);
   const response = await fetch(request);
 
   if (response.status === 200) {
@@ -239,7 +268,7 @@ async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
 
   try {
-    console.log('[SW] Trying network first:', request.url);
+    swLog('Trying network first:', request.url);
     const response = await fetch(request);
 
     if (response.status === 200) {
@@ -249,7 +278,7 @@ async function networkFirst(request, cacheName) {
 
     return response;
   } catch (error) {
-    console.log('[SW] Network failed, trying cache:', request.url);
+    swLog('Network failed, trying cache:', request.url);
     const cached = await cache.match(request);
 
     if (cached) {
@@ -279,11 +308,11 @@ async function staleWhileRevalidate(request, cacheName) {
   });
 
   if (cached) {
-    console.log('[SW] Serving stale content, revalidating:', request.url);
+    swLog('Serving stale content, revalidating:', request.url);
     return cached;
   }
 
-  console.log('[SW] No cache, waiting for network:', request.url);
+  swLog('No cache, waiting for network:', request.url);
   return await fetchPromise;
 }
 
@@ -409,7 +438,7 @@ function createOfflineHTML() {
 
 // Background sync (for future implementation)
 self.addEventListener('sync', (event) => {
-  console.log('[SW] Background sync event:', event.tag);
+  swLog('Background sync event:', event.tag);
 
   if (event.tag === 'session-sync') {
     event.waitUntil(syncSessionData());
@@ -421,7 +450,7 @@ self.addEventListener('sync', (event) => {
  */
 async function syncSessionData() {
   try {
-    console.log('[SW] Syncing session data...');
+    swLog('Syncing session data...');
 
     // Get stored session data
     const cache = await caches.open(RUNTIME_CACHE);
@@ -437,7 +466,7 @@ async function syncSessionData() {
 
       // Clear offline sessions after sync
       await cache.delete('/offline-sessions');
-      console.log('[SW] Session data synced successfully');
+      swLog('Session data synced successfully');
     }
   } catch (error) {
     console.error('[SW] Failed to sync session data:', error);
@@ -461,7 +490,7 @@ async function syncSession(session) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    console.log('[SW] Session synced:', session.id);
+    swLog('Session synced:', session.id);
   } catch (error) {
     console.error('[SW] Failed to sync session:', session.id, error);
     throw error;
@@ -490,7 +519,7 @@ self.addEventListener('message', (event) => {
       break;
 
     default:
-      console.log('[SW] Unknown message type:', type);
+      swLog('Unknown message type:', type);
   }
 });
 
@@ -518,7 +547,7 @@ async function cacheSessionOffline(sessionData) {
     });
 
     await cache.put('/offline-sessions', response);
-    console.log('[SW] Session cached for offline sync');
+    swLog('Session cached for offline sync');
   } catch (error) {
     console.error('[SW] Failed to cache session offline:', error);
   }
@@ -544,7 +573,7 @@ async function cleanOldCache() {
 
         if (now - responseDate > maxAge) {
           await cache.delete(request);
-          console.log('[SW] Deleted old cache entry:', request.url);
+          swLog('Deleted old cache entry:', request.url);
         }
       }
     }
@@ -562,4 +591,4 @@ self.addEventListener('unhandledrejection', (event) => {
   console.error('[SW] Unhandled promise rejection:', event.reason);
 });
 
-console.log('[SW] Service worker loaded successfully');
+swLog('Service worker loaded successfully');

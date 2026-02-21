@@ -69,10 +69,12 @@
 
 .pack-sidebar .btn-primary {
   background: var(--accent-primary);
+  color: var(--text-inverse);
 }
 
 .pack-sidebar .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
+  color: var(--text-inverse);
 }
 
 /* Disabled button states with proper contrast */
@@ -111,7 +113,7 @@
 }
 
 .voice-label {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
@@ -140,8 +142,8 @@
 }
 
 .stat-key {
-  font-size: 0.7rem;
-  color: var(--text-muted);
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -539,7 +541,7 @@
   padding: 0 0.45rem;
   border-radius: 999px;
   background: var(--accent-primary);
-  color: var(--text-primary);
+  color: var(--text-inverse);
   font-size: 0.64rem;
   font-weight: var(--font-semibold);
 }
@@ -606,8 +608,8 @@
 }
 
 .summary-label {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -817,6 +819,7 @@
     flex-wrap: wrap;
     gap: var(--spacing-sm);
     max-height: none;
+    overflow-x: auto;
   }
 
   .sidebar-section {
@@ -891,6 +894,10 @@
 
   .action-row {
     justify-content: flex-start;
+  }
+
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--card-width, 100px), 45vw), 1fr));
   }
 }
 

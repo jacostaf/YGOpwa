@@ -12,6 +12,7 @@
 
 import { features } from '../lib/config.js';
 import * as authService from '../services/authService.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class UserProfile {
   /**
@@ -217,7 +218,7 @@ export default class UserProfile {
     this.setDropdownState(this.dropdownOpen);
 
     if (window && window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
+      refreshIcons();
     }
 
     return this.element;

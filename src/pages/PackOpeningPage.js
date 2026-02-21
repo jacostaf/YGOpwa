@@ -13,7 +13,7 @@
  */
 
 import CardGrid from '../components/CardGrid.js';
-import IconLoader from '../utils/IconLoader.js';
+import IconLoader, { refreshIcons } from '../utils/IconLoader.js';
 import CollectionManager from '../services/CollectionManager.js';
 import { authService } from '../services/authService.js';
 
@@ -43,12 +43,17 @@ export default class PackOpeningPage {
     this.selectedSetIds = [];   // Multi-set: array of selected set IDs
     this.selectedSets = [];     // Multi-set: array of selected set objects
 
+    // RAF debounce ID for session updates
+    this._sessionUpdateRafId = null;
+
     // Event listeners
     this.boundHandlers = {
       handleVoiceResult: this.handleVoiceResult.bind(this),
       handleVoiceStatus: this.handleVoiceStatus.bind(this),
       handleVoiceError: this.handleVoiceError.bind(this),
       handleSessionUpdate: this.handleSessionUpdate.bind(this),
+      handleCardAdded: this.handleCardAdded.bind(this),
+      handleCardRemoved: this.handleCardRemoved.bind(this),
       handleAddToCollection: this.handleAddToCollection.bind(this)
     };
   }
@@ -922,12 +927,83 @@ export default class PackOpeningPage {
   }
 
   /**
-   * Handle session update
+   * Handle session update (debounced via RAF to coalesce multiple events per frame)
    * @private
    */
   handleSessionUpdate() {
+    this._scheduleSessionUpdate();
+  }
+
+  /**
+   * Schedule a full session UI + cards refresh, coalesced per animation frame.
+   * Multiple calls within the same frame only trigger one rebuild.
+   * @private
+   */
+  _scheduleSessionUpdate() {
+    if (this._sessionUpdateRafId) return;
+    this._sessionUpdateRafId = requestAnimationFrame(() => {
+      this._sessionUpdateRafId = null;
+      this.updateSessionUI();
+      this.renderCards();
+    });
+  }
+
+  /**
+   * Handle a single card being added (incremental append).
+   * Falls back to full renderCards() when consolidated view is active
+   * or the grid hasn't been created yet.
+   * @param {Object} card - The card object that was added
+   * @private
+   */
+  handleCardAdded(card) {
+    // Consolidated view needs a full rebuild because grouping changes
+    if (this.consolidatedView) {
+      this.updateSessionUI();
+      this.renderCards();
+      return;
+    }
+
+    // If cardGrid exists and is mounted, do an incremental append
+    if (this.cardGrid && this.cardGrid.element && this.cardGrid.element.parentNode) {
+      this.cardGrid.appendCard(card);
+      this.updateSessionUI();
+      return;
+    }
+
+    // Fallback: no grid yet, do a full render
     this.updateSessionUI();
     this.renderCards();
+  }
+
+  /**
+   * Handle a single card being removed (incremental remove).
+   * Falls back to full renderCards() when consolidated view is active.
+   * @param {Object} data - Object with card and/or index info
+   * @private
+   */
+  handleCardRemoved(data) {
+    // Consolidated view needs full rebuild
+    if (this.consolidatedView) {
+      this.updateSessionUI();
+      this.renderCards();
+      return;
+    }
+
+    // If cardGrid exists, try incremental remove
+    if (this.cardGrid && this.cardGrid.element && this.cardGrid.element.parentNode) {
+      const index = typeof data?.index === 'number' ? data.index : -1;
+      if (index >= 0) {
+        this.cardGrid.removeCardAt(index);
+        this.updateSessionUI();
+        this.updateButtons();
+        return;
+      }
+    }
+
+    // Fallback: full rebuild
+    this.updateSessionUI();
+    this.renderCards();
+    this.updateButtons();
   }
 
   /**
@@ -1373,11 +1449,11 @@ export default class PackOpeningPage {
 
     // Session manager events (if available)
     if (this.sessionManager && this.sessionManager.addEventListener) {
-      // Use the pre-bound handler
-      // Fix: Use consistent event name 'session-updated' matching removal logic
+      // session-updated: general session changes (debounced full rebuild)
       this.sessionManager.addEventListener('session-updated', this.boundHandlers.handleSessionUpdate);
-      this.sessionManager.addEventListener('cardAdded', this.boundHandlers.handleSessionUpdate);
-      this.sessionManager.addEventListener('cardRemoved', this.boundHandlers.handleSessionUpdate);
+      // cardAdded/cardRemoved: incremental DOM updates for single-card changes
+      this.sessionManager.addEventListener('cardAdded', this.boundHandlers.handleCardAdded);
+      this.sessionManager.addEventListener('cardRemoved', this.boundHandlers.handleCardRemoved);
     }
   }
 
@@ -1409,10 +1485,15 @@ export default class PackOpeningPage {
       if (window.sessionManager) {
         window.sessionManager.removeListener('session-updated', this.boundHandlers.handleSessionUpdate);
       }
-      // Fix: Use consistent event name 'session-updated'
       this.sessionManager.removeEventListener('session-updated', this.boundHandlers.handleSessionUpdate);
-      this.sessionManager.removeEventListener('cardAdded', this.boundHandlers.handleSessionUpdate);
-      this.sessionManager.removeEventListener('cardRemoved', this.boundHandlers.handleSessionUpdate);
+      this.sessionManager.removeEventListener('cardAdded', this.boundHandlers.handleCardAdded);
+      this.sessionManager.removeEventListener('cardRemoved', this.boundHandlers.handleCardRemoved);
+    }
+
+    // Cancel any pending RAF
+    if (this._sessionUpdateRafId) {
+      cancelAnimationFrame(this._sessionUpdateRafId);
+      this._sessionUpdateRafId = null;
     }
 
     // Clear all bound handlers
@@ -1425,9 +1506,23 @@ export default class PackOpeningPage {
    * @private
    */
   showError(message) {
-    // TODO: Implement toast notification system
-    alert(message);
+    const toast = window.app?.uiManager?.showToast;
+    if (toast) {
+      window.app.uiManager.showToast(message, 'error');
+    } else {
+      this._showInlineToast(message, 'error');
+    }
     console.error(message);
+  }
+
+  _showInlineToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
   }
 
   /**
@@ -1530,7 +1625,7 @@ export default class PackOpeningPage {
         `;
 
         if (window.lucide) {
-          window.lucide.createIcons();
+          refreshIcons();
         }
       }
     }
@@ -1681,7 +1776,7 @@ export default class PackOpeningPage {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 
     // Initialize icons in modal
-    if (typeof lucide !== 'undefined') lucide.createIcons();
+    refreshIcons();
 
     // Event Listeners for Modal
     const modal = document.querySelector('.modal-overlay');
@@ -1715,7 +1810,7 @@ export default class PackOpeningPage {
     confirmCreateBtn.onclick = async () => {
       const name = document.getElementById('new-collection-name').value;
       const desc = document.getElementById('new-collection-desc').value;
-      if (!name) return alert('Please enter a name');
+      if (!name) { this.showError('Please enter a name'); return; }
 
       try {
         const newCol = await this.collectionManager.createCollection(name, desc);
@@ -1725,7 +1820,7 @@ export default class PackOpeningPage {
         }
       } catch (err) {
         console.error(err);
-        alert('Failed to create collection');
+        this.showError('Failed to create collection');
       }
     };
 
@@ -1754,11 +1849,8 @@ export default class PackOpeningPage {
       btn.disabled = true;
 
       try {
-        let addedCount = 0;
-        for (const card of this.currentSession.cards) {
-          await this.collectionManager.addCardToCollection(selectedCollectionId, card);
-          addedCount++;
-        }
+        const addedData = await this.collectionManager.batchAddCardsToCollection(selectedCollectionId, this.currentSession.cards);
+        const addedCount = addedData.length;
 
         // Create pack event with price snapshots for ROI tracking
         try {
@@ -1805,7 +1897,7 @@ export default class PackOpeningPage {
         }
       } catch (err) {
         console.error(err);
-        alert('Failed to add some cards');
+        this.showError('Failed to add some cards');
         btn.textContent = originalText;
         btn.disabled = false;
       }

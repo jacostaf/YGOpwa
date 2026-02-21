@@ -7,6 +7,7 @@
  */
 
 import PatternList from '../components/PatternList.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class VoiceTrainingPage {
   constructor(router) {
@@ -290,10 +291,7 @@ export default class VoiceTrainingPage {
     // Mount pattern list
     this.mountPatternList();
 
-    // Initialize Lucide icons
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
-    }
+    refreshIcons();
 
     console.log('VoiceTrainingPage mounted');
   }
@@ -521,10 +519,7 @@ export default class VoiceTrainingPage {
     const modal = this.createEditModal(pattern);
     document.body.appendChild(modal);
 
-    // Initialize Lucide icons in modal
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
-    }
+    refreshIcons();
   }
 
   /**
@@ -792,10 +787,7 @@ export default class VoiceTrainingPage {
       this.attachEventListeners();
       this.mountPatternList();
 
-      // Re-initialize Lucide icons
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
+      refreshIcons();
     }
   }
 

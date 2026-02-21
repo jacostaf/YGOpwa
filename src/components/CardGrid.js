@@ -13,7 +13,14 @@
  * - Consolidated/expanded views (groups cards by name)
  * - Custom card size support
  * - Optimized DOM manipulation (no innerHTML)
+ * - IntersectionObserver lazy image loading
+ * - Virtual scrolling for large collections (50+ cards)
  */
+
+const VIRTUAL_THRESHOLD = 50;
+const INITIAL_BATCH = 30;
+const BATCH_SIZE = 20;
+const PLACEHOLDER_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 export default class CardGrid {
   /**
@@ -42,6 +49,13 @@ export default class CardGrid {
     // Memory management: track resources for cleanup
     this.imageElements = [];
     this._handleContainerClick = null;
+
+    // Lazy loading & virtual scrolling state
+    this._imageObserver = null;
+    this._scrollObserver = null;
+    this._allDisplayCards = null;
+    this._renderedCount = 0;
+    this._sentinel = null;
   }
 
   /**
@@ -77,9 +91,24 @@ export default class CardGrid {
     // Clear tracked images from previous render
     this.imageElements = [];
 
+    // Initialize lazy image observer
+    this._initImageObserver();
+
+    const useVirtual = displayCards.length > VIRTUAL_THRESHOLD;
+    const initialCards = useVirtual ? displayCards.slice(0, INITIAL_BATCH) : displayCards;
+
+    if (useVirtual) {
+      this._allDisplayCards = displayCards;
+      this._renderedCount = INITIAL_BATCH;
+      console.log('[CardGrid] Virtual scrolling: rendering first', INITIAL_BATCH, 'of', displayCards.length, 'cards');
+    } else {
+      this._allDisplayCards = null;
+      this._renderedCount = displayCards.length;
+      console.log('[CardGrid] Rendering view with', displayCards.length, 'cards');
+    }
+
     const fragment = document.createDocumentFragment();
-    console.log('[CardGrid] Rendering view with', displayCards.length, 'cards');
-    displayCards.forEach((card, index) => {
+    initialCards.forEach((card, index) => {
       try {
         fragment.appendChild(this.createGridCardElement(card, index));
       } catch (err) {
@@ -87,6 +116,16 @@ export default class CardGrid {
       }
     });
     container.appendChild(fragment);
+
+    // Append sentinel for virtual scrolling
+    if (useVirtual) {
+      this._initScrollObserver();
+      this._sentinel = document.createElement('div');
+      this._sentinel.className = 'card-grid-sentinel';
+      this._sentinel.style.height = '1px';
+      container.appendChild(this._sentinel);
+      this._scrollObserver.observe(this._sentinel);
+    }
 
     // Event delegation: single handler for all card interactions
     this._handleContainerClick = (e) => {
@@ -115,10 +154,86 @@ export default class CardGrid {
   }
 
   /**
-   * Render list view (row-style cards)
-   * @param {Array} displayCards - Cards to display
-   * @returns {HTMLElement} Container element
+   * Initialize IntersectionObserver for lazy image loading.
+   * Images start with a tiny placeholder; real src loads when visible.
    */
+  _initImageObserver() {
+    if (this._imageObserver) return;
+    this._imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const img = entry.target;
+          if (img.dataset.src) {
+            img.src = img.dataset.src;
+            delete img.dataset.src;
+          }
+          this._imageObserver.unobserve(img);
+        }
+      });
+    }, { rootMargin: '200px' });
+  }
+
+  /**
+   * Initialize IntersectionObserver for virtual scroll sentinel.
+   * Triggers loading the next batch when the sentinel enters the viewport.
+   */
+  _initScrollObserver() {
+    if (this._scrollObserver) return;
+    this._scrollObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        this._loadMoreCards(BATCH_SIZE);
+      }
+    }, { rootMargin: '400px' });
+  }
+
+  /**
+   * Append the next batch of cards for virtual scrolling.
+   * @param {number} batchSize - Number of cards to load
+   */
+  _loadMoreCards(batchSize) {
+    if (!this._allDisplayCards || !this.element) return;
+    if (this._renderedCount >= this._allDisplayCards.length) {
+      // All cards rendered, remove sentinel
+      if (this._sentinel) {
+        this._scrollObserver.unobserve(this._sentinel);
+        this._sentinel.remove();
+        this._sentinel = null;
+      }
+      return;
+    }
+
+    const end = Math.min(this._renderedCount + batchSize, this._allDisplayCards.length);
+    const fragment = document.createDocumentFragment();
+
+    for (let i = this._renderedCount; i < end; i++) {
+      try {
+        fragment.appendChild(this.createGridCardElement(this._allDisplayCards[i], i));
+      } catch (err) {
+        console.error('[CardGrid] Error creating card element:', err, this._allDisplayCards[i]);
+      }
+    }
+
+    // Insert batch before the sentinel so sentinel stays at the bottom
+    if (this._sentinel) {
+      this.element.insertBefore(fragment, this._sentinel);
+    } else {
+      this.element.appendChild(fragment);
+    }
+
+    this._renderedCount = end;
+
+    // Initialize lucide icons on new elements
+    if (window.lucide) {
+      window.lucide.createIcons({ root: this.element });
+    }
+
+    // If all cards are now rendered, clean up sentinel
+    if (this._renderedCount >= this._allDisplayCards.length && this._sentinel) {
+      this._scrollObserver.unobserve(this._sentinel);
+      this._sentinel.remove();
+      this._sentinel = null;
+    }
+  }
 
   /**
    * Consolidate cards by name
@@ -195,15 +310,18 @@ export default class CardGrid {
     const ygoprodeckId = card.ygoprodeck_id || card.card?.id;
 
     const img = document.createElement('img');
-    img.src = cardImage;
+    img.src = PLACEHOLDER_SRC;
+    img.dataset.src = cardImage;
     img.alt = cardName;
     img.className = 'card-image';
-    img.loading = 'lazy';
     img.onerror = () => {
       // Try YGOProDeck fallback first if we have the Konami passcode
       if (!img.dataset.fallbackTried && ygoprodeckId) {
         img.dataset.fallbackTried = 'true';
-        img.src = `https://images.ygoprodeck.com/images/cards_small/${ygoprodeckId}.jpg`;
+        // Small delay to avoid hammering on batch failures
+        setTimeout(() => {
+          img.src = `https://images.ygoprodeck.com/images/cards_small/${ygoprodeckId}.jpg`;
+        }, 100 + Math.random() * 200);
       } else {
         img.onerror = null;
         img.src = this.getDefaultCardImage();
@@ -211,8 +329,11 @@ export default class CardGrid {
     };
     imgWrapper.appendChild(img);
 
-    // Track image for cleanup
+    // Track image for cleanup and observe for lazy loading
     this.imageElements.push(img);
+    if (this._imageObserver) {
+      this._imageObserver.observe(img);
+    }
 
     // Quantity Badge
     if (quantity) {
@@ -468,6 +589,83 @@ export default class CardGrid {
   }
 
   /**
+   * Append a single card to the existing grid without rebuilding.
+   * Only works when the grid is already rendered (this.element exists).
+   * @param {Object} card - Card object to append
+   */
+  appendCard(card) {
+    if (!this.element) return;
+
+    const index = this.cards.length;
+    this.cards.push(card);
+
+    // If virtual scrolling is active, track in _allDisplayCards
+    if (this._allDisplayCards) {
+      this._allDisplayCards.push(card);
+    }
+
+    const cardEl = this.createGridCardElement(card, index);
+
+    // Insert before sentinel if it exists, otherwise append
+    if (this._sentinel) {
+      this.element.insertBefore(cardEl, this._sentinel);
+    } else {
+      this.element.appendChild(cardEl);
+    }
+
+    this._renderedCount++;
+
+    // Initialize lucide icons on just the new element
+    if (window.lucide) {
+      window.lucide.createIcons({ root: cardEl });
+    }
+  }
+
+  /**
+   * Remove a card at the given index and re-index remaining elements.
+   * @param {number} index - Index of the card to remove
+   */
+  removeCardAt(index) {
+    if (!this.element || index < 0 || index >= this.cards.length) return;
+
+    // Remove from data array
+    this.cards.splice(index, 1);
+
+    // Remove the DOM element at that index
+    const children = this.element.querySelectorAll('.card-item');
+    const target = children[index];
+    if (target) {
+      // Clean up the image from tracking before removing
+      const img = target.querySelector('.card-image');
+      if (img) {
+        const imgIdx = this.imageElements.indexOf(img);
+        if (imgIdx !== -1) {
+          img.onerror = null;
+          img.onload = null;
+          this.imageElements.splice(imgIdx, 1);
+        }
+      }
+      target.remove();
+    }
+
+    // Re-index remaining card elements' data-card-index attributes
+    const remaining = this.element.querySelectorAll('.card-item');
+    remaining.forEach((el, i) => {
+      el.dataset.cardIndex = i;
+      // Also update the remove button's data-remove-index if present
+      const removeBtn = el.querySelector('[data-remove-index]');
+      if (removeBtn) {
+        removeBtn.dataset.removeIndex = i;
+      }
+      // Update favorite button's data-card-index
+      const favBtn = el.querySelector('.card-favorite-btn');
+      if (favBtn) {
+        favBtn.dataset.cardIndex = i;
+      }
+    });
+  }
+
+  /**
    * Update configuration
    * @param {Object} options - New options
    */
@@ -499,6 +697,19 @@ export default class CardGrid {
    * Destroy the card grid and clean up all resources
    */
   destroy() {
+    // Disconnect IntersectionObservers
+    if (this._imageObserver) {
+      this._imageObserver.disconnect();
+      this._imageObserver = null;
+    }
+    if (this._scrollObserver) {
+      this._scrollObserver.disconnect();
+      this._scrollObserver = null;
+    }
+    this._sentinel = null;
+    this._allDisplayCards = null;
+    this._renderedCount = 0;
+
     // Remove delegated event listener
     if (this.element && this._handleContainerClick) {
       this.element.removeEventListener('click', this._handleContainerClick);

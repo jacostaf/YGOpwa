@@ -11,6 +11,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="VoxRip">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tcgplayer.com https://images.ygoprodeck.com https://*.supabase.co blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://db.ygoprodeck.com https://esm.sh http://localhost:* http://127.0.0.1:*;">
 
     <title>VoxRip - Yu-Gi-Oh Card Manager</title>
 
@@ -22,6 +23,9 @@
     <link rel="icon" type="image/png" sizes="192x192" href="src/assets/icons/icon-192.png">
     <link rel="apple-touch-icon" href="src/assets/icons/icon-192.png">
 
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,31 +34,35 @@
         rel="stylesheet">
 
     <!-- Stylesheets -->
+    <!-- Critical CSS (synchronous) -->
     <link rel="stylesheet" href="src/css/main.css">
-
-    <link rel="stylesheet" href="src/css/responsive.css">
-    <link rel="stylesheet" href="src/css/utilities.css">
     <link rel="stylesheet" href="src/css/themes.css">
     <link rel="stylesheet" href="src/css/layouts.css">
-    <link rel="stylesheet" href="src/css/sidebar.css">
-    <link rel="stylesheet" href="src/css/settings.css">
-    <link rel="stylesheet" href="src/css/theme-settings.css">
-    <link rel="stylesheet" href="src/css/collection.css?v=2.5.0">
-    <link rel="stylesheet" href="src/css/pack-opening-compact.css">
-    <link rel="stylesheet" href="src/css/animations.css">
-    <link rel="stylesheet" href="src/css/accessibility.css">
+    <link rel="stylesheet" href="src/css/utilities.css">
+
+    <!-- Deferred CSS (non-critical) -->
+    <link rel="stylesheet" href="src/css/responsive.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/sidebar.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/settings.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/theme-settings.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/collection.css?v=2.5.0" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/pack-opening-compact.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/animations.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/accessibility.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="src/css/rarity-admin.css" media="print" onload="this.media='all'">
 
     <!-- Preload critical resources -->
-    <link rel="preload" href="src/js/app.js" as="script" crossorigin="anonymous">
-    <link rel="preload" href="src/js/voice/VoiceEngine.js" as="script" crossorigin="anonymous">
+    <link rel="modulepreload" href="src/js/app.js" crossorigin="anonymous">
+    <link rel="modulepreload" href="src/js/voice/VoiceEngine.js" crossorigin="anonymous">
 
     <!-- Lucide Icons CDN -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" defer></script>
 
     <script type="importmap" id="supabase-importmap">
     {
       "imports": {
-        "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.0?bundle"
+        "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.0?bundle",
+        "fuse.js": "./node_modules/fuse.js/dist/fuse.mjs"
       }
     }
     </script>
@@ -219,19 +227,6 @@
         import Router from './src/utils/Router.js';
         import Sidebar from './src/components/Sidebar.js';
 
-        // Import all page components
-        import DashboardPage from './src/pages/DashboardPage.js';
-        import PriceCheckerPage from './src/pages/PriceCheckerPage.js';
-        import PackOpeningPage from './src/pages/PackOpeningPage.js';
-        import CollectionPage from './src/pages/CollectionPageV2.js';
-        import VoiceTrainingPage from './src/pages/VoiceTrainingPage.js';
-        import AchievementsPage from './src/pages/AchievementsPage.js';
-        import LeaderboardPage from './src/pages/LeaderboardPage.js';
-        import SettingsPage from './src/pages/SettingsPage.js';
-        import ThemeSettingsPage from './src/pages/ThemeSettingsPage.js';
-        import AdminPage from './src/pages/AdminPage.js';
-        import RarityAdminPage from './src/pages/RarityAdminPage.js';
-
         // Initialize router and sidebar when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize Router
@@ -243,18 +238,18 @@
             const pageContainer = document.getElementById('page-container');
             const pageTitle = document.getElementById('page-title');
 
-            // Register all routes before initialization so deep links resolve
-            router.register('dashboard', DashboardPage);
-            router.register('pack-opening', PackOpeningPage);
-            router.register('price-checker', PriceCheckerPage);
-            router.register('collection', CollectionPage);
-            router.register('training', VoiceTrainingPage);
-            router.register('achievements', AchievementsPage);
-            router.register('leaderboards', LeaderboardPage);
-            router.register('settings', SettingsPage);
-            router.register('theme', ThemeSettingsPage);
-            router.register('admin', AdminPage);
-            router.register('rarity-admin', RarityAdminPage, 'Rarity Vault');
+            // Register all routes with lazy imports
+            router.register('dashboard', () => import('./src/pages/DashboardPage.js'));
+            router.register('pack-opening', () => import('./src/pages/PackOpeningPage.js'));
+            router.register('price-checker', () => import('./src/pages/PriceCheckerPage.js'));
+            router.register('collection', () => import('./src/pages/CollectionPageV2.js'));
+            router.register('training', () => import('./src/pages/VoiceTrainingPage.js'));
+            router.register('achievements', () => import('./src/pages/AchievementsPage.js'));
+            router.register('leaderboards', () => import('./src/pages/LeaderboardPage.js'));
+            router.register('settings', () => import('./src/pages/SettingsPage.js'));
+            router.register('theme', () => import('./src/pages/ThemeSettingsPage.js'));
+            router.register('admin', () => import('./src/pages/AdminPage.js'));
+            router.register('rarity-admin', () => import('./src/pages/RarityAdminPage.js'), 'Rarity Vault');
 
             router.initialize(pageContainer, pageTitle);
 

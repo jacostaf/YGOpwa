@@ -2,10 +2,10 @@
  * ThemeSettingsPage.js - Theme Selection Interface
  *
  * Complete implementation for Phase 11: Theme Settings Page
- * Provides a visual theme selector with preview cards for all 7 available themes.
+ * Provides a visual theme selector with preview cards for all 8 available themes.
  *
  * Features:
- * - Display all 7 themes as preview cards
+ * - Display all 8 themes as preview cards
  * - Show active theme indicator
  * - One-click theme switching
  * - Color preview for each theme
@@ -15,6 +15,7 @@
  */
 
 import themeManager from '../themes/ThemeManager.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 export default class ThemeSettingsPage {
   constructor(router) {
@@ -57,7 +58,7 @@ export default class ThemeSettingsPage {
           <div class="info-content">
             <h3>About Themes</h3>
             <ul>
-              <li><strong>7 Themes Available:</strong> Choose from Dark, Light, Blue, Violet, Emerald, Rose, and Amber</li>
+              <li><strong>8 Themes Available:</strong> Choose from Dusk, Dark, Light, Blue, Violet, Emerald, Rose, and Amber</li>
               <li><strong>Instant Preview:</strong> Click any theme card to apply it immediately</li>
               <li><strong>Persistent:</strong> Your theme preference is saved automatically</li>
               <li><strong>Glassmorphism:</strong> All themes feature modern glassmorphism effects</li>
@@ -72,7 +73,7 @@ export default class ThemeSettingsPage {
    * Render theme cards
    */
   renderThemeCards(themes) {
-    const themeOrder = ['dark', 'light', 'blue', 'violet', 'emerald', 'rose', 'amber'];
+    const themeOrder = ['dusk', 'dark', 'light', 'blue', 'violet', 'emerald', 'rose', 'amber'];
 
     return themeOrder.map(themeName => {
       const theme = themes[themeName];
@@ -130,6 +131,7 @@ export default class ThemeSettingsPage {
    */
   getThemeDescription(themeName) {
     const descriptions = {
+      dusk: 'Warm, earthy dark theme with natural tones — the default experience',
       dark: 'Classic dark theme with neutral tones for low-light environments',
       light: 'Clean light theme with high contrast for bright environments',
       blue: 'Professional blue theme with cool, calming tones',
@@ -181,10 +183,7 @@ export default class ThemeSettingsPage {
     // Attach event listeners
     this.attachEventListeners();
 
-    // Initialize Lucide icons
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
-    }
+    refreshIcons();
 
     console.log('ThemeSettingsPage mounted with current theme:', this.currentTheme);
   }
@@ -285,10 +284,7 @@ export default class ThemeSettingsPage {
       // Re-attach listeners
       this.attachEventListeners();
 
-      // Re-initialize icons
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
+      refreshIcons();
     }
   }
 

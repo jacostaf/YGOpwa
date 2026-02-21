@@ -5,6 +5,7 @@
  */
 
 import LeaderboardService, { LEADERBOARD_TYPES } from '../services/leaderboardService.js';
+import { refreshIcons } from '../utils/IconLoader.js';
 
 const DEFAULT_LIMIT = 25;
 const PREFERRED_TYPE_KEY = 'voxrip:leaderboard:lastType';
@@ -207,7 +208,7 @@ export default class LeaderboardPage {
     this.loadLeaderboard(this.state.type);
 
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
@@ -470,7 +471,7 @@ export default class LeaderboardPage {
     tableBody.innerHTML = entries.map((entry) => this.renderRow(entry)).join('');
 
     if (window.lucide) {
-      window.lucide.createIcons();
+      refreshIcons();
     }
   }
 
