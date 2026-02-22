@@ -959,7 +959,7 @@ export default class PackOpeningPage {
   handleCardAdded(card) {
     // Consolidated view needs a full rebuild because grouping changes
     if (this.consolidatedView) {
-      this.updateSessionUI();
+      this._scheduleSessionUpdate();
       this.renderCards();
       return;
     }
@@ -967,19 +967,17 @@ export default class PackOpeningPage {
     const sessionCards = this.currentSession?.cards || [];
 
     // First card or empty-state visible: full render to clear empty state cleanly.
-    // appendCard's update() path can fail to replace the empty state due to shared
-    // array references (CardGrid.cards === session.cards) and DOM timing edge cases.
     if (sessionCards.length <= 1 || !this.cardGrid || !this.cardGrid.element
         || !this.cardGrid.element.parentNode
         || this.cardGrid.element.classList.contains('empty-state')) {
-      this.updateSessionUI();
+      this._scheduleSessionUpdate();
       this.renderCards();
       return;
     }
 
     // Subsequent cards: incremental append (no full rebuild)
     this.cardGrid.appendCard(card);
-    this.updateSessionUI();
+    this._scheduleSessionUpdate();
   }
 
   /**
@@ -991,7 +989,7 @@ export default class PackOpeningPage {
   handleCardRemoved(data) {
     // Consolidated view needs full rebuild
     if (this.consolidatedView) {
-      this.updateSessionUI();
+      this._scheduleSessionUpdate();
       this.renderCards();
       return;
     }
@@ -1001,14 +999,14 @@ export default class PackOpeningPage {
       const index = typeof data?.index === 'number' ? data.index : -1;
       if (index >= 0) {
         this.cardGrid.removeCardAt(index);
-        this.updateSessionUI();
+        this._scheduleSessionUpdate();
         this.updateButtons();
         return;
       }
     }
 
     // Fallback: full rebuild
-    this.updateSessionUI();
+    this._scheduleSessionUpdate();
     this.renderCards();
     this.updateButtons();
   }
@@ -1249,7 +1247,7 @@ export default class PackOpeningPage {
     }
 
     // Get cards from current session
-    const cards = this.currentSession?.cards || [];
+    const cards = [...(this.currentSession?.cards || [])];
 
     // Create new card grid (consolidated controls grouping + grid layout)
     this.cardGrid = new CardGrid({
