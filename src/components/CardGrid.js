@@ -596,6 +596,13 @@ export default class CardGrid {
   appendCard(card) {
     if (!this.element) return;
 
+    // Critical rendering fix: if the grid is currently rendering the Empty State,
+    // intercept the append and completely re-build the grid layout from scratch with the 1st card.
+    if (this.cards.length === 0 || this.element.classList.contains('empty-state')) {
+      this.update([card]);
+      return;
+    }
+
     const index = this.cards.length;
     this.cards.push(card);
 

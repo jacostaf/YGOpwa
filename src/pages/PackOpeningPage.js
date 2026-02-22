@@ -54,6 +54,7 @@ export default class PackOpeningPage {
       handleSessionUpdate: this.handleSessionUpdate.bind(this),
       handleCardAdded: this.handleCardAdded.bind(this),
       handleCardRemoved: this.handleCardRemoved.bind(this),
+      handleCardUpdated: this.handleCardUpdated.bind(this),
       handleAddToCollection: this.handleAddToCollection.bind(this)
     };
   }
@@ -935,8 +936,9 @@ export default class PackOpeningPage {
   }
 
   /**
-   * Schedule a full session UI + cards refresh, coalesced per animation frame.
-   * Multiple calls within the same frame only trigger one rebuild.
+   * Schedule a session stats refresh, coalesced per animation frame.
+   * Only updates stats text (card count, totals) — NOT the card grid.
+   * Card grid changes are handled incrementally by cardAdded/cardRemoved/cardUpdated.
    * @private
    */
   _scheduleSessionUpdate() {
@@ -944,7 +946,6 @@ export default class PackOpeningPage {
     this._sessionUpdateRafId = requestAnimationFrame(() => {
       this._sessionUpdateRafId = null;
       this.updateSessionUI();
-      this.renderCards();
     });
   }
 
@@ -963,16 +964,22 @@ export default class PackOpeningPage {
       return;
     }
 
-    // If cardGrid exists and is mounted, do an incremental append
-    if (this.cardGrid && this.cardGrid.element && this.cardGrid.element.parentNode) {
-      this.cardGrid.appendCard(card);
+    const sessionCards = this.currentSession?.cards || [];
+
+    // First card or empty-state visible: full render to clear empty state cleanly.
+    // appendCard's update() path can fail to replace the empty state due to shared
+    // array references (CardGrid.cards === session.cards) and DOM timing edge cases.
+    if (sessionCards.length <= 1 || !this.cardGrid || !this.cardGrid.element
+        || !this.cardGrid.element.parentNode
+        || this.cardGrid.element.classList.contains('empty-state')) {
       this.updateSessionUI();
+      this.renderCards();
       return;
     }
 
-    // Fallback: no grid yet, do a full render
+    // Subsequent cards: incremental append (no full rebuild)
+    this.cardGrid.appendCard(card);
     this.updateSessionUI();
-    this.renderCards();
   }
 
   /**
@@ -1004,6 +1011,54 @@ export default class PackOpeningPage {
     this.updateSessionUI();
     this.renderCards();
     this.updateButtons();
+  }
+
+  /**
+   * Handle a single card being updated (e.g., pricing data arrived).
+   * Updates the price overlay on the card element in place — no grid rebuild.
+   * @param {Object} data - { cardId, card }
+   * @private
+   */
+  handleCardUpdated(data) {
+    if (!data?.card || !this.cardGrid?.element) return;
+
+    const card = data.card;
+    const index = this.currentSession?.cards?.indexOf(card);
+    if (index == null || index < 0) return;
+
+    const cardEl = this.cardGrid.element.querySelector(`[data-card-index="${index}"]`);
+    if (!cardEl) return;
+
+    // Update card image if a real URL arrived (pricing fetch also brings image_url)
+    const imgEl = cardEl.querySelector('.card-image');
+    if (imgEl) {
+      const newSrc = card.image_url || card.imageUrl || card.image_url_small;
+      const currentSrc = imgEl.src || '';
+      // Only swap if we have a real URL and the current src is a placeholder/default/fallback
+      if (newSrc && !currentSrc.includes(newSrc) &&
+          (currentSrc.startsWith('data:') || currentSrc.includes('card-back') || currentSrc.includes('assets'))) {
+        imgEl.src = newSrc;
+      }
+    }
+
+    // Update price overlay text
+    const priceOverlay = cardEl.querySelector('.card-price-overlay');
+    const price = card.tcg_market_price || card.tcg_price ||
+      card.pricing?.marketPrice || card.pricing?.lowPrice;
+    if (price && priceOverlay) {
+      const num = parseFloat(price);
+      priceOverlay.textContent = isNaN(num) ? '' : `$${num.toFixed(2)}`;
+    } else if (price && !priceOverlay) {
+      // Price arrived but no overlay exists yet — add one
+      const imgWrapper = cardEl.querySelector('.card-image-wrapper');
+      if (imgWrapper) {
+        const overlay = document.createElement('div');
+        overlay.className = 'card-price-overlay';
+        const num = parseFloat(price);
+        overlay.textContent = isNaN(num) ? '' : `$${num.toFixed(2)}`;
+        imgWrapper.appendChild(overlay);
+      }
+    }
   }
 
   /**
@@ -1449,11 +1504,13 @@ export default class PackOpeningPage {
 
     // Session manager events (if available)
     if (this.sessionManager && this.sessionManager.addEventListener) {
-      // session-updated: general session changes (debounced full rebuild)
+      // session-updated: stats-only refresh (card count, totals) — no grid rebuild
       this.sessionManager.addEventListener('session-updated', this.boundHandlers.handleSessionUpdate);
       // cardAdded/cardRemoved: incremental DOM updates for single-card changes
       this.sessionManager.addEventListener('cardAdded', this.boundHandlers.handleCardAdded);
       this.sessionManager.addEventListener('cardRemoved', this.boundHandlers.handleCardRemoved);
+      // cardUpdated: targeted price overlay update — no grid rebuild
+      this.sessionManager.addEventListener('cardUpdated', this.boundHandlers.handleCardUpdated);
     }
   }
 
@@ -1488,6 +1545,7 @@ export default class PackOpeningPage {
       this.sessionManager.removeEventListener('session-updated', this.boundHandlers.handleSessionUpdate);
       this.sessionManager.removeEventListener('cardAdded', this.boundHandlers.handleCardAdded);
       this.sessionManager.removeEventListener('cardRemoved', this.boundHandlers.handleCardRemoved);
+      this.sessionManager.removeEventListener('cardUpdated', this.boundHandlers.handleCardUpdated);
     }
 
     // Cancel any pending RAF
