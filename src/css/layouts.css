@@ -109,7 +109,7 @@
   background: transparent;
   padding: 0;
   transition: margin-left var(--transition-normal, 300ms ease-in-out),
-              width var(--transition-normal, 300ms ease-in-out);
+    width var(--transition-normal, 300ms ease-in-out);
 }
 
 /* Collapsed sidebar state - more content space */
@@ -171,7 +171,8 @@ body.sidebar-collapsed .main-content {
 .page-container {
   flex: 1;
   padding: var(--spacing-sm, 0.5rem) var(--spacing-xl, 2rem);
-  padding-bottom: calc(var(--spacing-lg, 1.5rem) + 40px); /* Extra space for 32px status bar */
+  padding-bottom: calc(var(--spacing-lg, 1.5rem) + 40px);
+  /* Extra space for 32px status bar */
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -519,10 +520,9 @@ body.sidebar-collapsed .status-bar {
    CARD SELECTION MODAL
    ================================================ */
 
-.card-selection-modal .modal-content {
-  max-width: 600px;
-  width: 90%;
-}
+/* We stripped out an old override restricting the modal content to 90%.
+   By naturally inheriting block width bounds, the card grid correctly centers. */
+.card-selection-modal .modal-content {}
 
 .selection-intro {
   margin-bottom: 1.5rem;
@@ -533,7 +533,7 @@ body.sidebar-collapsed .status-bar {
 
 .selection-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
   max-height: 60vh;
   overflow-y: auto;
